@@ -95,7 +95,7 @@ impl<'a, S: Sample> BlockRead<S> for InterleavedViewMut<'a, S> {
         self.data
             .iter()
             .skip(frame * self.num_channels_allocated as usize)
-            .take(self.num_frames)
+            .take(self.num_channels as usize)
     }
 
     fn view(&self) -> impl BlockRead<S> {
@@ -124,7 +124,7 @@ impl<'a, S: Sample> BlockWrite<S> for InterleavedViewMut<'a, S> {
         self.data
             .iter_mut()
             .skip(frame * self.num_channels_allocated as usize)
-            .take(self.num_frames)
+            .take(self.num_channels as usize)
     }
 
     fn view_mut(&mut self) -> impl BlockWrite<S> {

@@ -94,7 +94,7 @@ impl<'a, S: Sample> BlockRead<S> for InterleavedView<'a, S> {
         self.data
             .iter()
             .skip(frame * self.num_channels_allocated as usize)
-            .take(self.num_frames)
+            .take(self.num_channels as usize)
     }
 
     fn view(&self) -> impl BlockRead<S> {

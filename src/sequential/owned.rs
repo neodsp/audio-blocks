@@ -20,6 +20,17 @@ impl<S: Sample> Sequential<S> {
             num_frames_allocated: num_frames,
         }
     }
+
+    pub fn from_slice(slice: &[S], num_channels: u16, num_frames: usize) -> Self {
+        assert_eq!(slice.len(), num_channels as usize * num_frames);
+        Self {
+            data: slice.to_owned(),
+            num_channels,
+            num_frames,
+            num_channels_allocated: num_channels,
+            num_frames_allocated: num_frames,
+        }
+    }
 }
 
 impl<S: Sample> BlockRead<S> for Sequential<S> {
