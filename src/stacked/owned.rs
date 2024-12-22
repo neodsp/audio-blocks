@@ -1,9 +1,9 @@
 use crate::{BlockOwned, BlockRead, BlockWrite, Sample};
 
-use super::{view::PlanarView, view_mut::PlanarViewMut};
+use super::{view::StackedView, view_mut::StackedViewMut};
 
 #[derive(Clone)]
-pub struct Planar<S: Sample> {
+pub struct Stacked<S: Sample> {
     data: Vec<Vec<S>>,
     num_channels: u16,
     num_frames: usize,
@@ -11,7 +11,7 @@ pub struct Planar<S: Sample> {
     num_frames_allocated: usize,
 }
 
-impl<S: Sample> BlockRead<S> for Planar<S> {
+impl<S: Sample> BlockRead<S> for Stacked<S> {
     fn num_frames(&self) -> usize {
         self.num_frames
     }
@@ -34,11 +34,11 @@ impl<S: Sample> BlockRead<S> for Planar<S> {
     }
 
     fn view(&self) -> impl BlockRead<S> {
-        PlanarView::<S, 256>::from_vec(&self.data)
+        StackedView::<S, 256>::from_vec(&self.data)
     }
 }
 
-impl<S: Sample> BlockWrite<S> for Planar<S> {
+impl<S: Sample> BlockWrite<S> for Stacked<S> {
     fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S> {
         assert!(channel < self.num_channels);
         self.data[channel as usize].iter_mut().take(self.num_frames)
@@ -52,11 +52,11 @@ impl<S: Sample> BlockWrite<S> for Planar<S> {
     }
 
     fn view_mut(&mut self) -> impl BlockWrite<S> {
-        PlanarViewMut::<S, 256>::from_vec(&mut self.data)
+        StackedViewMut::<S, 256>::from_vec(&mut self.data)
     }
 }
 
-impl<S: Sample> BlockOwned<S> for Planar<S> {
+impl<S: Sample> BlockOwned<S> for Stacked<S> {
     fn from_block(block: &impl BlockRead<S>) -> Self {
         let mut data = Vec::new();
         for i in 0..block.num_channels() {

@@ -2,13 +2,13 @@ use std::mem::MaybeUninit;
 
 use crate::{BlockRead, Sample};
 
-pub struct PlanarView<'a, S: Sample, const C: usize> {
+pub struct StackedView<'a, S: Sample, const C: usize> {
     pub(super) data: [MaybeUninit<&'a [S]>; C],
     pub(super) num_channels: u16,
     pub(super) num_frames: usize,
 }
 
-impl<'a, S: Sample, const C: usize> PlanarView<'a, S, C> {
+impl<'a, S: Sample, const C: usize> StackedView<'a, S, C> {
     pub fn from_slices(data: &'a [&'a [S]]) -> Self {
         let num_channels = data.len();
         assert!(num_channels <= C);
@@ -85,7 +85,7 @@ impl<'a, S: Sample, const C: usize> PlanarView<'a, S, C> {
     }
 }
 
-impl<'a, S: Sample, const C: usize> BlockRead<S> for PlanarView<'a, S, C> {
+impl<'a, S: Sample, const C: usize> BlockRead<S> for StackedView<'a, S, C> {
     fn num_frames(&self) -> usize {
         self.num_frames
     }
@@ -117,7 +117,7 @@ impl<'a, S: Sample, const C: usize> BlockRead<S> for PlanarView<'a, S, C> {
         for (i, ch) in self.data.iter().enumerate() {
             out[i].write(unsafe { &*ch.assume_init_ref() });
         }
-        PlanarView {
+        StackedView {
             data: out,
             num_channels: self.num_channels,
             num_frames: self.num_frames,

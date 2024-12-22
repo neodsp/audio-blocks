@@ -1,8 +1,10 @@
 pub mod interleaved;
-pub mod planar;
 pub mod sequential;
+pub mod stacked;
 
 pub trait Sample: Copy + Clone + Default + 'static {}
+
+impl Sample for f32 {}
 
 pub trait BlockRead<S: Sample> {
     fn num_frames(&self) -> usize;
