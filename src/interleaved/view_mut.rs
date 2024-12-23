@@ -3,11 +3,11 @@ use crate::{BlockRead, BlockWrite, Sample};
 use super::view::InterleavedView;
 
 pub struct InterleavedViewMut<'a, S: Sample> {
-    data: &'a mut [S],
-    num_channels: u16,
-    num_frames: usize,
-    num_channels_allocated: u16,
-    num_frames_allocated: usize,
+    pub(super) data: &'a mut [S],
+    pub(super) num_channels: u16,
+    pub(super) num_frames: usize,
+    pub(super) num_channels_allocated: u16,
+    pub(super) num_frames_allocated: usize,
 }
 
 impl<'a, S: Sample> InterleavedViewMut<'a, S> {
@@ -135,5 +135,194 @@ impl<'a, S: Sample> BlockWrite<S> for InterleavedViewMut<'a, S> {
             self.num_channels_allocated,
             self.num_frames_allocated,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_channels() {
+        let mut data = vec![0.0; 10];
+        let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+
+        let channel = block.channel(0).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        let channel = block.channel(1).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+
+        block
+            .channel_mut(0)
+            .enumerate()
+            .for_each(|(i, v)| *v = i as f32);
+        block
+            .channel_mut(1)
+            .enumerate()
+            .for_each(|(i, v)| *v = i as f32 + 10.0);
+
+        let channel = block.channel(0).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+        let channel = block.channel(1).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
+    }
+
+    #[test]
+    fn test_frames() {
+        let mut data = vec![0.0; 10];
+        let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+
+        for i in 0..block.num_frames() {
+            let frame = block.frame(i).copied().collect::<Vec<_>>();
+            assert_eq!(frame, vec![0.0, 0.0]);
+        }
+
+        for i in 0..block.num_frames() {
+            let add = i as f32 * 10.0;
+            block
+                .frame_mut(i)
+                .enumerate()
+                .for_each(|(i, v)| *v = i as f32 + add);
+        }
+
+        let channel = block.frame(0).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0]);
+        let channel = block.frame(1).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![10.0, 11.0]);
+        let channel = block.frame(2).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![20.0, 21.0]);
+        let channel = block.frame(3).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![30.0, 31.0]);
+        let channel = block.frame(4).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![40.0, 41.0]);
+    }
+
+    #[test]
+    fn test_from_slice() {
+        let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_channels_allocated, 2);
+        assert_eq!(block.num_frames(), 5);
+        assert_eq!(block.num_frames_allocated, 5);
+        assert_eq!(
+            block.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            block.channel(1).copied().collect::<Vec<_>>(),
+            vec![1.0, 3.0, 5.0, 7.0, 9.0]
+        );
+        assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 1.0]);
+        assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![2.0, 3.0]);
+        assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![4.0, 5.0]);
+        assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![6.0, 7.0]);
+        assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![8.0, 9.0]);
+    }
+
+    #[test]
+    fn test_view() {
+        let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let view = block.view();
+        assert_eq!(
+            view.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            view.channel(1).copied().collect::<Vec<_>>(),
+            vec![1.0, 3.0, 5.0, 7.0, 9.0]
+        );
+    }
+
+    #[test]
+    fn test_view_mut() {
+        let mut data = vec![0.0; 10];
+        let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+
+        {
+            let mut view = block.view_mut();
+            view.channel_mut(0)
+                .enumerate()
+                .for_each(|(i, v)| *v = i as f32);
+            view.channel_mut(1)
+                .enumerate()
+                .for_each(|(i, v)| *v = i as f32 + 10.0);
+        }
+
+        assert_eq!(
+            block.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 1.0, 2.0, 3.0, 4.0]
+        );
+        assert_eq!(
+            block.channel(1).copied().collect::<Vec<_>>(),
+            vec![10.0, 11.0, 12.0, 13.0, 14.0]
+        );
+    }
+
+    #[test]
+    fn test_limited() {
+        let mut data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
+
+        let mut block = InterleavedViewMut::from_slice_limited(&mut data, 2, 3, 3, 4);
+
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_frames(), 3);
+        assert_eq!(block.num_channels_allocated, 3);
+        assert_eq!(block.num_frames_allocated, 4);
+
+        for i in 0..block.num_channels() {
+            assert_eq!(block.channel(i).count(), 3);
+            assert_eq!(block.channel_mut(i).count(), 3);
+        }
+        for i in 0..block.num_frames() {
+            assert_eq!(block.frame(i).count(), 2);
+            assert_eq!(block.frame_mut(i).count(), 2);
+        }
+    }
+
+    #[test]
+    fn test_from_raw() {
+        let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = unsafe { InterleavedViewMut::<f32>::from_raw(data.as_mut_ptr(), 2, 5) };
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_channels_allocated, 2);
+        assert_eq!(block.num_frames(), 5);
+        assert_eq!(block.num_frames_allocated, 5);
+        assert_eq!(
+            block.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            block.channel(1).copied().collect::<Vec<_>>(),
+            vec![1.0, 3.0, 5.0, 7.0, 9.0]
+        );
+        assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 1.0]);
+        assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![2.0, 3.0]);
+        assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![4.0, 5.0]);
+        assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![6.0, 7.0]);
+        assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![8.0, 9.0]);
+    }
+
+    #[test]
+    fn test_from_raw_limited() {
+        let mut data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
+
+        let mut block =
+            unsafe { InterleavedViewMut::from_raw_limited(data.as_mut_ptr(), 2, 3, 3, 4) };
+
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_frames(), 3);
+        assert_eq!(block.num_channels_allocated, 3);
+        assert_eq!(block.num_frames_allocated, 4);
+
+        for i in 0..block.num_channels() {
+            assert_eq!(block.channel(i).count(), 3);
+            assert_eq!(block.channel_mut(i).count(), 3);
+        }
+        for i in 0..block.num_frames() {
+            assert_eq!(block.frame(i).count(), 2);
+            assert_eq!(block.frame_mut(i).count(), 2);
+        }
     }
 }

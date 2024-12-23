@@ -64,12 +64,11 @@ impl<'a, S: Sample, const C: usize> StackedView<'a, S, C> {
         // Create an uninitialized array
         let mut slice: [MaybeUninit<&'a [S]>; C] = unsafe { MaybeUninit::uninit().assume_init() };
 
+        let data = unsafe { std::slice::from_raw_parts(data, num_channels as usize) };
+
         // Fill the slice with the provided data
         for i in 0..num_channels as usize {
-            slice[i] = MaybeUninit::new(std::slice::from_raw_parts(
-                *data.add(num_channels as usize),
-                num_frames,
-            ))
+            slice[i] = MaybeUninit::new(std::slice::from_raw_parts(data[i], num_frames))
         }
 
         // Fill the remaining entries with uninitialized values
@@ -123,4 +122,139 @@ impl<'a, S: Sample, const C: usize> BlockRead<S> for StackedView<'a, S, C> {
             num_frames: self.num_frames,
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_channels() {
+        let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
+        let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
+        let data = vec![ch1.as_slice(), ch2.as_slice()];
+        let block = StackedView::<f32, 16>::from_slices(&data);
+
+        let channel = block.channel(0).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 2.0, 4.0, 6.0, 8.0]);
+        let channel = block.channel(1).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![1.0, 3.0, 5.0, 7.0, 9.0]);
+    }
+
+    #[test]
+    fn test_frames() {
+        let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
+        let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
+        let data = vec![ch1.as_slice(), ch2.as_slice()];
+        let block = StackedView::<f32, 16>::from_slices(&data);
+
+        let channel = block.frame(0).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0]);
+        let channel = block.frame(1).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![2.0, 3.0]);
+        let channel = block.frame(2).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![4.0, 5.0]);
+        let channel = block.frame(3).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![6.0, 7.0]);
+        let channel = block.frame(4).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![8.0, 9.0]);
+    }
+
+    #[test]
+    fn test_from_vec() {
+        let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
+        let block = StackedView::<f32, 16>::from_vec(&mut vec);
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_frames(), 5);
+        assert_eq!(
+            block.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            block.channel(1).copied().collect::<Vec<_>>(),
+            vec![1.0, 3.0, 5.0, 7.0, 9.0]
+        );
+        assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 1.0]);
+        assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![2.0, 3.0]);
+        assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![4.0, 5.0]);
+        assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![6.0, 7.0]);
+        assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![8.0, 9.0]);
+    }
+
+    #[test]
+    fn test_view() {
+        let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
+        let block = StackedView::<f32, 16>::from_vec(&mut vec);
+        let view = block.view();
+        assert_eq!(
+            view.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            view.channel(1).copied().collect::<Vec<_>>(),
+            vec![1.0, 3.0, 5.0, 7.0, 9.0]
+        );
+    }
+
+    // #[test]
+    // fn test_limited() {
+    //     let data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
+
+    //     let block = InterleavedView::from_slice_limited(&data, 2, 3, 3, 4);
+
+    //     assert_eq!(block.num_channels(), 2);
+    //     assert_eq!(block.num_frames(), 3);
+    //     assert_eq!(block.num_channels_allocated, 3);
+    //     assert_eq!(block.num_frames_allocated, 4);
+
+    //     for i in 0..block.num_channels() {
+    //         assert_eq!(block.channel(i).count(), 3);
+    //     }
+    //     for i in 0..block.num_frames() {
+    //         assert_eq!(block.frame(i).count(), 2);
+    //     }
+    // }
+
+    #[test]
+    fn test_from_raw() {
+        let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
+        let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
+        let data = [ch1.as_ptr(), ch2.as_ptr()];
+        let block = unsafe { StackedView::<f32, 16>::from_raw(data.as_ptr(), 2, 5) };
+
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_frames(), 5);
+        assert_eq!(
+            block.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            block.channel(1).copied().collect::<Vec<_>>(),
+            vec![1.0, 3.0, 5.0, 7.0, 9.0]
+        );
+        assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 1.0]);
+        assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![2.0, 3.0]);
+        assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![4.0, 5.0]);
+        assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![6.0, 7.0]);
+        assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![8.0, 9.0]);
+    }
+
+    // #[test]
+    // fn test_from_raw_limited() {
+    //     let data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
+
+    //     let block = unsafe { InterleavedView::from_raw_limited(data.as_ptr(), 2, 3, 3, 4) };
+
+    //     assert_eq!(block.num_channels(), 2);
+    //     assert_eq!(block.num_frames(), 3);
+    //     assert_eq!(block.num_channels_allocated, 3);
+    //     assert_eq!(block.num_frames_allocated, 4);
+
+    //     for i in 0..block.num_channels() {
+    //         assert_eq!(block.channel(i).count(), 3);
+    //     }
+    //     for i in 0..block.num_frames() {
+    //         assert_eq!(block.frame(i).count(), 2);
+    //     }
+    // }
 }

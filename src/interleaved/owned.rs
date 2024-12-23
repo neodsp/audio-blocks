@@ -4,28 +4,17 @@ use super::{view::InterleavedView, view_mut::InterleavedViewMut};
 
 #[derive(Clone)]
 pub struct Interleaved<S: Sample> {
-    data: Vec<S>,
-    num_channels: u16,
-    num_frames: usize,
-    num_channels_allocated: u16,
-    num_frames_allocated: usize,
+    pub(super) data: Vec<S>,
+    pub(super) num_channels: u16,
+    pub(super) num_frames: usize,
+    pub(super) num_channels_allocated: u16,
+    pub(super) num_frames_allocated: usize,
 }
 
 impl<S: Sample> Interleaved<S> {
     pub fn empty(num_channels: u16, num_frames: usize) -> Self {
         Self {
             data: vec![S::default(); num_channels as usize * num_frames],
-            num_channels,
-            num_frames,
-            num_channels_allocated: num_channels,
-            num_frames_allocated: num_frames,
-        }
-    }
-
-    pub fn from_slice(slice: &[S], num_channels: u16, num_frames: usize) -> Self {
-        assert_eq!(slice.len(), num_channels as usize * num_frames);
-        Self {
-            data: slice.to_owned(),
             num_channels,
             num_frames,
             num_channels_allocated: num_channels,
@@ -98,6 +87,18 @@ impl<S: Sample> BlockWrite<S> for Interleaved<S> {
             self.num_frames_allocated,
         )
     }
+
+    // fn copy_from_block(&mut self, block: &impl BlockRead<S>) {
+    //     assert!(block.num_channels() <= self.num_channels_allocated);
+    //     assert!(block.num_frames() <= self.num_frames_allocated);
+    //     self.num_frames = block.num_frames();
+    //     self.num_channels = block.num_channels();
+    //     for i in 0..block.num_frames() {
+    //         self.frame_mut(i)
+    //             .zip(block.frame(i))
+    //             .for_each(|(a, b)| *a = *b);
+    //     }
+    // }
 }
 
 impl<S: Sample> BlockOwned<S> for Interleaved<S> {
@@ -195,11 +196,11 @@ mod tests {
 
     #[test]
     fn test_from_slice() {
-        let block = Interleaved::<f32>::from_slice(
+        let block = Interleaved::<f32>::from_block(&InterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
             5,
-        );
+        ));
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated(), 2);
         assert_eq!(block.num_frames(), 5);
@@ -221,11 +222,11 @@ mod tests {
 
     #[test]
     fn test_view() {
-        let block = Interleaved::<f32>::from_slice(
+        let block = Interleaved::<f32>::from_block(&InterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
             5,
-        );
+        ));
         let view = block.view();
         assert_eq!(
             view.channel(0).copied().collect::<Vec<_>>(),
@@ -259,6 +260,25 @@ mod tests {
             vec![10.0, 11.0, 12.0, 13.0, 14.0]
         );
     }
+
+    // #[test]
+    // fn test_copy_from_block() {
+    //     let mut block = Interleaved::<f32>::empty(3, 6);
+    //     let view =
+    //         InterleavedView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], 2, 5);
+    //     block.copy_from_block(&view);
+
+    //     assert_eq!(
+    //         block.channel(0).copied().collect::<Vec<_>>(),
+    //         &[0.0, 2.0, 4.0, 6.0, 8.0]
+    //     );
+    //     assert_eq!(
+    //         block.channel(1).copied().collect::<Vec<_>>(),
+    //         &[1.0, 3.0, 5.0, 7.0, 9.0]
+    //     );
+    //     assert_eq!(block.num_channels(), view.num_channels());
+    //     assert_eq!(block.num_frames(), view.num_frames());
+    // }
 
     #[test]
     fn test_from_block() {
