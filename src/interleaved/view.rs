@@ -1,4 +1,4 @@
-use crate::{BlockRead, BlockWrite, Sample};
+use crate::{BlockRead, Sample};
 
 #[derive(Clone)]
 pub struct InterleavedView<'a, S: Sample> {
