@@ -93,7 +93,7 @@ impl<'a, S: Sample> BlockRead<S> for SequentialView<'a, S> {
             .iter()
             .skip(frame)
             .step_by(self.num_frames_allocated)
-            .take(self.num_frames)
+            .take(self.num_channels as usize)
     }
 
     fn view(&self) -> impl BlockRead<S> {
@@ -104,5 +104,137 @@ impl<'a, S: Sample> BlockRead<S> for SequentialView<'a, S> {
             self.num_channels_allocated,
             self.num_frames_allocated,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_channels() {
+        let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = SequentialView::<f32>::from_slice(&data, 2, 5);
+
+        let channel = block.channel(0).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+        let channel = block.channel(1).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![5.0, 6.0, 7.0, 8.0, 9.0]);
+    }
+
+    #[test]
+    fn test_frames() {
+        let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = SequentialView::<f32>::from_slice(&data, 2, 5);
+
+        let channel = block.frame(0).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 5.0]);
+        let channel = block.frame(1).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![1.0, 6.0]);
+        let channel = block.frame(2).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![2.0, 7.0]);
+        let channel = block.frame(3).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![3.0, 8.0]);
+        let channel = block.frame(4).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![4.0, 9.0]);
+    }
+
+    #[test]
+    fn test_from_slice() {
+        let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = SequentialView::<f32>::from_slice(&data, 2, 5);
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_channels_allocated, 2);
+        assert_eq!(block.num_frames(), 5);
+        assert_eq!(block.num_frames_allocated, 5);
+        assert_eq!(
+            block.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 1.0, 2.0, 3.0, 4.0]
+        );
+        assert_eq!(
+            block.channel(1).copied().collect::<Vec<_>>(),
+            vec![5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+        assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 5.0]);
+        assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![1.0, 6.0]);
+        assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![2.0, 7.0]);
+        assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![3.0, 8.0]);
+        assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![4.0, 9.0]);
+    }
+
+    #[test]
+    fn test_view() {
+        let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = SequentialView::<f32>::from_slice(&data, 2, 5);
+        let view = block.view();
+        assert_eq!(
+            view.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 1.0, 2.0, 3.0, 4.0]
+        );
+        assert_eq!(
+            view.channel(1).copied().collect::<Vec<_>>(),
+            vec![5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+    }
+
+    #[test]
+    fn test_limited() {
+        let data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
+
+        let block = SequentialView::from_slice_limited(&data, 2, 3, 3, 4);
+
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_frames(), 3);
+        assert_eq!(block.num_channels_allocated, 3);
+        assert_eq!(block.num_frames_allocated, 4);
+
+        for i in 0..block.num_channels() {
+            assert_eq!(block.channel(i).count(), 3);
+        }
+        for i in 0..block.num_frames() {
+            assert_eq!(block.frame(i).count(), 2);
+        }
+    }
+
+    #[test]
+    fn test_from_raw() {
+        let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = unsafe { SequentialView::<f32>::from_raw(data.as_mut_ptr(), 2, 5) };
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_channels_allocated, 2);
+        assert_eq!(block.num_frames(), 5);
+        assert_eq!(block.num_frames_allocated, 5);
+        assert_eq!(
+            block.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 1.0, 2.0, 3.0, 4.0]
+        );
+        assert_eq!(
+            block.channel(1).copied().collect::<Vec<_>>(),
+            vec![5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+        assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 5.0]);
+        assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![1.0, 6.0]);
+        assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![2.0, 7.0]);
+        assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![3.0, 8.0]);
+        assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![4.0, 9.0]);
+    }
+
+    #[test]
+    fn test_from_raw_limited() {
+        let data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
+
+        let block = unsafe { SequentialView::from_raw_limited(data.as_ptr(), 2, 3, 3, 4) };
+
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_frames(), 3);
+        assert_eq!(block.num_channels_allocated, 3);
+        assert_eq!(block.num_frames_allocated, 4);
+
+        for i in 0..block.num_channels() {
+            assert_eq!(block.channel(i).count(), 3);
+        }
+        for i in 0..block.num_frames() {
+            assert_eq!(block.frame(i).count(), 2);
+        }
     }
 }

@@ -56,7 +56,7 @@ impl<S: Sample> BlockRead<S> for Sequential<S> {
             .iter()
             .skip(frame)
             .step_by(self.num_frames_allocated)
-            .take(self.num_frames)
+            .take(self.num_channels as usize)
     }
 
     fn view(&self) -> impl BlockRead<S> {
@@ -85,7 +85,7 @@ impl<S: Sample> BlockWrite<S> for Sequential<S> {
             .iter_mut()
             .skip(frame)
             .step_by(self.num_frames_allocated)
-            .take(self.num_frames)
+            .take(self.num_channels as usize)
     }
 
     fn view_mut(&mut self) -> impl BlockWrite<S> {
@@ -130,5 +130,235 @@ impl<S: Sample> BlockOwned<S> for Sequential<S> {
     fn set_num_frames(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::interleaved::InterleavedView;
+
+    use super::*;
+
+    #[test]
+    fn test_channels() {
+        let mut block = Sequential::<f32>::empty(2, 5);
+
+        let channel = block.channel(0).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        let channel = block.channel(1).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+
+        block
+            .channel_mut(0)
+            .enumerate()
+            .for_each(|(i, v)| *v = i as f32);
+        block
+            .channel_mut(1)
+            .enumerate()
+            .for_each(|(i, v)| *v = i as f32 + 10.0);
+
+        let channel = block.channel(0).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+        let channel = block.channel(1).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
+    }
+
+    #[test]
+    fn test_frames() {
+        let mut block = Sequential::<f32>::empty(2, 5);
+
+        for i in 0..block.num_frames() {
+            let frame = block.frame(i).copied().collect::<Vec<_>>();
+            assert_eq!(frame, vec![0.0, 0.0]);
+        }
+
+        for i in 0..block.num_frames() {
+            let add = i as f32 * 10.0;
+            block
+                .frame_mut(i)
+                .enumerate()
+                .for_each(|(i, v)| *v = i as f32 + add);
+        }
+
+        let channel = block.frame(0).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0]);
+        let channel = block.frame(1).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![10.0, 11.0]);
+        let channel = block.frame(2).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![20.0, 21.0]);
+        let channel = block.frame(3).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![30.0, 31.0]);
+        let channel = block.frame(4).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![40.0, 41.0]);
+    }
+
+    #[test]
+    fn test_from_slice() {
+        let block = Sequential::<f32>::from_block(&InterleavedView::from_slice(
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+            2,
+            5,
+        ));
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_channels_allocated(), 2);
+        assert_eq!(block.num_frames(), 5);
+        assert_eq!(block.num_frames_allocated(), 5);
+        assert_eq!(
+            block.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            block.channel(1).copied().collect::<Vec<_>>(),
+            vec![1.0, 3.0, 5.0, 7.0, 9.0]
+        );
+        assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 1.0]);
+        assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![2.0, 3.0]);
+        assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![4.0, 5.0]);
+        assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![6.0, 7.0]);
+        assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![8.0, 9.0]);
+    }
+
+    #[test]
+    fn test_view() {
+        let block = Sequential::<f32>::from_block(&InterleavedView::from_slice(
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+            2,
+            5,
+        ));
+        let view = block.view();
+        assert_eq!(
+            view.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            view.channel(1).copied().collect::<Vec<_>>(),
+            vec![1.0, 3.0, 5.0, 7.0, 9.0]
+        );
+    }
+
+    #[test]
+    fn test_view_mut() {
+        let mut block = Sequential::<f32>::empty(2, 5);
+        {
+            let mut view = block.view_mut();
+            view.channel_mut(0)
+                .enumerate()
+                .for_each(|(i, v)| *v = i as f32);
+            view.channel_mut(1)
+                .enumerate()
+                .for_each(|(i, v)| *v = i as f32 + 10.0);
+        }
+
+        assert_eq!(
+            block.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 1.0, 2.0, 3.0, 4.0]
+        );
+        assert_eq!(
+            block.channel(1).copied().collect::<Vec<_>>(),
+            vec![10.0, 11.0, 12.0, 13.0, 14.0]
+        );
+    }
+
+    // #[test]
+    // fn test_copy_from_block() {
+    //     let mut block = Interleaved::<f32>::empty(3, 6);
+    //     let view =
+    //         InterleavedView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], 2, 5);
+    //     block.copy_from_block(&view);
+
+    //     assert_eq!(
+    //         block.channel(0).copied().collect::<Vec<_>>(),
+    //         &[0.0, 2.0, 4.0, 6.0, 8.0]
+    //     );
+    //     assert_eq!(
+    //         block.channel(1).copied().collect::<Vec<_>>(),
+    //         &[1.0, 3.0, 5.0, 7.0, 9.0]
+    //     );
+    //     assert_eq!(block.num_channels(), view.num_channels());
+    //     assert_eq!(block.num_frames(), view.num_frames());
+    // }
+
+    #[test]
+    fn test_resize() {
+        let mut block = Sequential::<f32>::empty(3, 10);
+        assert_eq!(block.num_channels(), 3);
+        assert_eq!(block.num_frames(), 10);
+        assert_eq!(block.num_channels_allocated(), 3);
+        assert_eq!(block.num_frames_allocated(), 10);
+
+        for i in 0..block.num_channels() {
+            assert_eq!(block.channel(i).count(), 10);
+            assert_eq!(block.channel_mut(i).count(), 10);
+        }
+        for i in 0..block.num_frames() {
+            assert_eq!(block.frame(i).count(), 3);
+            assert_eq!(block.frame_mut(i).count(), 3);
+        }
+
+        block.set_num_channels(3);
+        block.set_num_channels(2);
+        block.set_num_frames(10);
+        block.set_num_frames(5);
+
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_frames(), 5);
+        assert_eq!(block.num_channels_allocated(), 3);
+        assert_eq!(block.num_frames_allocated(), 10);
+
+        for i in 0..block.num_channels() {
+            assert_eq!(block.channel(i).count(), 5);
+            assert_eq!(block.channel_mut(i).count(), 5);
+        }
+        for i in 0..block.num_frames() {
+            assert_eq!(block.frame(i).count(), 2);
+            assert_eq!(block.frame_mut(i).count(), 2);
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_wrong_resize_channels() {
+        let mut block = Sequential::<f32>::empty(2, 10);
+        block.set_num_channels(3);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_wrong_resize_frames() {
+        let mut block = Sequential::<f32>::empty(2, 10);
+        block.set_num_frames(11);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_wrong_channel() {
+        let mut block = Sequential::<f32>::empty(2, 10);
+        block.set_num_channels(1);
+        let _ = block.channel(1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_wrong_frame() {
+        let mut block = Sequential::<f32>::empty(2, 10);
+        block.set_num_frames(5);
+        let _ = block.frame(5);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_wrong_channel_mut() {
+        let mut block = Sequential::<f32>::empty(2, 10);
+        block.set_num_channels(1);
+        let _ = block.channel_mut(1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_wrong_frame_mut() {
+        let mut block = Sequential::<f32>::empty(2, 10);
+        block.set_num_frames(5);
+        let _ = block.frame_mut(5);
     }
 }
