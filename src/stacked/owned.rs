@@ -77,7 +77,7 @@ impl<S: Sample> BlockRead<S> for Stacked<S> {
 
     #[nonblocking]
     fn view(&self) -> impl BlockRead<S> {
-        StackedView::<S, 256>::from_vec(&self.data)
+        StackedView::from_slices_limited(&self.data, self.num_channels, self.num_frames)
     }
 }
 
@@ -111,7 +111,7 @@ impl<S: Sample> BlockWrite<S> for Stacked<S> {
 
     #[nonblocking]
     fn view_mut(&mut self) -> impl BlockWrite<S> {
-        StackedViewMut::<S, 256>::from_vec(&mut self.data)
+        StackedViewMut::from_slices_limited(&mut self.data, self.num_channels, self.num_frames)
     }
 }
 

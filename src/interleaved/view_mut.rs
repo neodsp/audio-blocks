@@ -37,6 +37,8 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
             data.len(),
             num_channels_available as usize * num_frames_available
         );
+        assert!(num_channels_visible <= num_channels_available as u16);
+        assert!(num_frames_visible <= num_frames_available);
         Self {
             data,
             num_channels: num_channels_visible,
@@ -65,6 +67,8 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
         num_channels_available: u16,
         num_frames_available: usize,
     ) -> Self {
+        assert!(num_channels_visible <= num_channels_available as u16);
+        assert!(num_frames_visible <= num_frames_available);
         Self {
             data: std::slice::from_raw_parts_mut(
                 ptr,
