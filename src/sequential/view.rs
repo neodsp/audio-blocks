@@ -71,12 +71,20 @@ impl<'a, S: Sample> SequentialView<'a, S> {
 }
 
 impl<'a, S: Sample> BlockRead<S> for SequentialView<'a, S> {
+    fn num_channels(&self) -> u16 {
+        self.num_channels
+    }
+
     fn num_frames(&self) -> usize {
         self.num_frames
     }
 
-    fn num_channels(&self) -> u16 {
-        self.num_channels
+    fn num_channels_allocated(&self) -> u16 {
+        self.num_channels_allocated
+    }
+
+    fn num_frames_allocated(&self) -> usize {
+        self.num_frames_allocated
     }
 
     fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {

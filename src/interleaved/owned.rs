@@ -1,4 +1,4 @@
-use crate::{BlockOwned, BlockRead, BlockWrite, Sample};
+use crate::{BlockRead, BlockWrite, Sample};
 
 use super::{view::InterleavedView, view_mut::InterleavedViewMut};
 
@@ -21,15 +21,37 @@ impl<S: Sample> Interleaved<S> {
             num_frames_allocated: num_frames,
         }
     }
+
+    pub fn from_block(block: &impl BlockRead<S>) -> Self {
+        let mut data = Vec::new();
+        for i in 0..block.num_frames() {
+            block.frame(i).copied().for_each(|v| data.push(v));
+        }
+        Self {
+            data,
+            num_channels: block.num_channels(),
+            num_frames: block.num_frames(),
+            num_channels_allocated: block.num_channels(),
+            num_frames_allocated: block.num_frames(),
+        }
+    }
 }
 
 impl<S: Sample> BlockRead<S> for Interleaved<S> {
+    fn num_channels(&self) -> u16 {
+        self.num_channels
+    }
+
     fn num_frames(&self) -> usize {
         self.num_frames
     }
 
-    fn num_channels(&self) -> u16 {
-        self.num_channels
+    fn num_channels_allocated(&self) -> u16 {
+        self.num_channels_allocated
+    }
+
+    fn num_frames_allocated(&self) -> usize {
+        self.num_frames_allocated
     }
 
     fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {
@@ -61,6 +83,16 @@ impl<S: Sample> BlockRead<S> for Interleaved<S> {
 }
 
 impl<S: Sample> BlockWrite<S> for Interleaved<S> {
+    fn set_num_channels(&mut self, num_channels: u16) {
+        assert!(num_channels <= self.num_channels_allocated);
+        self.num_channels = num_channels;
+    }
+
+    fn set_num_frames(&mut self, num_frames: usize) {
+        assert!(num_frames <= self.num_frames_allocated);
+        self.num_frames = num_frames;
+    }
+
     fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S> {
         assert!(channel < self.num_channels);
         self.data
@@ -99,40 +131,6 @@ impl<S: Sample> BlockWrite<S> for Interleaved<S> {
     //             .for_each(|(a, b)| *a = *b);
     //     }
     // }
-}
-
-impl<S: Sample> BlockOwned<S> for Interleaved<S> {
-    fn from_block(block: &impl BlockRead<S>) -> Self {
-        let mut data = Vec::new();
-        for i in 0..block.num_frames() {
-            block.frame(i).copied().for_each(|v| data.push(v));
-        }
-        Self {
-            data,
-            num_channels: block.num_channels(),
-            num_frames: block.num_frames(),
-            num_channels_allocated: block.num_channels(),
-            num_frames_allocated: block.num_frames(),
-        }
-    }
-
-    fn num_channels_allocated(&self) -> u16 {
-        self.num_channels_allocated
-    }
-
-    fn num_frames_allocated(&self) -> usize {
-        self.num_frames_allocated
-    }
-
-    fn set_num_channels(&mut self, num_channels: u16) {
-        assert!(num_channels <= self.num_channels_allocated);
-        self.num_channels = num_channels;
-    }
-
-    fn set_num_frames(&mut self, num_frames: usize) {
-        assert!(num_frames <= self.num_frames_allocated);
-        self.num_frames = num_frames;
-    }
 }
 
 #[cfg(test)]

@@ -73,12 +73,20 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
 }
 
 impl<'a, S: Sample> BlockRead<S> for InterleavedViewMut<'a, S> {
+    fn num_channels(&self) -> u16 {
+        self.num_channels
+    }
+
     fn num_frames(&self) -> usize {
         self.num_frames
     }
 
-    fn num_channels(&self) -> u16 {
-        self.num_channels
+    fn num_channels_allocated(&self) -> u16 {
+        self.num_channels_allocated
+    }
+
+    fn num_frames_allocated(&self) -> usize {
+        self.num_frames_allocated
     }
 
     fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {
@@ -110,6 +118,16 @@ impl<'a, S: Sample> BlockRead<S> for InterleavedViewMut<'a, S> {
 }
 
 impl<'a, S: Sample> BlockWrite<S> for InterleavedViewMut<'a, S> {
+    fn set_num_channels(&mut self, num_channels: u16) {
+        assert!(num_channels <= self.num_channels_allocated);
+        self.num_channels = num_channels;
+    }
+
+    fn set_num_frames(&mut self, num_frames: usize) {
+        assert!(num_frames <= self.num_frames_allocated);
+        self.num_frames = num_frames;
+    }
+
     fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S> {
         assert!(channel < self.num_channels);
         self.data

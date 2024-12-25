@@ -6,8 +6,8 @@ pub struct StackedView<'a, S: Sample, const C: usize> {
     pub(super) data: [MaybeUninit<&'a [S]>; C],
     pub(super) num_channels: u16,
     pub(super) num_frames: usize,
-    pub(super) num_channels_available: u16,
-    pub(super) num_frames_available: usize,
+    pub(super) num_channels_allocated: u16,
+    pub(super) num_frames_allocated: usize,
 }
 
 impl<'a, S: Sample, const C: usize> StackedView<'a, S, C> {
@@ -46,8 +46,8 @@ impl<'a, S: Sample, const C: usize> StackedView<'a, S, C> {
             data: slice,
             num_channels: num_channels_visible,
             num_frames: num_frames_visible,
-            num_channels_available: num_channels_available as u16,
-            num_frames_available,
+            num_channels_allocated: num_channels_available as u16,
+            num_frames_allocated: num_frames_available,
         }
     }
 
@@ -86,8 +86,8 @@ impl<'a, S: Sample, const C: usize> StackedView<'a, S, C> {
             data: slice,
             num_channels: num_channels_visible,
             num_frames: num_frames_visible,
-            num_channels_available: num_channels_available as u16,
-            num_frames_available,
+            num_channels_allocated: num_channels_available as u16,
+            num_frames_allocated: num_frames_available,
         }
     }
 
@@ -122,8 +122,8 @@ impl<'a, S: Sample, const C: usize> StackedView<'a, S, C> {
             data: slice,
             num_channels: num_channels_visible,
             num_frames: num_frames_visible,
-            num_channels_available,
-            num_frames_available,
+            num_channels_allocated: num_channels_available,
+            num_frames_allocated: num_frames_available,
         }
     }
 }
@@ -135,6 +135,14 @@ impl<'a, S: Sample, const C: usize> BlockRead<S> for StackedView<'a, S, C> {
 
     fn num_channels(&self) -> u16 {
         self.num_channels
+    }
+
+    fn num_channels_allocated(&self) -> u16 {
+        self.num_channels_allocated
+    }
+
+    fn num_frames_allocated(&self) -> usize {
+        self.num_frames_allocated
     }
 
     fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {
@@ -164,8 +172,8 @@ impl<'a, S: Sample, const C: usize> BlockRead<S> for StackedView<'a, S, C> {
             data: out,
             num_channels: self.num_channels,
             num_frames: self.num_frames,
-            num_channels_available: self.num_channels_available,
-            num_frames_available: self.num_frames_available,
+            num_channels_allocated: self.num_channels_allocated,
+            num_frames_allocated: self.num_frames_allocated,
         }
     }
 }
@@ -250,8 +258,8 @@ mod tests {
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
-        assert_eq!(block.num_channels_available, 3);
-        assert_eq!(block.num_frames_available, 4);
+        assert_eq!(block.num_channels_allocated, 3);
+        assert_eq!(block.num_frames_allocated, 4);
 
         for i in 0..block.num_channels() {
             assert_eq!(block.channel(i).count(), 3);
@@ -296,8 +304,8 @@ mod tests {
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
-        assert_eq!(block.num_channels_available, 3);
-        assert_eq!(block.num_frames_available, 5);
+        assert_eq!(block.num_channels_allocated, 3);
+        assert_eq!(block.num_frames_allocated, 5);
 
         for i in 0..block.num_channels() {
             assert_eq!(block.channel(i).count(), 3);
