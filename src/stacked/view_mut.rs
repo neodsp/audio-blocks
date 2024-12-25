@@ -138,6 +138,8 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> BlockWrite<S> for StackedViewMut
 
 #[cfg(test)]
 mod tests {
+    use std::mem::MaybeUninit;
+
     use super::*;
 
     #[test]
@@ -281,6 +283,26 @@ mod tests {
         }
     }
 
+    pub unsafe fn adapt_stacked_ptr<'a, const MAX_CHANNELS: usize>(
+        ptr: *const *mut f32,
+        num_channels: usize,
+        num_frames: usize,
+    ) -> [&'a mut [f32]; MAX_CHANNELS] {
+        let mut data: [MaybeUninit<&mut [f32]>; MAX_CHANNELS] =
+            std::array::from_fn(|_| MaybeUninit::uninit());
+
+        let ptr_slice: &mut [*mut f32] =
+            std::slice::from_raw_parts_mut(ptr as *mut *mut f32, num_channels);
+
+        for ch in 0..num_channels {
+            data[ch] = MaybeUninit::new(std::slice::from_raw_parts_mut(ptr_slice[ch], num_frames));
+        }
+        std::mem::transmute_copy::<
+            [MaybeUninit<&mut [f32]>; MAX_CHANNELS],
+            [&mut [f32]; MAX_CHANNELS],
+        >(&data)
+    }
+
     #[test]
     fn test_pointer() {
         unsafe {
@@ -293,14 +315,12 @@ mod tests {
 
             let a = ptr_vec.as_mut_ptr();
 
-            let mut vec = Vec::with_capacity(2);
+            let num_channels = 2;
+            let num_frames = 5;
 
-            let b: &mut [*mut f32] = std::slice::from_raw_parts_mut(a as *mut *mut f32, 2);
+            let mut array = adapt_stacked_ptr::<16>(a, num_channels, num_frames);
 
-            vec.push(std::slice::from_raw_parts_mut(b[0], 5));
-            vec.push(std::slice::from_raw_parts_mut(b[1], 5));
-
-            let stacked = StackedViewMut::from_slices(&mut vec);
+            let stacked = StackedViewMut::from_slices(&mut array[..num_channels]);
 
             assert_eq!(
                 stacked.channel(0).copied().collect::<Vec<_>>(),
