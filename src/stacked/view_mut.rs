@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, mem::MaybeUninit};
 
 use rtsan::nonblocking;
 
@@ -283,13 +283,14 @@ mod tests {
         }
     }
 
-    pub unsafe fn adapt_stacked_ptr<'a, const MAX_CHANNELS: usize>(
+    unsafe fn adapt_stacked_ptr<'a, const MAX_CHANNELS: usize>(
         ptr: *const *mut f32,
         num_channels: usize,
         num_frames: usize,
     ) -> [&'a mut [f32]; MAX_CHANNELS] {
-        let mut data: [MaybeUninit<&mut [f32]>; MAX_CHANNELS] =
-            std::array::from_fn(|_| MaybeUninit::uninit());
+        assert!(num_channels <= MAX_CHANNELS);
+
+        let mut data: [MaybeUninit<&mut [f32]>; MAX_CHANNELS] = MaybeUninit::uninit().assume_init();
 
         let ptr_slice: &mut [*mut f32] =
             std::slice::from_raw_parts_mut(ptr as *mut *mut f32, num_channels);
@@ -297,28 +298,29 @@ mod tests {
         for ch in 0..num_channels {
             data[ch] = MaybeUninit::new(std::slice::from_raw_parts_mut(ptr_slice[ch], num_frames));
         }
-        std::mem::transmute_copy::<
-            [MaybeUninit<&mut [f32]>; MAX_CHANNELS],
-            [&mut [f32]; MAX_CHANNELS],
-        >(&data)
+
+        // Fill remaining slots with dummy data to satisfy type requirements
+        for ch in num_channels..MAX_CHANNELS {
+            data[ch] = MaybeUninit::new(&mut []);
+        }
+
+        std::mem::transmute_copy(&data)
     }
 
     #[test]
     fn test_pointer() {
         unsafe {
+            let num_channels = 2;
+            let num_frames = 5;
             let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
 
             let mut ptr_vec: Vec<*mut f32> = vec
                 .iter_mut()
                 .map(|inner_vec| inner_vec.as_mut_ptr())
                 .collect();
+            let ptr = ptr_vec.as_mut_ptr();
 
-            let a = ptr_vec.as_mut_ptr();
-
-            let num_channels = 2;
-            let num_frames = 5;
-
-            let mut array = adapt_stacked_ptr::<16>(a, num_channels, num_frames);
+            let mut array = adapt_stacked_ptr::<16>(ptr, num_channels, num_frames);
 
             let stacked = StackedViewMut::from_slices(&mut array[..num_channels]);
 
