@@ -220,64 +220,97 @@ mod tests {
         assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![8.0, 9.0]);
     }
 
-    // #[test]
-    // fn test_view() {
-    //     let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-    //     let block = StackedViewMut::<f32, 16>::from_vec(&mut vec);
-    //     let view = block.view();
-    //     assert_eq!(
-    //         view.channel(0).copied().collect::<Vec<_>>(),
-    //         vec![0.0, 2.0, 4.0, 6.0, 8.0]
-    //     );
-    //     assert_eq!(
-    //         view.channel(1).copied().collect::<Vec<_>>(),
-    //         vec![1.0, 3.0, 5.0, 7.0, 9.0]
-    //     );
-    // }
+    #[test]
+    fn test_view() {
+        let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
+        let block = StackedViewMut::from_slices(&mut vec);
+        let view = block.view();
+        assert_eq!(
+            view.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            view.channel(1).copied().collect::<Vec<_>>(),
+            vec![1.0, 3.0, 5.0, 7.0, 9.0]
+        );
+    }
 
-    // #[test]
-    // fn test_view_mut() {
-    //     let mut data = vec![vec![0.0; 5]; 2];
-    //     let mut block = StackedViewMut::<f32, 16>::from_vec(&mut data);
+    #[test]
+    fn test_view_mut() {
+        let mut data = vec![vec![0.0; 5]; 2];
+        let mut block = StackedViewMut::from_slices(&mut data);
 
-    //     {
-    //         let mut view = block.view_mut();
-    //         view.channel_mut(0)
-    //             .enumerate()
-    //             .for_each(|(i, v)| *v = i as f32);
-    //         view.channel_mut(1)
-    //             .enumerate()
-    //             .for_each(|(i, v)| *v = i as f32 + 10.0);
-    //     }
+        {
+            let mut view = block.view_mut();
+            view.channel_mut(0)
+                .enumerate()
+                .for_each(|(i, v)| *v = i as f32);
+            view.channel_mut(1)
+                .enumerate()
+                .for_each(|(i, v)| *v = i as f32 + 10.0);
+        }
 
-    //     assert_eq!(
-    //         block.channel(0).copied().collect::<Vec<_>>(),
-    //         vec![0.0, 1.0, 2.0, 3.0, 4.0]
-    //     );
-    //     assert_eq!(
-    //         block.channel(1).copied().collect::<Vec<_>>(),
-    //         vec![10.0, 11.0, 12.0, 13.0, 14.0]
-    //     );
-    // }
+        assert_eq!(
+            block.channel(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 1.0, 2.0, 3.0, 4.0]
+        );
+        assert_eq!(
+            block.channel(1).copied().collect::<Vec<_>>(),
+            vec![10.0, 11.0, 12.0, 13.0, 14.0]
+        );
+    }
 
-    // #[test]
-    // fn test_limited() {
-    //     let mut data = vec![vec![0.0; 4]; 3];
+    #[test]
+    fn test_limited() {
+        let mut data = vec![vec![0.0; 4]; 3];
 
-    //     let mut block = StackedViewMut::<f32, 16>::from_vec_limited(&mut data, 2, 3);
+        let mut block = StackedViewMut::from_slices_limited(&mut data, 2, 3);
 
-    //     assert_eq!(block.num_channels(), 2);
-    //     assert_eq!(block.num_frames(), 3);
-    //     assert_eq!(block.num_channels_allocated, 3);
-    //     assert_eq!(block.num_frames_allocated, 4);
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_frames(), 3);
+        assert_eq!(block.num_channels_allocated, 3);
+        assert_eq!(block.num_frames_allocated, 4);
 
-    //     for i in 0..block.num_channels() {
-    //         assert_eq!(block.channel(i).count(), 3);
-    //         assert_eq!(block.channel_mut(i).count(), 3);
-    //     }
-    //     for i in 0..block.num_frames() {
-    //         assert_eq!(block.frame(i).count(), 2);
-    //         assert_eq!(block.frame_mut(i).count(), 2);
-    //     }
-    // }
+        for i in 0..block.num_channels() {
+            assert_eq!(block.channel(i).count(), 3);
+            assert_eq!(block.channel_mut(i).count(), 3);
+        }
+        for i in 0..block.num_frames() {
+            assert_eq!(block.frame(i).count(), 2);
+            assert_eq!(block.frame_mut(i).count(), 2);
+        }
+    }
+
+    #[test]
+    fn test_pointer() {
+        unsafe {
+            let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
+
+            let mut ptr_vec: Vec<*mut f32> = vec
+                .iter_mut()
+                .map(|inner_vec| inner_vec.as_mut_ptr())
+                .collect();
+
+            let a = ptr_vec.as_mut_ptr();
+
+            let mut vec = Vec::with_capacity(2);
+
+            let b: &mut [*mut f32] = std::slice::from_raw_parts_mut(a as *mut *mut f32, 2);
+
+            vec.push(std::slice::from_raw_parts_mut(b[0], 5));
+            vec.push(std::slice::from_raw_parts_mut(b[1], 5));
+
+            let stacked = StackedViewMut::from_slices(&mut vec);
+
+            assert_eq!(
+                stacked.channel(0).copied().collect::<Vec<_>>(),
+                vec![0.0, 2.0, 4.0, 6.0, 8.0]
+            );
+
+            assert_eq!(
+                stacked.channel(1).copied().collect::<Vec<_>>(),
+                vec![1.0, 3.0, 5.0, 7.0, 9.0]
+            );
+        }
+    }
 }
