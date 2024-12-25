@@ -3,7 +3,10 @@ use rtsan::nonblocking;
 use crate::{BlockRead, BlockWrite, Sample};
 
 pub trait Ops<S: Sample> {
+    /// Destination block will take over the size from source block.
+    /// Panics if destination block has not enough memory allocated to grow.
     fn copy_from_block(&mut self, block: &impl BlockRead<S>);
+    /// Copy will panic if blocks don't have the exact same size
     fn copy_from_block_exact(&mut self, block: &impl BlockRead<S>);
     fn for_each(&mut self, f: impl FnMut(&mut S));
     fn gain(&mut self, gain: S);
