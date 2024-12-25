@@ -1,3 +1,5 @@
+use rtsan::nonblocking;
+
 use crate::{BlockRead, BlockWrite, Sample};
 
 use super::view::SequentialView;
@@ -11,6 +13,7 @@ pub struct SequentialViewMut<'a, S: Sample> {
 }
 
 impl<'a, S: Sample> SequentialViewMut<'a, S> {
+    #[nonblocking]
     pub fn from_slice(data: &'a mut [S], num_channels: u16, num_frames: usize) -> Self {
         assert_eq!(data.len(), num_channels as usize * num_frames);
         Self {
@@ -22,6 +25,7 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
         }
     }
 
+    #[nonblocking]
     pub fn from_slice_limited(
         data: &'a mut [S],
         num_channels_visible: u16,
@@ -42,6 +46,7 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
         }
     }
 
+    #[nonblocking]
     pub unsafe fn from_raw(ptr: *mut S, num_channels: u16, num_frames: usize) -> Self {
         Self {
             data: std::slice::from_raw_parts_mut(ptr, num_channels as usize * num_frames),
@@ -52,6 +57,7 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
         }
     }
 
+    #[nonblocking]
     pub unsafe fn from_raw_limited(
         ptr: *mut S,
         num_channels_visible: u16,
@@ -73,22 +79,27 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
 }
 
 impl<'a, S: Sample> BlockRead<S> for SequentialViewMut<'a, S> {
+    #[nonblocking]
     fn num_frames(&self) -> usize {
         self.num_frames
     }
 
+    #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
     }
 
+    #[nonblocking]
     fn num_channels_allocated(&self) -> u16 {
         self.num_channels_allocated
     }
 
+    #[nonblocking]
     fn num_frames_allocated(&self) -> usize {
         self.num_frames_allocated
     }
 
+    #[nonblocking]
     fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {
         assert!(channel < self.num_channels);
         self.data
@@ -97,6 +108,7 @@ impl<'a, S: Sample> BlockRead<S> for SequentialViewMut<'a, S> {
             .take(self.num_frames)
     }
 
+    #[nonblocking]
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -106,6 +118,7 @@ impl<'a, S: Sample> BlockRead<S> for SequentialViewMut<'a, S> {
             .take(self.num_channels as usize)
     }
 
+    #[nonblocking]
     fn view(&self) -> impl BlockRead<S> {
         SequentialView::from_slice_limited(
             &self.data,
@@ -118,16 +131,19 @@ impl<'a, S: Sample> BlockRead<S> for SequentialViewMut<'a, S> {
 }
 
 impl<'a, S: Sample> BlockWrite<S> for SequentialViewMut<'a, S> {
+    #[nonblocking]
     fn set_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
         self.num_channels = num_channels;
     }
 
+    #[nonblocking]
     fn set_num_frames(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
 
+    #[nonblocking]
     fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S> {
         assert!(channel < self.num_channels);
         self.data
@@ -136,6 +152,7 @@ impl<'a, S: Sample> BlockWrite<S> for SequentialViewMut<'a, S> {
             .take(self.num_frames)
     }
 
+    #[nonblocking]
     fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S> {
         assert!(frame < self.num_frames);
         self.data
@@ -145,6 +162,7 @@ impl<'a, S: Sample> BlockWrite<S> for SequentialViewMut<'a, S> {
             .take(self.num_channels as usize)
     }
 
+    #[nonblocking]
     fn view_mut(&mut self) -> impl BlockWrite<S> {
         SequentialViewMut::from_slice_limited(
             &mut self.data,

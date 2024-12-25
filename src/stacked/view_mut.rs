@@ -1,5 +1,7 @@
 use std::mem::MaybeUninit;
 
+use rtsan::nonblocking;
+
 use crate::{BlockRead, BlockWrite, Sample};
 
 use super::StackedView;
@@ -13,11 +15,13 @@ pub struct StackedViewMut<'a, S: Sample, const C: usize> {
 }
 
 impl<'a, S: Sample, const C: usize> StackedViewMut<'a, S, C> {
+    #[nonblocking]
     pub fn from_slices(data: &'a mut [&'a mut [S]]) -> Self {
         let num_frames_available = if data.is_empty() { 0 } else { data[0].len() };
         Self::from_slices_limited(data, data.len() as u16, num_frames_available)
     }
 
+    #[nonblocking]
     pub fn from_slices_limited(
         data: &'a mut [&'a mut [S]],
         num_channels_visible: u16,
@@ -54,11 +58,13 @@ impl<'a, S: Sample, const C: usize> StackedViewMut<'a, S, C> {
         }
     }
 
+    #[nonblocking]
     pub fn from_vec(data: &'a mut Vec<Vec<S>>) -> Self {
         let num_frames_available = if data.is_empty() { 0 } else { data[0].len() };
         Self::from_vec_limited(data, data.len() as u16, num_frames_available)
     }
 
+    #[nonblocking]
     pub fn from_vec_limited(
         data: &'a mut Vec<Vec<S>>,
         num_channels_visible: u16,
@@ -95,10 +101,12 @@ impl<'a, S: Sample, const C: usize> StackedViewMut<'a, S, C> {
         }
     }
 
+    #[nonblocking]
     pub unsafe fn from_raw(data: *const *mut S, num_channels: u16, num_frames: usize) -> Self {
         Self::from_raw_limited(data, num_channels, num_frames, num_channels, num_frames)
     }
 
+    #[nonblocking]
     pub unsafe fn from_raw_limited(
         data: *const *mut S,
         num_channels_visible: u16,
@@ -137,22 +145,27 @@ impl<'a, S: Sample, const C: usize> StackedViewMut<'a, S, C> {
 }
 
 impl<'a, S: Sample, const C: usize> BlockRead<S> for StackedViewMut<'a, S, C> {
+    #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
     }
 
+    #[nonblocking]
     fn num_frames(&self) -> usize {
         self.num_frames
     }
 
+    #[nonblocking]
     fn num_channels_allocated(&self) -> u16 {
         self.num_channels_allocated
     }
 
+    #[nonblocking]
     fn num_frames_allocated(&self) -> usize {
         self.num_frames_allocated
     }
 
+    #[nonblocking]
     fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {
         assert!(channel < self.num_channels);
         unsafe {
@@ -163,6 +176,7 @@ impl<'a, S: Sample, const C: usize> BlockRead<S> for StackedViewMut<'a, S, C> {
         }
     }
 
+    #[nonblocking]
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -171,6 +185,7 @@ impl<'a, S: Sample, const C: usize> BlockRead<S> for StackedViewMut<'a, S, C> {
             .map(move |channel_data| unsafe { &channel_data.assume_init_read()[frame] })
     }
 
+    #[nonblocking]
     fn view(&self) -> impl BlockRead<S> {
         let mut out = [MaybeUninit::<&'a [S]>::uninit(); C];
         for (i, ch) in self.data.iter().enumerate() {
@@ -187,16 +202,19 @@ impl<'a, S: Sample, const C: usize> BlockRead<S> for StackedViewMut<'a, S, C> {
 }
 
 impl<'a, S: Sample, const C: usize> BlockWrite<S> for StackedViewMut<'a, S, C> {
+    #[nonblocking]
     fn set_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
         self.num_channels = num_channels;
     }
 
+    #[nonblocking]
     fn set_num_frames(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
 
+    #[nonblocking]
     fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S> {
         assert!(channel < self.num_channels);
         unsafe {
@@ -207,6 +225,7 @@ impl<'a, S: Sample, const C: usize> BlockWrite<S> for StackedViewMut<'a, S, C> {
         }
     }
 
+    #[nonblocking]
     fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S> {
         assert!(frame < self.num_frames);
         self.data
@@ -215,6 +234,7 @@ impl<'a, S: Sample, const C: usize> BlockWrite<S> for StackedViewMut<'a, S, C> {
             .map(move |channel_data| unsafe { &mut channel_data.assume_init_mut()[frame] })
     }
 
+    #[nonblocking]
     fn view_mut(&mut self) -> impl BlockWrite<S> {
         let mut out: [MaybeUninit<&'_ mut [S]>; C] = std::array::from_fn(|_| MaybeUninit::uninit());
         for (i, ch) in self.data.iter_mut().enumerate() {

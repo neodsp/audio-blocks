@@ -1,3 +1,5 @@
+use rtsan::nonblocking;
+
 use crate::{BlockRead, BlockWrite, Sample};
 
 use super::{view::StackedView, view_mut::StackedViewMut};
@@ -38,27 +40,33 @@ impl<S: Sample> Stacked<S> {
 }
 
 impl<S: Sample> BlockRead<S> for Stacked<S> {
+    #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
     }
 
+    #[nonblocking]
     fn num_frames(&self) -> usize {
         self.num_frames
     }
 
+    #[nonblocking]
     fn num_channels_allocated(&self) -> u16 {
         self.num_channels_allocated
     }
 
+    #[nonblocking]
     fn num_frames_allocated(&self) -> usize {
         self.num_frames_allocated
     }
 
+    #[nonblocking]
     fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {
         assert!(channel < self.num_channels);
         self.data[channel as usize].iter().take(self.num_frames)
     }
 
+    #[nonblocking]
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -67,27 +75,32 @@ impl<S: Sample> BlockRead<S> for Stacked<S> {
             .map(move |channel_data| &channel_data[frame])
     }
 
+    #[nonblocking]
     fn view(&self) -> impl BlockRead<S> {
         StackedView::<S, 256>::from_vec(&self.data)
     }
 }
 
 impl<S: Sample> BlockWrite<S> for Stacked<S> {
+    #[nonblocking]
     fn set_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
         self.num_channels = num_channels;
     }
 
+    #[nonblocking]
     fn set_num_frames(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
 
+    #[nonblocking]
     fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S> {
         assert!(channel < self.num_channels);
         self.data[channel as usize].iter_mut().take(self.num_frames)
     }
 
+    #[nonblocking]
     fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S> {
         assert!(frame < self.num_frames);
         self.data
@@ -96,6 +109,7 @@ impl<S: Sample> BlockWrite<S> for Stacked<S> {
             .map(move |channel_data| &mut channel_data[frame])
     }
 
+    #[nonblocking]
     fn view_mut(&mut self) -> impl BlockWrite<S> {
         StackedViewMut::<S, 256>::from_vec(&mut self.data)
     }
@@ -266,6 +280,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_wrong_resize_channels() {
         let mut block = Stacked::<f32>::empty(2, 10);
         block.set_num_channels(3);
@@ -273,6 +288,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_wrong_resize_frames() {
         let mut block = Stacked::<f32>::empty(2, 10);
         block.set_num_frames(11);
@@ -280,6 +296,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_wrong_channel() {
         let mut block = Stacked::<f32>::empty(2, 10);
         block.set_num_channels(1);
@@ -288,6 +305,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_wrong_frame() {
         let mut block = Stacked::<f32>::empty(2, 10);
         block.set_num_frames(5);
@@ -296,6 +314,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_wrong_channel_mut() {
         let mut block = Stacked::<f32>::empty(2, 10);
         block.set_num_channels(1);
@@ -304,6 +323,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_wrong_frame_mut() {
         let mut block = Stacked::<f32>::empty(2, 10);
         block.set_num_frames(5);

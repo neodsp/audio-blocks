@@ -1,3 +1,5 @@
+use rtsan::nonblocking;
+
 use crate::{BlockRead, BlockWrite, Sample};
 
 use super::{view::SequentialView, view_mut::SequentialViewMut};
@@ -48,22 +50,27 @@ impl<S: Sample> Sequential<S> {
 }
 
 impl<S: Sample> BlockRead<S> for Sequential<S> {
+    #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
     }
 
+    #[nonblocking]
     fn num_frames(&self) -> usize {
         self.num_frames
     }
 
+    #[nonblocking]
     fn num_channels_allocated(&self) -> u16 {
         self.num_channels_allocated
     }
 
+    #[nonblocking]
     fn num_frames_allocated(&self) -> usize {
         self.num_frames_allocated
     }
 
+    #[nonblocking]
     fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {
         assert!(channel < self.num_channels);
         self.data
@@ -72,6 +79,7 @@ impl<S: Sample> BlockRead<S> for Sequential<S> {
             .take(self.num_frames)
     }
 
+    #[nonblocking]
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -81,6 +89,7 @@ impl<S: Sample> BlockRead<S> for Sequential<S> {
             .take(self.num_channels as usize)
     }
 
+    #[nonblocking]
     fn view(&self) -> impl BlockRead<S> {
         SequentialView::from_slice_limited(
             &self.data,
@@ -93,16 +102,19 @@ impl<S: Sample> BlockRead<S> for Sequential<S> {
 }
 
 impl<S: Sample> BlockWrite<S> for Sequential<S> {
+    #[nonblocking]
     fn set_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
         self.num_channels = num_channels;
     }
 
+    #[nonblocking]
     fn set_num_frames(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
 
+    #[nonblocking]
     fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S> {
         assert!(channel < self.num_channels);
         self.data
@@ -111,6 +123,7 @@ impl<S: Sample> BlockWrite<S> for Sequential<S> {
             .take(self.num_frames)
     }
 
+    #[nonblocking]
     fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S> {
         assert!(frame < self.num_frames);
         self.data
@@ -120,6 +133,7 @@ impl<S: Sample> BlockWrite<S> for Sequential<S> {
             .take(self.num_channels as usize)
     }
 
+    #[nonblocking]
     fn view_mut(&mut self) -> impl BlockWrite<S> {
         SequentialViewMut::from_slice_limited(
             &mut self.data,
@@ -258,25 +272,6 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn test_copy_from_block() {
-    //     let mut block = Interleaved::<f32>::empty(3, 6);
-    //     let view =
-    //         InterleavedView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], 2, 5);
-    //     block.copy_from_block(&view);
-
-    //     assert_eq!(
-    //         block.channel(0).copied().collect::<Vec<_>>(),
-    //         &[0.0, 2.0, 4.0, 6.0, 8.0]
-    //     );
-    //     assert_eq!(
-    //         block.channel(1).copied().collect::<Vec<_>>(),
-    //         &[1.0, 3.0, 5.0, 7.0, 9.0]
-    //     );
-    //     assert_eq!(block.num_channels(), view.num_channels());
-    //     assert_eq!(block.num_frames(), view.num_frames());
-    // }
-
     #[test]
     fn test_resize() {
         let mut block = Sequential::<f32>::empty(3, 10);
@@ -316,6 +311,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_wrong_resize_channels() {
         let mut block = Sequential::<f32>::empty(2, 10);
         block.set_num_channels(3);
@@ -323,6 +319,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_wrong_resize_frames() {
         let mut block = Sequential::<f32>::empty(2, 10);
         block.set_num_frames(11);
@@ -330,6 +327,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_wrong_channel() {
         let mut block = Sequential::<f32>::empty(2, 10);
         block.set_num_channels(1);
@@ -338,6 +336,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_wrong_frame() {
         let mut block = Sequential::<f32>::empty(2, 10);
         block.set_num_frames(5);
@@ -346,6 +345,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_wrong_channel_mut() {
         let mut block = Sequential::<f32>::empty(2, 10);
         block.set_num_channels(1);
@@ -354,6 +354,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_wrong_frame_mut() {
         let mut block = Sequential::<f32>::empty(2, 10);
         block.set_num_frames(5);

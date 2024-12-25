@@ -1,5 +1,7 @@
 use std::mem::MaybeUninit;
 
+use rtsan::nonblocking;
+
 use crate::{BlockRead, Sample};
 
 pub struct StackedView<'a, S: Sample, const C: usize> {
@@ -11,11 +13,13 @@ pub struct StackedView<'a, S: Sample, const C: usize> {
 }
 
 impl<'a, S: Sample, const C: usize> StackedView<'a, S, C> {
+    #[nonblocking]
     pub fn from_slices(data: &'a [&'a [S]]) -> Self {
         let num_frames_available = if data.is_empty() { 0 } else { data[0].len() };
         Self::from_slices_limited(data, data.len() as u16, num_frames_available)
     }
 
+    #[nonblocking]
     pub fn from_slices_limited(
         data: &'a [&'a [S]],
         num_channels_visible: u16,
@@ -51,11 +55,13 @@ impl<'a, S: Sample, const C: usize> StackedView<'a, S, C> {
         }
     }
 
+    #[nonblocking]
     pub fn from_vec(data: &'a Vec<Vec<S>>) -> Self {
         let num_frames_available = if data.is_empty() { 0 } else { data[0].len() };
         Self::from_vec_limited(data, data.len() as u16, num_frames_available)
     }
 
+    #[nonblocking]
     pub fn from_vec_limited(
         data: &'a Vec<Vec<S>>,
         num_channels_visible: u16,
@@ -91,10 +97,12 @@ impl<'a, S: Sample, const C: usize> StackedView<'a, S, C> {
         }
     }
 
+    #[nonblocking]
     pub unsafe fn from_raw(data: *const *const S, num_channels: u16, num_frames: usize) -> Self {
         Self::from_raw_limited(data, num_channels, num_frames, num_channels, num_frames)
     }
 
+    #[nonblocking]
     pub unsafe fn from_raw_limited(
         data: *const *const S,
         num_channels_visible: u16,
@@ -129,22 +137,27 @@ impl<'a, S: Sample, const C: usize> StackedView<'a, S, C> {
 }
 
 impl<'a, S: Sample, const C: usize> BlockRead<S> for StackedView<'a, S, C> {
+    #[nonblocking]
     fn num_frames(&self) -> usize {
         self.num_frames
     }
 
+    #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
     }
 
+    #[nonblocking]
     fn num_channels_allocated(&self) -> u16 {
         self.num_channels_allocated
     }
 
+    #[nonblocking]
     fn num_frames_allocated(&self) -> usize {
         self.num_frames_allocated
     }
 
+    #[nonblocking]
     fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {
         assert!(channel < self.num_channels);
         unsafe {
@@ -155,6 +168,7 @@ impl<'a, S: Sample, const C: usize> BlockRead<S> for StackedView<'a, S, C> {
         }
     }
 
+    #[nonblocking]
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -163,6 +177,7 @@ impl<'a, S: Sample, const C: usize> BlockRead<S> for StackedView<'a, S, C> {
             .map(move |channel_data| unsafe { &channel_data.assume_init_read()[frame] })
     }
 
+    #[nonblocking]
     fn view(&self) -> impl BlockRead<S> {
         let mut out = [MaybeUninit::<&'a [S]>::uninit(); C];
         for (i, ch) in self.data.iter().enumerate() {

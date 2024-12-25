@@ -1,3 +1,5 @@
+use rtsan::nonblocking;
+
 use crate::{BlockRead, BlockWrite, Sample};
 
 pub trait Ops<S: Sample> {
@@ -9,6 +11,7 @@ pub trait Ops<S: Sample> {
 }
 
 impl<S: Sample, B: BlockWrite<S>> Ops<S> for B {
+    #[nonblocking]
     fn copy_from_block(&mut self, block: &impl BlockRead<S>) {
         assert!(block.num_channels() <= self.num_channels_allocated());
         assert!(block.num_frames() <= self.num_frames_allocated());
@@ -21,6 +24,7 @@ impl<S: Sample, B: BlockWrite<S>> Ops<S> for B {
         }
     }
 
+    #[nonblocking]
     fn copy_from_block_exact(&mut self, block: &impl BlockRead<S>) {
         assert_eq!(block.num_channels(), self.num_channels());
         assert_eq!(block.num_frames(), self.num_frames());
@@ -31,16 +35,19 @@ impl<S: Sample, B: BlockWrite<S>> Ops<S> for B {
         }
     }
 
+    #[nonblocking]
     fn for_each(&mut self, mut f: impl FnMut(&mut S)) {
         for ch in 0..self.num_channels() {
             self.channel_mut(ch).for_each(|v| f(v));
         }
     }
 
+    #[nonblocking]
     fn gain(&mut self, gain: S) {
         self.for_each(|s| *s = *s * gain);
     }
 
+    #[nonblocking]
     fn clear(&mut self) {
         self.for_each(|s| *s = S::zero());
     }
@@ -99,6 +106,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_copy_data_wrong_channels() {
         let mut block = Interleaved::empty(1, 5);
         let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
@@ -107,6 +115,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_copy_data_wrong_frames() {
         let mut block = Interleaved::empty(3, 3);
         let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
@@ -115,6 +124,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_copy_data_exact_wrong_channels() {
         let mut block = Interleaved::empty(3, 4);
         let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
@@ -123,6 +133,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[rtsan::no_sanitize]
     fn test_copy_data_exact_wrong_frames() {
         let mut block = Interleaved::empty(2, 5);
         let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);

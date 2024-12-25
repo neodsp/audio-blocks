@@ -1,3 +1,5 @@
+use rtsan::nonblocking;
+
 use crate::{BlockRead, Sample};
 
 pub struct SequentialView<'a, S: Sample> {
@@ -9,6 +11,7 @@ pub struct SequentialView<'a, S: Sample> {
 }
 
 impl<'a, S: Sample> SequentialView<'a, S> {
+    #[nonblocking]
     pub fn from_slice(data: &'a [S], num_channels: u16, num_frames: usize) -> Self {
         assert_eq!(data.len(), num_channels as usize * num_frames);
         Self {
@@ -20,6 +23,7 @@ impl<'a, S: Sample> SequentialView<'a, S> {
         }
     }
 
+    #[nonblocking]
     pub fn from_slice_limited(
         data: &'a [S],
         num_channels_visible: u16,
@@ -40,6 +44,7 @@ impl<'a, S: Sample> SequentialView<'a, S> {
         }
     }
 
+    #[nonblocking]
     pub unsafe fn from_raw(ptr: *const S, num_channels: u16, num_frames: usize) -> Self {
         Self {
             data: std::slice::from_raw_parts(ptr, num_channels as usize * num_frames),
@@ -50,6 +55,7 @@ impl<'a, S: Sample> SequentialView<'a, S> {
         }
     }
 
+    #[nonblocking]
     pub unsafe fn from_raw_limited(
         ptr: *const S,
         num_channels_visible: u16,
@@ -71,22 +77,27 @@ impl<'a, S: Sample> SequentialView<'a, S> {
 }
 
 impl<'a, S: Sample> BlockRead<S> for SequentialView<'a, S> {
+    #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
     }
 
+    #[nonblocking]
     fn num_frames(&self) -> usize {
         self.num_frames
     }
 
+    #[nonblocking]
     fn num_channels_allocated(&self) -> u16 {
         self.num_channels_allocated
     }
 
+    #[nonblocking]
     fn num_frames_allocated(&self) -> usize {
         self.num_frames_allocated
     }
 
+    #[nonblocking]
     fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {
         assert!(channel < self.num_channels);
         self.data
@@ -95,6 +106,7 @@ impl<'a, S: Sample> BlockRead<S> for SequentialView<'a, S> {
             .take(self.num_frames)
     }
 
+    #[nonblocking]
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -104,6 +116,7 @@ impl<'a, S: Sample> BlockRead<S> for SequentialView<'a, S> {
             .take(self.num_channels as usize)
     }
 
+    #[nonblocking]
     fn view(&self) -> impl BlockRead<S> {
         SequentialView::from_slice_limited(
             &self.data,
