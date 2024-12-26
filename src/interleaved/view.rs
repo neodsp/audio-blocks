@@ -131,6 +131,16 @@ impl<'a, S: Sample> BlockRead<S> for InterleavedView<'a, S> {
             self.num_frames_allocated,
         )
     }
+
+    #[nonblocking]
+    fn layout(&self) -> crate::Layout {
+        crate::Layout::Interleaved
+    }
+
+    #[nonblocking]
+    fn raw_data(&self, _: u16) -> &[S] {
+        self.data
+    }
 }
 
 #[cfg(test)]
@@ -262,5 +272,18 @@ mod tests {
         for i in 0..block.num_frames() {
             assert_eq!(block.frame(i).count(), 2);
         }
+    }
+
+    #[test]
+    fn test_raw_data() {
+        let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = InterleavedView::<f32>::from_slice(&data, 2, 5);
+
+        assert_eq!(block.layout(), crate::Layout::Interleaved);
+
+        assert_eq!(
+            block.raw_data(0),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
     }
 }

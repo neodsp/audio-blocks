@@ -5,11 +5,11 @@ use crate::{BlockRead, BlockWrite, Sample};
 use super::view::InterleavedView;
 
 pub struct InterleavedViewMut<'a, S: Sample> {
-    pub(super) data: &'a mut [S],
-    pub(super) num_channels: u16,
-    pub(super) num_frames: usize,
-    pub(super) num_channels_allocated: u16,
-    pub(super) num_frames_allocated: usize,
+    data: &'a mut [S],
+    num_channels: u16,
+    num_frames: usize,
+    num_channels_allocated: u16,
+    num_frames_allocated: usize,
 }
 
 impl<'a, S: Sample> InterleavedViewMut<'a, S> {
@@ -132,6 +132,16 @@ impl<'a, S: Sample> BlockRead<S> for InterleavedViewMut<'a, S> {
             self.num_frames_allocated,
         )
     }
+
+    #[nonblocking]
+    fn layout(&self) -> crate::Layout {
+        crate::Layout::Interleaved
+    }
+
+    #[nonblocking]
+    fn raw_data(&self, _: u16) -> &[S] {
+        &self.data
+    }
 }
 
 impl<'a, S: Sample> BlockWrite<S> for InterleavedViewMut<'a, S> {
@@ -175,6 +185,11 @@ impl<'a, S: Sample> BlockWrite<S> for InterleavedViewMut<'a, S> {
             self.num_channels_allocated,
             self.num_frames_allocated,
         )
+    }
+
+    #[nonblocking]
+    fn raw_data_mut(&mut self, _: u16) -> &mut [S] {
+        &mut self.data
     }
 }
 
@@ -364,5 +379,23 @@ mod tests {
             assert_eq!(block.frame(i).count(), 2);
             assert_eq!(block.frame_mut(i).count(), 2);
         }
+    }
+
+    #[test]
+    fn test_raw_data() {
+        let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+
+        assert_eq!(block.layout(), crate::Layout::Interleaved);
+
+        assert_eq!(
+            block.raw_data(0),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+
+        assert_eq!(
+            block.raw_data_mut(0),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
     }
 }

@@ -95,6 +95,16 @@ impl<'a, S: Sample, V: AsRef<[S]>> BlockRead<S> for StackedView<'a, S, V> {
     fn view(&self) -> impl BlockRead<S> {
         StackedView::<S, V>::from_slices_limited(&self.data, self.num_channels, self.num_frames)
     }
+
+    #[nonblocking]
+    fn layout(&self) -> crate::Layout {
+        crate::Layout::Stacked
+    }
+
+    #[nonblocking]
+    fn raw_data(&self, stacked_ch: u16) -> &[S] {
+        self.data[stacked_ch as usize].as_ref()
+    }
 }
 
 pub struct StackedPtrAdapter<'a, S: Sample, const MAX_CHANNELS: usize> {
@@ -246,5 +256,16 @@ mod tests {
                 vec![1.0, 3.0, 5.0, 7.0, 9.0]
             );
         }
+    }
+
+    #[test]
+    fn test_raw_data() {
+        let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
+        let block = StackedView::from_slices(&mut vec);
+
+        assert_eq!(block.layout(), crate::Layout::Stacked);
+
+        assert_eq!(block.raw_data(0), &[0.0, 2.0, 4.0, 6.0, 8.0]);
+        assert_eq!(block.raw_data(1), &[1.0, 3.0, 5.0, 7.0, 9.0]);
     }
 }

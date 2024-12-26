@@ -97,6 +97,16 @@ impl<'a, S: Sample, C: AsMut<[S]> + AsRef<[S]>> BlockRead<S> for StackedViewMut<
     fn view(&self) -> impl BlockRead<S> {
         StackedView::from_slices_limited(&self.data, self.num_channels, self.num_frames)
     }
+
+    #[nonblocking]
+    fn layout(&self) -> crate::Layout {
+        crate::Layout::Stacked
+    }
+
+    #[nonblocking]
+    fn raw_data(&self, stacked_ch: u16) -> &[S] {
+        self.data[stacked_ch as usize].as_ref()
+    }
 }
 
 impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> BlockWrite<S> for StackedViewMut<'a, S, V> {
@@ -133,6 +143,11 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> BlockWrite<S> for StackedViewMut
     #[nonblocking]
     fn view_mut(&mut self) -> impl BlockWrite<S> {
         StackedViewMut::from_slices_limited(&mut self.data, self.num_channels, self.num_frames)
+    }
+
+    #[nonblocking]
+    fn raw_data_mut(&mut self, stacked_ch: u16) -> &mut [S] {
+        self.data[stacked_ch as usize].as_mut()
     }
 }
 
@@ -349,5 +364,19 @@ mod tests {
                 vec![1.0, 3.0, 5.0, 7.0, 9.0]
             );
         }
+    }
+
+    #[test]
+    fn test_raw_data() {
+        let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
+        let mut block = StackedViewMut::from_slices(&mut vec);
+
+        assert_eq!(block.layout(), crate::Layout::Stacked);
+
+        assert_eq!(block.raw_data(0), &[0.0, 2.0, 4.0, 6.0, 8.0]);
+        assert_eq!(block.raw_data(1), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+
+        assert_eq!(block.raw_data_mut(0), &[0.0, 2.0, 4.0, 6.0, 8.0]);
+        assert_eq!(block.raw_data_mut(1), &[1.0, 3.0, 5.0, 7.0, 9.0]);
     }
 }

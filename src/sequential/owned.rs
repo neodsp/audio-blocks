@@ -99,6 +99,16 @@ impl<S: Sample> BlockRead<S> for Sequential<S> {
             self.num_frames_allocated,
         )
     }
+
+    #[nonblocking]
+    fn layout(&self) -> crate::Layout {
+        crate::Layout::Sequential
+    }
+
+    #[nonblocking]
+    fn raw_data(&self, _: u16) -> &[S] {
+        &self.data
+    }
 }
 
 impl<S: Sample> BlockWrite<S> for Sequential<S> {
@@ -142,6 +152,11 @@ impl<S: Sample> BlockWrite<S> for Sequential<S> {
             self.num_channels_allocated,
             self.num_frames_allocated,
         )
+    }
+
+    #[nonblocking]
+    fn raw_data_mut(&mut self, _: u16) -> &mut [S] {
+        &mut self.data
     }
 }
 
@@ -359,5 +374,23 @@ mod tests {
         let mut block = Sequential::<f32>::empty(2, 10);
         block.set_num_frames(5);
         let _ = block.frame_mut(5);
+    }
+
+    #[test]
+    fn test_raw_data() {
+        let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let mut block = Sequential::<f32>::from_slice(&mut data, 2, 5);
+
+        assert_eq!(block.layout(), crate::Layout::Sequential);
+
+        assert_eq!(
+            block.raw_data(0),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+
+        assert_eq!(
+            block.raw_data_mut(0),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
     }
 }
