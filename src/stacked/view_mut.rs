@@ -136,9 +136,48 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> BlockWrite<S> for StackedViewMut
     }
 }
 
+pub struct StackedPtrAdapterMut<'a, S: Sample, const MAX_CHANNELS: usize> {
+    data: [&'a mut [S]; MAX_CHANNELS],
+    num_channels: u16,
+}
+
+impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_CHANNELS> {
+    #[nonblocking]
+    pub unsafe fn new(ptr: *const *mut S, num_channels: u16, num_frames: usize) -> Self {
+        assert!(num_channels as usize <= MAX_CHANNELS);
+
+        let mut data: [std::mem::MaybeUninit<&mut [S]>; MAX_CHANNELS] =
+            std::mem::MaybeUninit::uninit().assume_init();
+
+        let ptr_slice: &mut [*mut S] =
+            std::slice::from_raw_parts_mut(ptr as *mut *mut S, num_channels as usize);
+
+        for ch in 0..num_channels as usize {
+            data[ch] = std::mem::MaybeUninit::new(std::slice::from_raw_parts_mut(
+                ptr_slice[ch],
+                num_frames,
+            ));
+        }
+
+        Self {
+            data: std::mem::transmute_copy(&data),
+            num_channels,
+        }
+    }
+
+    #[nonblocking]
+    pub fn stacked_view(&mut self) -> StackedView<'a, S, &mut [S]> {
+        StackedView::from_slices(&mut self.data[..self.num_channels as usize])
+    }
+
+    #[nonblocking]
+    pub fn stacked_view_mut(&mut self) -> StackedViewMut<'a, S, &mut [S]> {
+        StackedViewMut::from_slices(&mut self.data[..self.num_channels as usize])
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::mem::MaybeUninit;
 
     use super::*;
 
@@ -283,42 +322,6 @@ mod tests {
         }
     }
 
-    pub struct StackedPtrAdaptor<'a, const MAX_CHANNELS: usize> {
-        data: [&'a mut [f32]; MAX_CHANNELS],
-        num_channels: u16,
-    }
-
-    impl<'a, const MAX_CHANNELS: usize> StackedPtrAdaptor<'a, MAX_CHANNELS> {
-        pub unsafe fn new(ptr: *const *mut f32, num_channels: u16, num_frames: usize) -> Self {
-            assert!(num_channels as usize <= MAX_CHANNELS);
-
-            let mut data: [MaybeUninit<&mut [f32]>; MAX_CHANNELS] =
-                MaybeUninit::uninit().assume_init();
-
-            let ptr_slice: &mut [*mut f32] =
-                std::slice::from_raw_parts_mut(ptr as *mut *mut f32, num_channels as usize);
-
-            for ch in 0..num_channels as usize {
-                data[ch] =
-                    MaybeUninit::new(std::slice::from_raw_parts_mut(ptr_slice[ch], num_frames));
-            }
-
-            // Fill remaining slots with dummy data to satisfy type requirements
-            for ch in num_channels as usize..MAX_CHANNELS {
-                data[ch] = MaybeUninit::new(&mut []);
-            }
-
-            Self {
-                data: std::mem::transmute_copy(&data),
-                num_channels,
-            }
-        }
-
-        pub fn stacked_view(&mut self) -> StackedViewMut<'a, f32, &mut [f32]> {
-            StackedViewMut::from_slices(&mut self.data[..self.num_channels as usize])
-        }
-    }
-
     #[test]
     fn test_pointer() {
         unsafe {
@@ -332,9 +335,9 @@ mod tests {
                 .collect();
             let ptr = ptr_vec.as_mut_ptr();
 
-            let mut adaptor = StackedPtrAdaptor::<16>::new(ptr, num_channels, num_frames);
+            let mut adaptor = StackedPtrAdapterMut::<_, 16>::new(ptr, num_channels, num_frames);
 
-            let stacked = adaptor.stacked_view();
+            let stacked = adaptor.stacked_view_mut();
 
             assert_eq!(
                 stacked.channel(0).copied().collect::<Vec<_>>(),

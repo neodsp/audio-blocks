@@ -8,4 +8,4 @@ num = "0.4.3"
 rtsan = { git = "https://github.com/realtime-sanitizer/rtsan-standalone-rs", branch = "dev" }
 
 [features]
-realtime-sanitizer = ["rtsan/enable"]
+rtsan = ["rtsan/enable"]

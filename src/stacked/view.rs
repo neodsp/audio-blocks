@@ -97,6 +97,39 @@ impl<'a, S: Sample, V: AsRef<[S]>> BlockRead<S> for StackedView<'a, S, V> {
     }
 }
 
+pub struct StackedPtrAdapter<'a, S: Sample, const MAX_CHANNELS: usize> {
+    data: [&'a [S]; MAX_CHANNELS],
+    num_channels: u16,
+}
+
+impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHANNELS> {
+    #[nonblocking]
+    pub unsafe fn new(ptr: *const *const S, num_channels: u16, num_frames: usize) -> Self {
+        assert!(num_channels as usize <= MAX_CHANNELS);
+
+        let mut data: [std::mem::MaybeUninit<&[S]>; MAX_CHANNELS] =
+            std::mem::MaybeUninit::uninit().assume_init();
+
+        let ptr_slice: &[*const S] =
+            std::slice::from_raw_parts(ptr as *const *const S, num_channels as usize);
+
+        for ch in 0..num_channels as usize {
+            data[ch] =
+                std::mem::MaybeUninit::new(std::slice::from_raw_parts(ptr_slice[ch], num_frames));
+        }
+
+        Self {
+            data: std::mem::transmute_copy(&data),
+            num_channels,
+        }
+    }
+
+    #[nonblocking]
+    pub fn stacked_view(&self) -> StackedView<'a, S, &[S]> {
+        StackedView::from_slices(&self.data[..self.num_channels as usize])
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,49 +221,30 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn test_from_raw() {
-    //     let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
-    //     let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
-    //     let data = [ch1.as_ptr(), ch2.as_ptr()];
-    //     let block = unsafe { StackedView::from_raw(data.as_ptr(), 2, 5) };
+    #[test]
+    fn test_pointer() {
+        unsafe {
+            let num_channels = 2;
+            let num_frames = 5;
+            let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
 
-    //     assert_eq!(block.num_channels(), 2);
-    //     assert_eq!(block.num_frames(), 5);
-    //     assert_eq!(
-    //         block.channel(0).copied().collect::<Vec<_>>(),
-    //         vec![0.0, 2.0, 4.0, 6.0, 8.0]
-    //     );
-    //     assert_eq!(
-    //         block.channel(1).copied().collect::<Vec<_>>(),
-    //         vec![1.0, 3.0, 5.0, 7.0, 9.0]
-    //     );
-    //     assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 1.0]);
-    //     assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![2.0, 3.0]);
-    //     assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![4.0, 5.0]);
-    //     assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![6.0, 7.0]);
-    //     assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![8.0, 9.0]);
-    // }
+            let ptr_vec: Vec<*const f32> =
+                vec.iter_mut().map(|inner_vec| inner_vec.as_ptr()).collect();
+            let ptr = ptr_vec.as_ptr();
 
-    // #[test]
-    // fn test_from_raw_limited() {
-    //     let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
-    //     let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
-    //     let ch3 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
-    //     let data = [ch1.as_ptr(), ch2.as_ptr(), ch3.as_ptr()];
+            let adaptor = StackedPtrAdapter::<_, 16>::new(ptr, num_channels, num_frames);
 
-    //     let block = unsafe { StackedView::<_, 16>::from_raw_limited(data.as_ptr(), 2, 3, 3, 5) };
+            let stacked = adaptor.stacked_view();
 
-    //     assert_eq!(block.num_channels(), 2);
-    //     assert_eq!(block.num_frames(), 3);
-    //     assert_eq!(block.num_channels_allocated, 3);
-    //     assert_eq!(block.num_frames_allocated, 5);
+            assert_eq!(
+                stacked.channel(0).copied().collect::<Vec<_>>(),
+                vec![0.0, 2.0, 4.0, 6.0, 8.0]
+            );
 
-    //     for i in 0..block.num_channels() {
-    //         assert_eq!(block.channel(i).count(), 3);
-    //     }
-    //     for i in 0..block.num_frames() {
-    //         assert_eq!(block.frame(i).count(), 2);
-    //     }
-    // }
+            assert_eq!(
+                stacked.channel(1).copied().collect::<Vec<_>>(),
+                vec![1.0, 3.0, 5.0, 7.0, 9.0]
+            );
+        }
+    }
 }
