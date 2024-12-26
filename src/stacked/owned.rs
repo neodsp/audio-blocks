@@ -86,8 +86,9 @@ impl<S: Sample> BlockRead<S> for Stacked<S> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, stacked_ch: u16) -> &[S] {
-        self.data[stacked_ch as usize].as_slice()
+    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
+        let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
+        self.data[ch as usize].as_slice()
     }
 }
 
@@ -125,8 +126,9 @@ impl<S: Sample> BlockWrite<S> for Stacked<S> {
     }
 
     #[nonblocking]
-    fn raw_data_mut(&mut self, stacked_ch: u16) -> &mut [S] {
-        self.data[stacked_ch as usize].as_mut()
+    fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S] {
+        let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
+        self.data[ch as usize].as_mut()
     }
 }
 
@@ -352,10 +354,10 @@ mod tests {
 
         assert_eq!(block.layout(), crate::BlockLayout::Stacked);
 
-        assert_eq!(block.raw_data(0), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-        assert_eq!(block.raw_data(1), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        assert_eq!(block.raw_data(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
+        assert_eq!(block.raw_data(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
 
-        assert_eq!(block.raw_data_mut(0), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-        assert_eq!(block.raw_data_mut(1), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        assert_eq!(block.raw_data_mut(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
+        assert_eq!(block.raw_data_mut(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
     }
 }

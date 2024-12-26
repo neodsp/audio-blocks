@@ -102,8 +102,9 @@ impl<'a, S: Sample, V: AsRef<[S]>> BlockRead<S> for StackedView<'a, S, V> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, stacked_ch: u16) -> &[S] {
-        self.data[stacked_ch as usize].as_ref()
+    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
+        let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
+        self.data[ch as usize].as_ref()
     }
 }
 
@@ -265,7 +266,7 @@ mod tests {
 
         assert_eq!(block.layout(), crate::BlockLayout::Stacked);
 
-        assert_eq!(block.raw_data(0), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-        assert_eq!(block.raw_data(1), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        assert_eq!(block.raw_data(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
+        assert_eq!(block.raw_data(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
     }
 }

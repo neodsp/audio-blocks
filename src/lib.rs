@@ -29,7 +29,7 @@ pub trait BlockRead<S: Sample> {
     /// Otherwise you will get all data in interleaved or sequential layout.
     /// The returned slice includes all allocated data and not only the one
     /// that should be visible.
-    fn raw_data(&self, stacked_ch: u16) -> &[S];
+    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
 }
 
 pub trait BlockWrite<S: Sample>: BlockRead<S> {
@@ -42,5 +42,5 @@ pub trait BlockWrite<S: Sample>: BlockRead<S> {
     /// Otherwise you will get all data in interleaved or sequential layout.
     /// The returned slice includes all allocated data and not only the one
     /// that should be visible.
-    fn raw_data_mut(&mut self, stacked_ch: u16) -> &mut [S];
+    fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
 }

@@ -139,7 +139,8 @@ impl<'a, S: Sample> BlockRead<S> for InterleavedViewMut<'a, S> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, _: u16) -> &[S] {
+    fn raw_data(&self, ch: Option<u16>) -> &[S] {
+        assert!(ch.is_none());
         &self.data
     }
 }
@@ -188,7 +189,8 @@ impl<'a, S: Sample> BlockWrite<S> for InterleavedViewMut<'a, S> {
     }
 
     #[nonblocking]
-    fn raw_data_mut(&mut self, _: u16) -> &mut [S] {
+    fn raw_data_mut(&mut self, ch: Option<u16>) -> &mut [S] {
+        assert!(ch.is_none());
         &mut self.data
     }
 }
@@ -389,12 +391,12 @@ mod tests {
         assert_eq!(block.layout(), crate::BlockLayout::Interleaved);
 
         assert_eq!(
-            block.raw_data(0),
+            block.raw_data(None),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
 
         assert_eq!(
-            block.raw_data_mut(0),
+            block.raw_data_mut(None),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }
