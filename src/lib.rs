@@ -10,7 +10,7 @@ pub trait Sample: Float + Default + 'static {}
 impl Sample for f32 {}
 
 #[derive(PartialEq, Debug)]
-pub enum Layout {
+pub enum BlockLayout {
     Sequential,
     Interleaved,
     Stacked,
@@ -24,7 +24,7 @@ pub trait BlockRead<S: Sample> {
     fn channel(&self, channel: u16) -> impl Iterator<Item = &S>;
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S>;
     fn view(&self) -> impl BlockRead<S>;
-    fn layout(&self) -> Layout;
+    fn layout(&self) -> BlockLayout;
     /// In case of Layout::Stacked, this will return just one channel.
     /// Otherwise you will get all data in interleaved or sequential layout.
     /// The returned slice includes all allocated data and not only the one

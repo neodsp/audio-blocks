@@ -99,8 +99,8 @@ impl<'a, S: Sample, C: AsMut<[S]> + AsRef<[S]>> BlockRead<S> for StackedViewMut<
     }
 
     #[nonblocking]
-    fn layout(&self) -> crate::Layout {
-        crate::Layout::Stacked
+    fn layout(&self) -> crate::BlockLayout {
+        crate::BlockLayout::Stacked
     }
 
     #[nonblocking]
@@ -371,7 +371,7 @@ mod tests {
         let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
         let mut block = StackedViewMut::from_slices(&mut vec);
 
-        assert_eq!(block.layout(), crate::Layout::Stacked);
+        assert_eq!(block.layout(), crate::BlockLayout::Stacked);
 
         assert_eq!(block.raw_data(0), &[0.0, 2.0, 4.0, 6.0, 8.0]);
         assert_eq!(block.raw_data(1), &[1.0, 3.0, 5.0, 7.0, 9.0]);

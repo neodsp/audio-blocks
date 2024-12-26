@@ -91,8 +91,8 @@ impl<S: Sample> BlockRead<S> for Interleaved<S> {
     }
 
     #[nonblocking]
-    fn layout(&self) -> crate::Layout {
-        crate::Layout::Interleaved
+    fn layout(&self) -> crate::BlockLayout {
+        crate::BlockLayout::Interleaved
     }
 
     #[nonblocking]
@@ -393,7 +393,7 @@ mod tests {
             &mut data, 2, 5,
         ));
 
-        assert_eq!(block.layout(), crate::Layout::Interleaved);
+        assert_eq!(block.layout(), crate::BlockLayout::Interleaved);
 
         assert_eq!(
             block.raw_data(0),
