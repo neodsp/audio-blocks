@@ -17,12 +17,13 @@ pub enum BlockLayout {
 }
 
 pub trait BlockRead<S: Sample> {
-    fn num_frames(&self) -> usize;
     fn num_channels(&self) -> u16;
+    fn num_frames(&self) -> usize;
     fn num_channels_allocated(&self) -> u16;
     fn num_frames_allocated(&self) -> usize;
-    fn channel(&self, channel: u16) -> impl Iterator<Item = &S>;
-    fn frame(&self, frame: usize) -> impl Iterator<Item = &S>;
+    fn sample(&self, channel: u16, frame: usize) -> S;
+    fn channel(&self, channel: u16) -> impl Iterator<Item = S>;
+    fn frame(&self, frame: usize) -> impl Iterator<Item = S>;
     fn view(&self) -> impl BlockRead<S>;
     fn layout(&self) -> BlockLayout;
     /// In case of Layout::Stacked, this will return just one channel.
@@ -35,6 +36,7 @@ pub trait BlockRead<S: Sample> {
 pub trait BlockWrite<S: Sample>: BlockRead<S> {
     fn set_num_channels(&mut self, num_channels: u16);
     fn set_num_frames(&mut self, num_frames: usize);
+    fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S;
     fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
     fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
     fn view_mut(&mut self) -> impl BlockWrite<S>;

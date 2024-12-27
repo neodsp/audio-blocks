@@ -7,5 +7,12 @@ edition = "2021"
 num = "0.4.3"
 rtsan = { git = "https://github.com/realtime-sanitizer/rtsan-standalone-rs", branch = "dev" }
 
+[dev-dependencies]
+criterion = "0.5.1"
+
 [features]
 rtsan = ["rtsan/enable"]
+
+[[bench]]
+name = "blocks"
+harness = false

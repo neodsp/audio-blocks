@@ -33,7 +33,7 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
         num_channels_available: u16,
         num_frames_available: usize,
     ) -> Self {
-        assert!(num_channels_visible <= num_channels_available as u16);
+        assert!(num_channels_visible <= num_channels_available);
         assert!(num_frames_visible <= num_frames_available);
         assert_eq!(
             data.len(),
@@ -48,6 +48,14 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
         }
     }
 
+    /// Creates a new `SequentialViewMut` from raw parts.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    /// - `ptr` points to valid memory containing at least `num_channels_available * num_frames_available` elements
+    /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
+    /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]
     pub unsafe fn from_raw(ptr: *mut S, num_channels: u16, num_frames: usize) -> Self {
         Self {
@@ -59,25 +67,33 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
         }
     }
 
+    /// Creates a new `SequentialViewMut` from raw parts with a limited amount of channels and/or frames.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    /// - `ptr` points to valid memory containing at least `num_channels_available * num_frames_available` elements
+    /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
+    /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]
     pub unsafe fn from_raw_limited(
         ptr: *mut S,
         num_channels_visible: u16,
         num_frames_visible: usize,
-        num_channels_available: u16,
-        num_frames_available: usize,
+        num_channels_allocated: u16,
+        num_frames_allocated: usize,
     ) -> Self {
-        assert!(num_channels_visible <= num_channels_available as u16);
-        assert!(num_frames_visible <= num_frames_available);
+        assert!(num_channels_visible <= num_channels_allocated);
+        assert!(num_frames_visible <= num_frames_allocated);
         Self {
             data: std::slice::from_raw_parts_mut(
                 ptr,
-                num_channels_available as usize * num_frames_available,
+                num_channels_allocated as usize * num_frames_allocated,
             ),
             num_channels: num_channels_visible,
             num_frames: num_frames_visible,
-            num_channels_allocated: num_channels_available,
-            num_frames_allocated: num_frames_available,
+            num_channels_allocated,
+            num_frames_allocated,
         }
     }
 }
@@ -104,28 +120,41 @@ impl<'a, S: Sample> BlockRead<S> for SequentialViewMut<'a, S> {
     }
 
     #[nonblocking]
-    fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {
+    fn sample(&self, channel: u16, frame: usize) -> S {
+        assert!(channel < self.num_channels);
+        assert!(frame < self.num_frames);
+        unsafe {
+            *self
+                .data
+                .get_unchecked(channel as usize * self.num_frames_allocated + frame)
+        }
+    }
+
+    #[nonblocking]
+    fn channel(&self, channel: u16) -> impl Iterator<Item = S> {
         assert!(channel < self.num_channels);
         self.data
             .iter()
             .skip(channel as usize * self.num_frames_allocated)
             .take(self.num_frames)
+            .copied()
     }
 
     #[nonblocking]
-    fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
+    fn frame(&self, frame: usize) -> impl Iterator<Item = S> {
         assert!(frame < self.num_frames);
         self.data
             .iter()
             .skip(frame)
             .step_by(self.num_frames_allocated)
             .take(self.num_channels as usize)
+            .copied()
     }
 
     #[nonblocking]
     fn view(&self) -> impl BlockRead<S> {
         SequentialView::from_slice_limited(
-            &self.data,
+            self.data,
             self.num_channels,
             self.num_frames,
             self.num_channels_allocated,
@@ -141,7 +170,7 @@ impl<'a, S: Sample> BlockRead<S> for SequentialViewMut<'a, S> {
     #[nonblocking]
     fn raw_data(&self, ch: Option<u16>) -> &[S] {
         assert!(ch.is_none());
-        &self.data
+        self.data
     }
 }
 
@@ -156,6 +185,16 @@ impl<'a, S: Sample> BlockWrite<S> for SequentialViewMut<'a, S> {
     fn set_num_frames(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
+    }
+
+    #[nonblocking]
+    fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S {
+        assert!(channel < self.num_channels);
+        assert!(frame < self.num_frames);
+        unsafe {
+            self.data
+                .get_unchecked_mut(channel as usize * self.num_frames_allocated + frame)
+        }
     }
 
     #[nonblocking]
@@ -180,7 +219,7 @@ impl<'a, S: Sample> BlockWrite<S> for SequentialViewMut<'a, S> {
     #[nonblocking]
     fn view_mut(&mut self) -> impl BlockWrite<S> {
         SequentialViewMut::from_slice_limited(
-            &mut self.data,
+            self.data,
             self.num_channels,
             self.num_frames,
             self.num_channels_allocated,
@@ -191,7 +230,7 @@ impl<'a, S: Sample> BlockWrite<S> for SequentialViewMut<'a, S> {
     #[nonblocking]
     fn raw_data_mut(&mut self, ch: Option<u16>) -> &mut [S] {
         assert!(ch.is_none());
-        &mut self.data
+        self.data
     }
 }
 
@@ -200,13 +239,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_samples() {
+        let mut data = vec![0.0; 10];
+        let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
+
+        let num_frames = block.num_frames();
+        for ch in 0..block.num_channels() {
+            for f in 0..block.num_frames() {
+                *block.sample_mut(ch, f) = (ch as usize * num_frames + f) as f32;
+            }
+        }
+
+        for ch in 0..block.num_channels() {
+            for f in 0..block.num_frames() {
+                assert_eq!(block.sample(ch, f), (ch as usize * num_frames + f) as f32);
+            }
+        }
+
+        assert_eq!(
+            block.raw_data(None),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+    }
+
+    #[test]
     fn test_channels() {
         let mut data = vec![0.0; 10];
         let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
 
-        let channel = block.channel(0).copied().collect::<Vec<_>>();
+        let channel = block.channel(0).collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
-        let channel = block.channel(1).copied().collect::<Vec<_>>();
+        let channel = block.channel(1).collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
 
         block
@@ -218,9 +281,9 @@ mod tests {
             .enumerate()
             .for_each(|(i, v)| *v = i as f32 + 10.0);
 
-        let channel = block.channel(0).copied().collect::<Vec<_>>();
+        let channel = block.channel(0).collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
-        let channel = block.channel(1).copied().collect::<Vec<_>>();
+        let channel = block.channel(1).collect::<Vec<_>>();
         assert_eq!(channel, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
     }
 
@@ -230,7 +293,7 @@ mod tests {
         let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         for i in 0..block.num_frames() {
-            let frame = block.frame(i).copied().collect::<Vec<_>>();
+            let frame = block.frame(i).collect::<Vec<_>>();
             assert_eq!(frame, vec![0.0, 0.0]);
         }
 
@@ -242,15 +305,15 @@ mod tests {
                 .for_each(|(i, v)| *v = i as f32 + add);
         }
 
-        let channel = block.frame(0).copied().collect::<Vec<_>>();
+        let channel = block.frame(0).collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0]);
-        let channel = block.frame(1).copied().collect::<Vec<_>>();
+        let channel = block.frame(1).collect::<Vec<_>>();
         assert_eq!(channel, vec![10.0, 11.0]);
-        let channel = block.frame(2).copied().collect::<Vec<_>>();
+        let channel = block.frame(2).collect::<Vec<_>>();
         assert_eq!(channel, vec![20.0, 21.0]);
-        let channel = block.frame(3).copied().collect::<Vec<_>>();
+        let channel = block.frame(3).collect::<Vec<_>>();
         assert_eq!(channel, vec![30.0, 31.0]);
-        let channel = block.frame(4).copied().collect::<Vec<_>>();
+        let channel = block.frame(4).collect::<Vec<_>>();
         assert_eq!(channel, vec![40.0, 41.0]);
     }
 
@@ -263,18 +326,18 @@ mod tests {
         assert_eq!(block.num_frames(), 5);
         assert_eq!(block.num_frames_allocated, 5);
         assert_eq!(
-            block.channel(0).copied().collect::<Vec<_>>(),
+            block.channel(0).collect::<Vec<_>>(),
             vec![0.0, 1.0, 2.0, 3.0, 4.0]
         );
         assert_eq!(
-            block.channel(1).copied().collect::<Vec<_>>(),
+            block.channel(1).collect::<Vec<_>>(),
             vec![5.0, 6.0, 7.0, 8.0, 9.0]
         );
-        assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 5.0]);
-        assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![1.0, 6.0]);
-        assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![2.0, 7.0]);
-        assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![3.0, 8.0]);
-        assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![4.0, 9.0]);
+        assert_eq!(block.frame(0).collect::<Vec<_>>(), vec![0.0, 5.0]);
+        assert_eq!(block.frame(1).collect::<Vec<_>>(), vec![1.0, 6.0]);
+        assert_eq!(block.frame(2).collect::<Vec<_>>(), vec![2.0, 7.0]);
+        assert_eq!(block.frame(3).collect::<Vec<_>>(), vec![3.0, 8.0]);
+        assert_eq!(block.frame(4).collect::<Vec<_>>(), vec![4.0, 9.0]);
     }
 
     #[test]
@@ -283,11 +346,11 @@ mod tests {
         let block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
         let view = block.view();
         assert_eq!(
-            view.channel(0).copied().collect::<Vec<_>>(),
+            view.channel(0).collect::<Vec<_>>(),
             vec![0.0, 1.0, 2.0, 3.0, 4.0]
         );
         assert_eq!(
-            view.channel(1).copied().collect::<Vec<_>>(),
+            view.channel(1).collect::<Vec<_>>(),
             vec![5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }
@@ -308,11 +371,11 @@ mod tests {
         }
 
         assert_eq!(
-            block.channel(0).copied().collect::<Vec<_>>(),
+            block.channel(0).collect::<Vec<_>>(),
             vec![0.0, 1.0, 2.0, 3.0, 4.0]
         );
         assert_eq!(
-            block.channel(1).copied().collect::<Vec<_>>(),
+            block.channel(1).collect::<Vec<_>>(),
             vec![10.0, 11.0, 12.0, 13.0, 14.0]
         );
     }
@@ -347,18 +410,18 @@ mod tests {
         assert_eq!(block.num_frames(), 5);
         assert_eq!(block.num_frames_allocated, 5);
         assert_eq!(
-            block.channel(0).copied().collect::<Vec<_>>(),
+            block.channel(0).collect::<Vec<_>>(),
             vec![0.0, 1.0, 2.0, 3.0, 4.0]
         );
         assert_eq!(
-            block.channel(1).copied().collect::<Vec<_>>(),
+            block.channel(1).collect::<Vec<_>>(),
             vec![5.0, 6.0, 7.0, 8.0, 9.0]
         );
-        assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 5.0]);
-        assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![1.0, 6.0]);
-        assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![2.0, 7.0]);
-        assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![3.0, 8.0]);
-        assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![4.0, 9.0]);
+        assert_eq!(block.frame(0).collect::<Vec<_>>(), vec![0.0, 5.0]);
+        assert_eq!(block.frame(1).collect::<Vec<_>>(), vec![1.0, 6.0]);
+        assert_eq!(block.frame(2).collect::<Vec<_>>(), vec![2.0, 7.0]);
+        assert_eq!(block.frame(3).collect::<Vec<_>>(), vec![3.0, 8.0]);
+        assert_eq!(block.frame(4).collect::<Vec<_>>(), vec![4.0, 9.0]);
     }
 
     #[test]
