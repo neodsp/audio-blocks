@@ -1,6 +1,6 @@
 use rtsan_standalone::nonblocking;
 
-use crate::{BlockRead, BlockWrite, Sample};
+use crate::{AudioBlock, AudioBlockMut, Sample};
 
 use super::view::PlanarView;
 
@@ -10,6 +10,17 @@ pub struct PlanarViewMut<'a, S: Sample> {
     num_frames: usize,
     num_channels_allocated: u16,
     num_frames_allocated: usize,
+}
+
+#[test]
+fn hell() {
+    let mut data = [0.0, 1.0, 2.0, 3.0];
+    let mut block = PlanarViewMut::from_slice(&mut data, 2, 2);
+    for channel in block.channels_mut() {
+        for sample in channel {
+            dbg!(sample);
+        }
+    }
 }
 
 impl<'a, S: Sample> PlanarViewMut<'a, S> {
@@ -102,7 +113,7 @@ impl<'a, S: Sample> PlanarViewMut<'a, S> {
     }
 }
 
-impl<S: Sample> BlockRead<S> for PlanarViewMut<'_, S> {
+impl<S: Sample> AudioBlock<S> for PlanarViewMut<'_, S> {
     #[nonblocking]
     fn num_frames(&self) -> usize {
         self.num_frames
@@ -135,28 +146,37 @@ impl<S: Sample> BlockRead<S> for PlanarViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn channel(&self, channel: u16) -> impl Iterator<Item = S> {
+    fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {
         assert!(channel < self.num_channels);
         self.data
             .iter()
             .skip(channel as usize * self.num_frames_allocated)
             .take(self.num_frames)
-            .copied()
     }
 
     #[nonblocking]
-    fn frame(&self, frame: usize) -> impl Iterator<Item = S> {
+    fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+        let num_frames = self.num_frames; // Active frames per channel
+        let num_frames_allocated = self.num_frames_allocated; // Allocated frames per channel (chunk size)
+
+        self.data
+            .chunks(num_frames_allocated)
+            .take(self.num_channels as usize)
+            .map(move |channel_chunk| channel_chunk.iter().take(num_frames))
+    }
+
+    #[nonblocking]
+    fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
             .iter()
             .skip(frame)
             .step_by(self.num_frames_allocated)
             .take(self.num_channels as usize)
-            .copied()
     }
 
     #[nonblocking]
-    fn view(&self) -> impl BlockRead<S> {
+    fn view(&self) -> impl AudioBlock<S> {
         PlanarView::from_slice_limited(
             self.data,
             self.num_channels,
@@ -178,7 +198,7 @@ impl<S: Sample> BlockRead<S> for PlanarViewMut<'_, S> {
     }
 }
 
-impl<S: Sample> BlockWrite<S> for PlanarViewMut<'_, S> {
+impl<S: Sample> AudioBlockMut<S> for PlanarViewMut<'_, S> {
     #[nonblocking]
     fn set_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
@@ -211,6 +231,16 @@ impl<S: Sample> BlockWrite<S> for PlanarViewMut<'_, S> {
     }
 
     #[nonblocking]
+    fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+        let num_frames = self.num_frames;
+        let num_frames_allocated = self.num_frames_allocated;
+        self.data
+            .chunks_mut(num_frames_allocated)
+            .take(self.num_channels as usize)
+            .map(move |channel_chunk| channel_chunk.iter_mut().take(num_frames))
+    }
+
+    #[nonblocking]
     fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S> {
         assert!(frame < self.num_frames);
         self.data
@@ -221,7 +251,7 @@ impl<S: Sample> BlockWrite<S> for PlanarViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn view_mut(&mut self) -> impl BlockWrite<S> {
+    fn view_mut(&mut self) -> impl AudioBlockMut<S> {
         PlanarViewMut::from_slice_limited(
             self.data,
             self.num_channels,
@@ -271,9 +301,9 @@ mod tests {
         let mut data = vec![0.0; 10];
         let mut block = PlanarViewMut::<f32>::from_slice(&mut data, 2, 5);
 
-        let channel = block.channel(0).collect::<Vec<_>>();
+        let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
-        let channel = block.channel(1).collect::<Vec<_>>();
+        let channel = block.channel(1).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
 
         block
@@ -285,9 +315,9 @@ mod tests {
             .enumerate()
             .for_each(|(i, v)| *v = i as f32 + 10.0);
 
-        let channel = block.channel(0).collect::<Vec<_>>();
+        let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
-        let channel = block.channel(1).collect::<Vec<_>>();
+        let channel = block.channel(1).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
     }
 
@@ -297,7 +327,7 @@ mod tests {
         let mut block = PlanarViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         for i in 0..block.num_frames() {
-            let frame = block.frame(i).collect::<Vec<_>>();
+            let frame = block.frame(i).copied().collect::<Vec<_>>();
             assert_eq!(frame, vec![0.0, 0.0]);
         }
 
@@ -309,15 +339,15 @@ mod tests {
                 .for_each(|(i, v)| *v = i as f32 + add);
         }
 
-        let channel = block.frame(0).collect::<Vec<_>>();
+        let channel = block.frame(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0]);
-        let channel = block.frame(1).collect::<Vec<_>>();
+        let channel = block.frame(1).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![10.0, 11.0]);
-        let channel = block.frame(2).collect::<Vec<_>>();
+        let channel = block.frame(2).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![20.0, 21.0]);
-        let channel = block.frame(3).collect::<Vec<_>>();
+        let channel = block.frame(3).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![30.0, 31.0]);
-        let channel = block.frame(4).collect::<Vec<_>>();
+        let channel = block.frame(4).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![40.0, 41.0]);
     }
 
@@ -330,18 +360,18 @@ mod tests {
         assert_eq!(block.num_frames(), 5);
         assert_eq!(block.num_frames_allocated, 5);
         assert_eq!(
-            block.channel(0).collect::<Vec<_>>(),
+            block.channel(0).copied().collect::<Vec<_>>(),
             vec![0.0, 1.0, 2.0, 3.0, 4.0]
         );
         assert_eq!(
-            block.channel(1).collect::<Vec<_>>(),
+            block.channel(1).copied().collect::<Vec<_>>(),
             vec![5.0, 6.0, 7.0, 8.0, 9.0]
         );
-        assert_eq!(block.frame(0).collect::<Vec<_>>(), vec![0.0, 5.0]);
-        assert_eq!(block.frame(1).collect::<Vec<_>>(), vec![1.0, 6.0]);
-        assert_eq!(block.frame(2).collect::<Vec<_>>(), vec![2.0, 7.0]);
-        assert_eq!(block.frame(3).collect::<Vec<_>>(), vec![3.0, 8.0]);
-        assert_eq!(block.frame(4).collect::<Vec<_>>(), vec![4.0, 9.0]);
+        assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 5.0]);
+        assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![1.0, 6.0]);
+        assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![2.0, 7.0]);
+        assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![3.0, 8.0]);
+        assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![4.0, 9.0]);
     }
 
     #[test]
@@ -350,11 +380,11 @@ mod tests {
         let block = PlanarViewMut::<f32>::from_slice(&mut data, 2, 5);
         let view = block.view();
         assert_eq!(
-            view.channel(0).collect::<Vec<_>>(),
+            view.channel(0).copied().collect::<Vec<_>>(),
             vec![0.0, 1.0, 2.0, 3.0, 4.0]
         );
         assert_eq!(
-            view.channel(1).collect::<Vec<_>>(),
+            view.channel(1).copied().collect::<Vec<_>>(),
             vec![5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }
@@ -375,11 +405,11 @@ mod tests {
         }
 
         assert_eq!(
-            block.channel(0).collect::<Vec<_>>(),
+            block.channel(0).copied().collect::<Vec<_>>(),
             vec![0.0, 1.0, 2.0, 3.0, 4.0]
         );
         assert_eq!(
-            block.channel(1).collect::<Vec<_>>(),
+            block.channel(1).copied().collect::<Vec<_>>(),
             vec![10.0, 11.0, 12.0, 13.0, 14.0]
         );
     }
@@ -414,18 +444,18 @@ mod tests {
         assert_eq!(block.num_frames(), 5);
         assert_eq!(block.num_frames_allocated, 5);
         assert_eq!(
-            block.channel(0).collect::<Vec<_>>(),
+            block.channel(0).copied().collect::<Vec<_>>(),
             vec![0.0, 1.0, 2.0, 3.0, 4.0]
         );
         assert_eq!(
-            block.channel(1).collect::<Vec<_>>(),
+            block.channel(1).copied().collect::<Vec<_>>(),
             vec![5.0, 6.0, 7.0, 8.0, 9.0]
         );
-        assert_eq!(block.frame(0).collect::<Vec<_>>(), vec![0.0, 5.0]);
-        assert_eq!(block.frame(1).collect::<Vec<_>>(), vec![1.0, 6.0]);
-        assert_eq!(block.frame(2).collect::<Vec<_>>(), vec![2.0, 7.0]);
-        assert_eq!(block.frame(3).collect::<Vec<_>>(), vec![3.0, 8.0]);
-        assert_eq!(block.frame(4).collect::<Vec<_>>(), vec![4.0, 9.0]);
+        assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 5.0]);
+        assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![1.0, 6.0]);
+        assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![2.0, 7.0]);
+        assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![3.0, 8.0]);
+        assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![4.0, 9.0]);
     }
 
     #[test]
