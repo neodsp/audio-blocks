@@ -1,8 +1,7 @@
-use rtsan::nonblocking;
-
-use crate::{BlockRead, BlockWrite, Sample};
+use rtsan_standalone::nonblocking;
 
 use super::{view::InterleavedView, view_mut::InterleavedViewMut};
+use crate::{BlockRead, BlockWrite, Sample};
 
 #[derive(Clone)]
 pub struct Interleaved<S: Sample> {
@@ -16,7 +15,7 @@ pub struct Interleaved<S: Sample> {
 impl<S: Sample> Interleaved<S> {
     pub fn empty(num_channels: u16, num_frames: usize) -> Self {
         Self {
-            data: vec![S::default(); num_channels as usize * num_frames],
+            data: vec![S::zero(); num_channels as usize * num_frames],
             num_channels,
             num_frames,
             num_channels_allocated: num_channels,
@@ -177,8 +176,9 @@ impl<S: Sample> BlockWrite<S> for Interleaved<S> {
 
 #[cfg(test)]
 mod tests {
+    use rtsan_standalone::no_sanitize_realtime;
 
-    use crate::sequential::Sequential;
+    use crate::planar::Planar;
 
     use super::*;
 
@@ -327,11 +327,8 @@ mod tests {
 
     #[test]
     fn test_from_block() {
-        let block = Sequential::<f32>::from_slice(
-            &[0.0, 2.0, 4.0, 6.0, 8.0, 1.0, 3.0, 5.0, 7.0, 9.0],
-            2,
-            5,
-        );
+        let block =
+            Planar::<f32>::from_slice(&[0.0, 2.0, 4.0, 6.0, 8.0, 1.0, 3.0, 5.0, 7.0, 9.0], 2, 5);
 
         let block = Interleaved::<f32>::from_block(&block);
 
@@ -384,7 +381,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
         let mut block = Interleaved::<f32>::empty(2, 10);
         block.set_num_channels(3);
@@ -392,7 +389,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
         let mut block = Interleaved::<f32>::empty(2, 10);
         block.set_num_frames(11);
@@ -400,7 +397,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_wrong_channel() {
         let mut block = Interleaved::<f32>::empty(2, 10);
         block.set_num_channels(1);
@@ -409,7 +406,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_wrong_frame() {
         let mut block = Interleaved::<f32>::empty(2, 10);
         block.set_num_frames(5);
@@ -418,7 +415,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
         let mut block = Interleaved::<f32>::empty(2, 10);
         block.set_num_channels(1);
@@ -427,7 +424,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_wrong_frame_mut() {
         let mut block = Interleaved::<f32>::empty(2, 10);
         block.set_num_frames(5);

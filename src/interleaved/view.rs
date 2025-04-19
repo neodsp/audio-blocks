@@ -1,4 +1,4 @@
-use rtsan::nonblocking;
+use rtsan_standalone::nonblocking;
 
 use crate::{BlockRead, Sample};
 
@@ -58,7 +58,7 @@ impl<'a, S: Sample> InterleavedView<'a, S> {
     #[nonblocking]
     pub unsafe fn from_raw(ptr: *const S, num_channels: u16, num_frames: usize) -> Self {
         Self {
-            data: std::slice::from_raw_parts(ptr, num_channels as usize * num_frames),
+            data: unsafe { std::slice::from_raw_parts(ptr, num_channels as usize * num_frames) },
             num_channels,
             num_frames,
             num_channels_allocated: num_channels,
@@ -85,10 +85,12 @@ impl<'a, S: Sample> InterleavedView<'a, S> {
         assert!(num_channels_visible <= num_channels_allocated);
         assert!(num_frames_visible <= num_frames_allocated);
         Self {
-            data: std::slice::from_raw_parts(
-                ptr,
-                num_channels_allocated as usize * num_frames_allocated,
-            ),
+            data: unsafe {
+                std::slice::from_raw_parts(
+                    ptr,
+                    num_channels_allocated as usize * num_frames_allocated,
+                )
+            },
             num_channels: num_channels_visible,
             num_frames: num_frames_visible,
             num_channels_allocated,
@@ -97,7 +99,7 @@ impl<'a, S: Sample> InterleavedView<'a, S> {
     }
 }
 
-impl<'a, S: Sample> BlockRead<S> for InterleavedView<'a, S> {
+impl<S: Sample> BlockRead<S> for InterleavedView<'_, S> {
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels

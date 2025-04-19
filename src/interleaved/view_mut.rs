@@ -1,8 +1,7 @@
-use rtsan::nonblocking;
-
-use crate::{BlockRead, BlockWrite, Sample};
+use rtsan_standalone::nonblocking;
 
 use super::view::InterleavedView;
+use crate::{BlockRead, BlockWrite, Sample};
 
 pub struct InterleavedViewMut<'a, S: Sample> {
     data: &'a mut [S],
@@ -59,7 +58,9 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
     #[nonblocking]
     pub unsafe fn from_raw(ptr: *mut S, num_channels: u16, num_frames: usize) -> Self {
         Self {
-            data: std::slice::from_raw_parts_mut(ptr, num_channels as usize * num_frames),
+            data: unsafe {
+                std::slice::from_raw_parts_mut(ptr, num_channels as usize * num_frames)
+            },
             num_channels,
             num_frames,
             num_channels_allocated: num_channels,
@@ -86,10 +87,12 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
         assert!(num_channels_visible <= num_channels_available);
         assert!(num_frames_visible <= num_frames_available);
         Self {
-            data: std::slice::from_raw_parts_mut(
-                ptr,
-                num_channels_available as usize * num_frames_available,
-            ),
+            data: unsafe {
+                std::slice::from_raw_parts_mut(
+                    ptr,
+                    num_channels_available as usize * num_frames_available,
+                )
+            },
             num_channels: num_channels_visible,
             num_frames: num_frames_visible,
             num_channels_allocated: num_channels_available,
@@ -98,7 +101,7 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
     }
 }
 
-impl<'a, S: Sample> BlockRead<S> for InterleavedViewMut<'a, S> {
+impl<S: Sample> BlockRead<S> for InterleavedViewMut<'_, S> {
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -174,7 +177,7 @@ impl<'a, S: Sample> BlockRead<S> for InterleavedViewMut<'a, S> {
     }
 }
 
-impl<'a, S: Sample> BlockWrite<S> for InterleavedViewMut<'a, S> {
+impl<S: Sample> BlockWrite<S> for InterleavedViewMut<'_, S> {
     #[nonblocking]
     fn set_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);

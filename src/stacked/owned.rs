@@ -1,4 +1,4 @@
-use rtsan::nonblocking;
+use rtsan_standalone::nonblocking;
 
 use crate::{BlockRead, BlockWrite, Sample};
 
@@ -6,7 +6,7 @@ use super::{view::StackedView, view_mut::StackedViewMut};
 
 #[derive(Clone)]
 pub struct Stacked<S: Sample> {
-    data: Vec<Vec<S>>,
+    data: Box<[Box<[S]>]>,
     num_channels: u16,
     num_frames: usize,
     num_channels_allocated: u16,
@@ -16,7 +16,8 @@ pub struct Stacked<S: Sample> {
 impl<S: Sample> Stacked<S> {
     pub fn empty(num_channels: u16, num_frames: usize) -> Self {
         Self {
-            data: vec![vec![S::default(); num_frames]; num_channels as usize],
+            data: vec![vec![S::zero(); num_frames].into_boxed_slice(); num_channels as usize]
+                .into_boxed_slice(),
             num_channels,
             num_frames,
             num_channels_allocated: num_channels,
@@ -30,7 +31,7 @@ impl<S: Sample> Stacked<S> {
             data.push(block.channel(i).collect());
         }
         Self {
-            data,
+            data: data.into_boxed_slice(),
             num_channels: block.num_channels(),
             num_frames: block.num_frames(),
             num_channels_allocated: block.num_channels(),
@@ -108,7 +109,7 @@ impl<S: Sample> BlockRead<S> for Stacked<S> {
     fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
         let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
         assert!(ch < self.num_channels_allocated);
-        unsafe { self.data.get_unchecked(ch as usize).as_slice() }
+        unsafe { self.data.get_unchecked(ch as usize) }
     }
 }
 
@@ -171,9 +172,10 @@ impl<S: Sample> BlockWrite<S> for Stacked<S> {
 
 #[cfg(test)]
 mod tests {
-    use crate::interleaved::InterleavedView;
+    use rtsan_standalone::no_sanitize_realtime;
 
     use super::*;
+    use crate::interleaved::InterleavedView;
 
     #[test]
     fn test_samples() {
@@ -355,7 +357,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
         let mut block = Stacked::<f32>::empty(2, 10);
         block.set_num_channels(3);
@@ -363,7 +365,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
         let mut block = Stacked::<f32>::empty(2, 10);
         block.set_num_frames(11);
@@ -371,7 +373,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_wrong_channel() {
         let mut block = Stacked::<f32>::empty(2, 10);
         block.set_num_channels(1);
@@ -380,7 +382,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_wrong_frame() {
         let mut block = Stacked::<f32>::empty(2, 10);
         block.set_num_frames(5);
@@ -389,7 +391,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
         let mut block = Stacked::<f32>::empty(2, 10);
         block.set_num_channels(1);
@@ -398,7 +400,7 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_wrong_frame_mut() {
         let mut block = Stacked::<f32>::empty(2, 10);
         block.set_num_frames(5);

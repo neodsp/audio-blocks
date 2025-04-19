@@ -1,6 +1,5 @@
+use rtsan_standalone::nonblocking;
 use std::marker::PhantomData;
-
-use rtsan::nonblocking;
 
 use crate::{BlockRead, BlockWrite, Sample};
 
@@ -54,7 +53,7 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> StackedViewMut<'a, S, V> {
     }
 }
 
-impl<'a, S: Sample, C: AsMut<[S]> + AsRef<[S]>> BlockRead<S> for StackedViewMut<'a, S, C> {
+impl<S: Sample, C: AsMut<[S]> + AsRef<[S]>> BlockRead<S> for StackedViewMut<'_, S, C> {
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -129,7 +128,7 @@ impl<'a, S: Sample, C: AsMut<[S]> + AsRef<[S]>> BlockRead<S> for StackedViewMut<
     }
 }
 
-impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> BlockWrite<S> for StackedViewMut<'a, S, V> {
+impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> BlockWrite<S> for StackedViewMut<'_, S, V> {
     #[nonblocking]
     fn set_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
@@ -208,20 +207,19 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
         assert!(num_channels as usize <= MAX_CHANNELS);
 
         let mut data: [std::mem::MaybeUninit<&mut [S]>; MAX_CHANNELS] =
-            std::mem::MaybeUninit::uninit().assume_init();
+            unsafe { std::mem::MaybeUninit::uninit().assume_init() };
 
         let ptr_slice: &mut [*mut S] =
-            std::slice::from_raw_parts_mut(ptr as *mut *mut S, num_channels as usize);
+            unsafe { std::slice::from_raw_parts_mut(ptr as *mut *mut S, num_channels as usize) };
 
         for ch in 0..num_channels as usize {
-            data[ch] = std::mem::MaybeUninit::new(std::slice::from_raw_parts_mut(
-                ptr_slice[ch],
-                num_frames,
-            ));
+            data[ch] = std::mem::MaybeUninit::new(unsafe {
+                std::slice::from_raw_parts_mut(ptr_slice[ch], num_frames)
+            });
         }
 
         Self {
-            data: std::mem::transmute_copy(&data),
+            data: unsafe { std::mem::transmute_copy(&data) },
             num_channels,
         }
     }

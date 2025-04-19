@@ -1,4 +1,4 @@
-use rtsan::nonblocking;
+use rtsan_standalone::nonblocking;
 
 use crate::{BlockLayout, BlockRead, BlockWrite, Sample};
 
@@ -53,7 +53,7 @@ impl<S: Sample, B: BlockWrite<S>> Ops<S> for B {
             }
         } else {
             match self.layout() {
-                BlockLayout::Sequential | BlockLayout::Stacked => {
+                BlockLayout::Planar | BlockLayout::Stacked => {
                     for ch in 0..self.num_channels() {
                         self.channel_mut(ch)
                             .enumerate()
@@ -74,7 +74,7 @@ impl<S: Sample, B: BlockWrite<S>> Ops<S> for B {
     #[nonblocking]
     fn for_each_including_non_visible(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
         match self.layout() {
-            BlockLayout::Sequential => {
+            BlockLayout::Planar => {
                 let num_frames = self.num_frames_allocated();
                 self.raw_data_mut(None)
                     .iter_mut()
@@ -120,9 +120,11 @@ impl<S: Sample, B: BlockWrite<S>> Ops<S> for B {
 
 #[cfg(test)]
 mod tests {
+    use rtsan_standalone::no_sanitize_realtime;
+
     use crate::{
         interleaved::{Interleaved, InterleavedViewMut},
-        sequential::{SequentialView, SequentialViewMut},
+        planar::{PlanarView, PlanarViewMut},
         stacked::StackedViewMut,
     };
 
@@ -131,7 +133,7 @@ mod tests {
     #[test]
     fn test_copy_from() {
         let mut block = Interleaved::empty(3, 5);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let view = PlanarView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block(&view);
 
         assert_eq!(block.num_channels(), 2);
@@ -152,7 +154,7 @@ mod tests {
     #[test]
     fn test_copy_from_exact() {
         let mut block = Interleaved::empty(2, 4);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let view = PlanarView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block_exact(&view);
 
         assert_eq!(block.num_channels(), 2);
@@ -172,44 +174,44 @@ mod tests {
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_copy_data_wrong_channels() {
         let mut block = Interleaved::empty(1, 5);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let view = PlanarView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block(&view);
     }
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_copy_data_wrong_frames() {
         let mut block = Interleaved::empty(3, 3);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let view = PlanarView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block_exact(&view);
     }
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_copy_data_exact_wrong_channels() {
         let mut block = Interleaved::empty(3, 4);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let view = PlanarView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block_exact(&view);
     }
 
     #[test]
     #[should_panic]
-    #[rtsan::no_sanitize]
+    #[no_sanitize_realtime]
     fn test_copy_data_exact_wrong_frames() {
         let mut block = Interleaved::empty(2, 5);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let view = PlanarView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block_exact(&view);
     }
 
     #[test]
     fn test_for_each() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = SequentialViewMut::from_slice(&mut data, 2, 4);
+        let mut block = PlanarViewMut::from_slice(&mut data, 2, 4);
 
         let mut i = 0;
         let mut c_exp = 0;
@@ -263,7 +265,7 @@ mod tests {
     #[test]
     fn test_gain() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = SequentialViewMut::from_slice(&mut data, 2, 4);
+        let mut block = PlanarViewMut::from_slice(&mut data, 2, 4);
 
         block.gain(2.0);
 
@@ -280,7 +282,7 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = SequentialViewMut::from_slice(&mut data, 2, 4);
+        let mut block = PlanarViewMut::from_slice(&mut data, 2, 4);
 
         block.clear();
 

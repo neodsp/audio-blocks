@@ -1,6 +1,5 @@
+use rtsan_standalone::nonblocking;
 use std::marker::PhantomData;
-
-use rtsan::nonblocking;
 
 use crate::{BlockRead, Sample};
 
@@ -52,7 +51,7 @@ impl<'a, S: Sample, V: AsRef<[S]>> StackedView<'a, S, V> {
     }
 }
 
-impl<'a, S: Sample, V: AsRef<[S]>> BlockRead<S> for StackedView<'a, S, V> {
+impl<S: Sample, V: AsRef<[S]>> BlockRead<S> for StackedView<'_, S, V> {
     #[nonblocking]
     fn num_frames(&self) -> usize {
         self.num_frames
@@ -147,17 +146,19 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHAN
         assert!(num_channels as usize <= MAX_CHANNELS);
 
         let mut data: [std::mem::MaybeUninit<&[S]>; MAX_CHANNELS] =
-            std::mem::MaybeUninit::uninit().assume_init();
+            unsafe { std::mem::MaybeUninit::uninit().assume_init() };
 
-        let ptr_slice: &[*const S] = std::slice::from_raw_parts(ptr, num_channels as usize);
+        let ptr_slice: &[*const S] =
+            unsafe { std::slice::from_raw_parts(ptr, num_channels as usize) };
 
         for ch in 0..num_channels as usize {
-            data[ch] =
-                std::mem::MaybeUninit::new(std::slice::from_raw_parts(ptr_slice[ch], num_frames));
+            data[ch] = std::mem::MaybeUninit::new(unsafe {
+                std::slice::from_raw_parts(ptr_slice[ch], num_frames)
+            });
         }
 
         Self {
-            data: std::mem::transmute_copy(&data),
+            data: unsafe { std::mem::transmute_copy(&data) },
             num_channels,
         }
     }

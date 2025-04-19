@@ -1,10 +1,10 @@
-use rtsan::nonblocking;
+use rtsan_standalone::nonblocking;
 
 use crate::{BlockRead, BlockWrite, Sample};
 
-use super::view::SequentialView;
+use super::view::PlanarView;
 
-pub struct SequentialViewMut<'a, S: Sample> {
+pub struct PlanarViewMut<'a, S: Sample> {
     data: &'a mut [S],
     num_channels: u16,
     num_frames: usize,
@@ -12,7 +12,7 @@ pub struct SequentialViewMut<'a, S: Sample> {
     num_frames_allocated: usize,
 }
 
-impl<'a, S: Sample> SequentialViewMut<'a, S> {
+impl<'a, S: Sample> PlanarViewMut<'a, S> {
     #[nonblocking]
     pub fn from_slice(data: &'a mut [S], num_channels: u16, num_frames: usize) -> Self {
         assert_eq!(data.len(), num_channels as usize * num_frames);
@@ -59,7 +59,9 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
     #[nonblocking]
     pub unsafe fn from_raw(ptr: *mut S, num_channels: u16, num_frames: usize) -> Self {
         Self {
-            data: std::slice::from_raw_parts_mut(ptr, num_channels as usize * num_frames),
+            data: unsafe {
+                std::slice::from_raw_parts_mut(ptr, num_channels as usize * num_frames)
+            },
             num_channels,
             num_frames,
             num_channels_allocated: num_channels,
@@ -86,10 +88,12 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
         assert!(num_channels_visible <= num_channels_allocated);
         assert!(num_frames_visible <= num_frames_allocated);
         Self {
-            data: std::slice::from_raw_parts_mut(
-                ptr,
-                num_channels_allocated as usize * num_frames_allocated,
-            ),
+            data: unsafe {
+                std::slice::from_raw_parts_mut(
+                    ptr,
+                    num_channels_allocated as usize * num_frames_allocated,
+                )
+            },
             num_channels: num_channels_visible,
             num_frames: num_frames_visible,
             num_channels_allocated,
@@ -98,7 +102,7 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
     }
 }
 
-impl<'a, S: Sample> BlockRead<S> for SequentialViewMut<'a, S> {
+impl<S: Sample> BlockRead<S> for PlanarViewMut<'_, S> {
     #[nonblocking]
     fn num_frames(&self) -> usize {
         self.num_frames
@@ -153,7 +157,7 @@ impl<'a, S: Sample> BlockRead<S> for SequentialViewMut<'a, S> {
 
     #[nonblocking]
     fn view(&self) -> impl BlockRead<S> {
-        SequentialView::from_slice_limited(
+        PlanarView::from_slice_limited(
             self.data,
             self.num_channels,
             self.num_frames,
@@ -164,7 +168,7 @@ impl<'a, S: Sample> BlockRead<S> for SequentialViewMut<'a, S> {
 
     #[nonblocking]
     fn layout(&self) -> crate::BlockLayout {
-        crate::BlockLayout::Sequential
+        crate::BlockLayout::Planar
     }
 
     #[nonblocking]
@@ -174,7 +178,7 @@ impl<'a, S: Sample> BlockRead<S> for SequentialViewMut<'a, S> {
     }
 }
 
-impl<'a, S: Sample> BlockWrite<S> for SequentialViewMut<'a, S> {
+impl<S: Sample> BlockWrite<S> for PlanarViewMut<'_, S> {
     #[nonblocking]
     fn set_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
@@ -218,7 +222,7 @@ impl<'a, S: Sample> BlockWrite<S> for SequentialViewMut<'a, S> {
 
     #[nonblocking]
     fn view_mut(&mut self) -> impl BlockWrite<S> {
-        SequentialViewMut::from_slice_limited(
+        PlanarViewMut::from_slice_limited(
             self.data,
             self.num_channels,
             self.num_frames,
@@ -241,7 +245,7 @@ mod tests {
     #[test]
     fn test_samples() {
         let mut data = vec![0.0; 10];
-        let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block = PlanarViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         let num_frames = block.num_frames();
         for ch in 0..block.num_channels() {
@@ -265,7 +269,7 @@ mod tests {
     #[test]
     fn test_channels() {
         let mut data = vec![0.0; 10];
-        let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block = PlanarViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         let channel = block.channel(0).collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -290,7 +294,7 @@ mod tests {
     #[test]
     fn test_frames() {
         let mut data = vec![0.0; 10];
-        let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block = PlanarViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         for i in 0..block.num_frames() {
             let frame = block.frame(i).collect::<Vec<_>>();
@@ -320,7 +324,7 @@ mod tests {
     #[test]
     fn test_from_slice() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let block = PlanarViewMut::<f32>::from_slice(&mut data, 2, 5);
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated, 2);
         assert_eq!(block.num_frames(), 5);
@@ -343,7 +347,7 @@ mod tests {
     #[test]
     fn test_view() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let block = PlanarViewMut::<f32>::from_slice(&mut data, 2, 5);
         let view = block.view();
         assert_eq!(
             view.channel(0).collect::<Vec<_>>(),
@@ -358,7 +362,7 @@ mod tests {
     #[test]
     fn test_view_mut() {
         let mut data = vec![0.0; 10];
-        let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block = PlanarViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         {
             let mut view = block.view_mut();
@@ -384,7 +388,7 @@ mod tests {
     fn test_limited() {
         let mut data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
 
-        let mut block = SequentialViewMut::from_slice_limited(&mut data, 2, 3, 3, 4);
+        let mut block = PlanarViewMut::from_slice_limited(&mut data, 2, 3, 3, 4);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -404,7 +408,7 @@ mod tests {
     #[test]
     fn test_from_raw() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = unsafe { SequentialViewMut::<f32>::from_raw(data.as_mut_ptr(), 2, 5) };
+        let block = unsafe { PlanarViewMut::<f32>::from_raw(data.as_mut_ptr(), 2, 5) };
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated, 2);
         assert_eq!(block.num_frames(), 5);
@@ -428,8 +432,7 @@ mod tests {
     fn test_from_raw_limited() {
         let mut data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
 
-        let mut block =
-            unsafe { SequentialViewMut::from_raw_limited(data.as_mut_ptr(), 2, 3, 3, 4) };
+        let mut block = unsafe { PlanarViewMut::from_raw_limited(data.as_mut_ptr(), 2, 3, 3, 4) };
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -449,9 +452,9 @@ mod tests {
     #[test]
     fn test_raw_data() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block = PlanarViewMut::<f32>::from_slice(&mut data, 2, 5);
 
-        assert_eq!(block.layout(), crate::BlockLayout::Sequential);
+        assert_eq!(block.layout(), crate::BlockLayout::Planar);
 
         assert_eq!(
             block.raw_data(None),
