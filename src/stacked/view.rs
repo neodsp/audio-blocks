@@ -200,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    fn test_channels() {
+    fn test_channel() {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
         let data = vec![ch1.as_slice(), ch2.as_slice()];
@@ -210,6 +210,22 @@ mod tests {
         assert_eq!(channel, vec![0.0, 2.0, 4.0, 6.0, 8.0]);
         let channel = block.channel(1).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![1.0, 3.0, 5.0, 7.0, 9.0]);
+    }
+
+    #[test]
+    fn test_channels() {
+        let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
+        let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
+        let data = vec![ch1.as_slice(), ch2.as_slice()];
+        let block = StackedView::from_slices(&data);
+
+        let mut channels_iter = block.channels();
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 2.0, 4.0, 6.0, 8.0]);
+
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![1.0, 3.0, 5.0, 7.0, 9.0]);
+        assert!(channels_iter.next().is_none());
     }
 
     #[test]
@@ -297,9 +313,8 @@ mod tests {
                 vec.iter_mut().map(|inner_vec| inner_vec.as_ptr()).collect();
             let ptr = ptr_vec.as_ptr();
 
-            let adaptor = StackedPtrAdapter::<_, 16>::new(ptr, num_channels, num_frames);
-
-            let stacked = adaptor.stacked_view();
+            let adapter = StackedPtrAdapter::<_, 16>::new(ptr, num_channels, num_frames);
+            let stacked = adapter.stacked_view();
 
             assert_eq!(
                 stacked.channel(0).copied().collect::<Vec<_>>(),

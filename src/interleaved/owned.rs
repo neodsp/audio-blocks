@@ -1,6 +1,6 @@
 use super::{
     iterators::{InterleavedChannelIter, InterleavedChannelMutIter},
-    view::InterleavedView,
+    view::AudioBlockInterleavedView,
     view_mut::InterleavedViewMut,
 };
 use crate::{AudioBlock, AudioBlockMut, Sample};
@@ -136,7 +136,7 @@ impl<S: Sample> AudioBlock<S> for Interleaved<S> {
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        InterleavedView::from_slice_limited(
+        AudioBlockInterleavedView::from_slice_limited(
             &self.data,
             self.num_channels,
             self.num_frames,
@@ -250,7 +250,7 @@ mod tests {
     use rtsan_standalone::no_sanitize_realtime;
 
     use super::*;
-    use crate::planar::Planar;
+    use crate::sequential::Sequential;
 
     #[test]
     fn test_samples() {
@@ -276,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn test_channels() {
+    fn test_channel() {
         let mut block = Interleaved::<f32>::empty(2, 5);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
@@ -300,7 +300,42 @@ mod tests {
     }
 
     #[test]
-    fn test_frames() {
+    fn test_channels() {
+        let mut block = Interleaved::<f32>::empty(2, 5);
+
+        let mut channels_iter = block.channels();
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        assert!(channels_iter.next().is_none());
+        drop(channels_iter);
+
+        let mut channels_iter = block.channels_mut();
+        channels_iter
+            .next()
+            .unwrap()
+            .enumerate()
+            .for_each(|(i, v)| *v = i as f32);
+        channels_iter
+            .next()
+            .unwrap()
+            .enumerate()
+            .for_each(|(i, v)| *v = i as f32 + 10.0);
+        assert!(channels_iter.next().is_none());
+        drop(channels_iter);
+
+        let mut channels_iter = block.channels();
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
+        assert!(channels_iter.next().is_none());
+        drop(channels_iter);
+    }
+
+    #[test]
+    fn test_frame() {
         let mut block = Interleaved::<f32>::empty(2, 5);
 
         for i in 0..block.num_frames() {
@@ -330,7 +365,7 @@ mod tests {
 
     #[test]
     fn test_from_slice() {
-        let block = Interleaved::<f32>::from_block(&InterleavedView::from_slice(
+        let block = Interleaved::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
             5,
@@ -356,7 +391,7 @@ mod tests {
 
     #[test]
     fn test_view() {
-        let block = Interleaved::<f32>::from_block(&InterleavedView::from_slice(
+        let block = Interleaved::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
             5,
@@ -397,8 +432,11 @@ mod tests {
 
     #[test]
     fn test_from_block() {
-        let block =
-            Planar::<f32>::from_slice(&[0.0, 2.0, 4.0, 6.0, 8.0, 1.0, 3.0, 5.0, 7.0, 9.0], 2, 5);
+        let block = Sequential::<f32>::from_slice(
+            &[0.0, 2.0, 4.0, 6.0, 8.0, 1.0, 3.0, 5.0, 7.0, 9.0],
+            2,
+            5,
+        );
 
         let block = Interleaved::<f32>::from_block(&block);
 
@@ -504,8 +542,9 @@ mod tests {
     #[test]
     fn test_raw_data() {
         let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let mut block =
-            Interleaved::<f32>::from_block(&InterleavedView::<f32>::from_slice(&data, 2, 5));
+        let mut block = Interleaved::<f32>::from_block(
+            &AudioBlockInterleavedView::<f32>::from_slice(&data, 2, 5),
+        );
 
         assert_eq!(block.layout(), crate::BlockLayout::Interleaved);
 

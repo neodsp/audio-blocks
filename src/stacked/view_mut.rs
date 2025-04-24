@@ -283,7 +283,7 @@ mod tests {
     }
 
     #[test]
-    fn test_channels() {
+    fn test_channel() {
         let mut ch1 = vec![0.0; 5];
         let mut ch2 = vec![0.0; 5];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice()];
@@ -307,6 +307,44 @@ mod tests {
         assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
         let channel = block.channel(1).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
+    }
+
+    #[test]
+    fn test_channels() {
+        let mut ch1 = vec![0.0; 5];
+        let mut ch2 = vec![0.0; 5];
+        let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice()];
+        let mut block = StackedViewMut::from_slices(&mut data);
+
+        let mut channels_iter = block.channels();
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        assert!(channels_iter.next().is_none());
+        drop(channels_iter);
+
+        let mut channels_iter = block.channels_mut();
+        channels_iter
+            .next()
+            .unwrap()
+            .enumerate()
+            .for_each(|(i, v)| *v = i as f32);
+        channels_iter
+            .next()
+            .unwrap()
+            .enumerate()
+            .for_each(|(i, v)| *v = i as f32 + 10.0);
+        assert!(channels_iter.next().is_none());
+        drop(channels_iter);
+
+        let mut channels_iter = block.channels();
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
+        assert!(channels_iter.next().is_none());
+        drop(channels_iter);
     }
 
     #[test]

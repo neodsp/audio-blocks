@@ -4,7 +4,7 @@ use rtsan_standalone::nonblocking;
 
 use super::{
     iterators::{InterleavedChannelIter, InterleavedChannelMutIter},
-    view::InterleavedView,
+    view::AudioBlockInterleavedView,
 };
 use crate::{AudioBlock, AudioBlockMut, Sample};
 
@@ -14,17 +14,6 @@ pub struct InterleavedViewMut<'a, S: Sample> {
     num_frames: usize,
     num_channels_allocated: u16,
     num_frames_allocated: usize,
-}
-
-#[test]
-fn hell() {
-    let mut data = [0.0, 1.0, 2.0, 3.0];
-    let mut block = InterleavedViewMut::from_slice(&mut data, 2, 2);
-    for channel in block.channels_mut() {
-        for sample in channel {
-            dbg!(sample);
-        }
-    }
 }
 
 impl<'a, S: Sample> InterleavedViewMut<'a, S> {
@@ -204,7 +193,7 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        InterleavedView::from_slice_limited(
+        AudioBlockInterleavedView::from_slice_limited(
             self.data,
             self.num_channels,
             self.num_frames,
@@ -342,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn test_channels() {
+    fn test_channel() {
         let mut data = vec![0.0; 10];
         let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
 
@@ -364,6 +353,42 @@ mod tests {
         assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
         let channel = block.channel(1).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
+    }
+
+    #[test]
+    fn test_channels() {
+        let mut data = vec![0.0; 10];
+        let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+
+        let mut channels_iter = block.channels();
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        assert!(channels_iter.next().is_none());
+        drop(channels_iter);
+
+        let mut channels_iter = block.channels_mut();
+        channels_iter
+            .next()
+            .unwrap()
+            .enumerate()
+            .for_each(|(i, v)| *v = i as f32);
+        channels_iter
+            .next()
+            .unwrap()
+            .enumerate()
+            .for_each(|(i, v)| *v = i as f32 + 10.0);
+        assert!(channels_iter.next().is_none());
+        drop(channels_iter);
+
+        let mut channels_iter = block.channels();
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
+        assert!(channels_iter.next().is_none());
+        drop(channels_iter);
     }
 
     #[test]

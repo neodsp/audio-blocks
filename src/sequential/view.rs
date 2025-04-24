@@ -2,7 +2,7 @@ use rtsan_standalone::nonblocking;
 
 use crate::{AudioBlock, Sample};
 
-pub struct PlanarView<'a, S: Sample> {
+pub struct SequentialView<'a, S: Sample> {
     data: &'a [S],
     num_channels: u16,
     num_frames: usize,
@@ -10,7 +10,7 @@ pub struct PlanarView<'a, S: Sample> {
     num_frames_allocated: usize,
 }
 
-impl<'a, S: Sample> PlanarView<'a, S> {
+impl<'a, S: Sample> SequentialView<'a, S> {
     #[nonblocking]
     pub fn from_slice(data: &'a [S], num_channels: u16, num_frames: usize) -> Self {
         assert_eq!(data.len(), num_channels as usize * num_frames);
@@ -96,7 +96,7 @@ impl<'a, S: Sample> PlanarView<'a, S> {
     }
 }
 
-impl<S: Sample> AudioBlock<S> for PlanarView<'_, S> {
+impl<S: Sample> AudioBlock<S> for SequentialView<'_, S> {
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -160,7 +160,7 @@ impl<S: Sample> AudioBlock<S> for PlanarView<'_, S> {
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        PlanarView::from_slice_limited(
+        SequentialView::from_slice_limited(
             self.data,
             self.num_channels,
             self.num_frames,
@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn test_samples() {
         let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = PlanarView::<f32>::from_slice(&data, 2, 5);
+        let block = SequentialView::<f32>::from_slice(&data, 2, 5);
 
         for ch in 0..block.num_channels() {
             for f in 0..block.num_frames() {
@@ -201,9 +201,9 @@ mod tests {
     }
 
     #[test]
-    fn test_channels() {
+    fn test_channel() {
         let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = PlanarView::<f32>::from_slice(&data, 2, 5);
+        let block = SequentialView::<f32>::from_slice(&data, 2, 5);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
@@ -212,9 +212,23 @@ mod tests {
     }
 
     #[test]
+    fn test_channels() {
+        let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = SequentialView::<f32>::from_slice(&data, 2, 5);
+
+        let mut channels_iter = block.channels();
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![5.0, 6.0, 7.0, 8.0, 9.0]);
+        assert!(channels_iter.next().is_none());
+    }
+
+    #[test]
     fn test_frames() {
         let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = PlanarView::<f32>::from_slice(&data, 2, 5);
+        let block = SequentialView::<f32>::from_slice(&data, 2, 5);
 
         let channel = block.frame(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 5.0]);
@@ -231,7 +245,7 @@ mod tests {
     #[test]
     fn test_from_slice() {
         let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = PlanarView::<f32>::from_slice(&data, 2, 5);
+        let block = SequentialView::<f32>::from_slice(&data, 2, 5);
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated, 2);
         assert_eq!(block.num_frames(), 5);
@@ -254,7 +268,7 @@ mod tests {
     #[test]
     fn test_view() {
         let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = PlanarView::<f32>::from_slice(&data, 2, 5);
+        let block = SequentialView::<f32>::from_slice(&data, 2, 5);
         let view = block.view();
         assert_eq!(
             view.channel(0).copied().collect::<Vec<_>>(),
@@ -270,7 +284,7 @@ mod tests {
     fn test_limited() {
         let data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
 
-        let block = PlanarView::from_slice_limited(&data, 2, 3, 3, 4);
+        let block = SequentialView::from_slice_limited(&data, 2, 3, 3, 4);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -288,7 +302,7 @@ mod tests {
     #[test]
     fn test_from_raw() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = unsafe { PlanarView::<f32>::from_raw(data.as_mut_ptr(), 2, 5) };
+        let block = unsafe { SequentialView::<f32>::from_raw(data.as_mut_ptr(), 2, 5) };
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated, 2);
         assert_eq!(block.num_frames(), 5);
@@ -312,7 +326,7 @@ mod tests {
     fn test_from_raw_limited() {
         let data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
 
-        let block = unsafe { PlanarView::from_raw_limited(data.as_ptr(), 2, 3, 3, 4) };
+        let block = unsafe { SequentialView::from_raw_limited(data.as_ptr(), 2, 3, 3, 4) };
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -330,7 +344,7 @@ mod tests {
     #[test]
     fn test_raw_data() {
         let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = PlanarView::<f32>::from_slice(&data, 2, 5);
+        let block = SequentialView::<f32>::from_slice(&data, 2, 5);
 
         assert_eq!(block.layout(), crate::BlockLayout::Planar);
 

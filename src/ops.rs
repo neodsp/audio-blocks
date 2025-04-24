@@ -124,7 +124,7 @@ mod tests {
 
     use crate::{
         interleaved::InterleavedViewMut,
-        planar::{PlanarView, PlanarViewMut},
+        sequential::{SequentialView, SequentialViewMut},
         stacked::StackedViewMut,
     };
 
@@ -134,7 +134,7 @@ mod tests {
     fn test_copy_from() {
         let mut data = [0.0; 15];
         let mut block = InterleavedViewMut::from_slice(&mut data, 3, 5);
-        let view = PlanarView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block(&view);
 
         assert_eq!(block.num_channels(), 2);
@@ -156,7 +156,7 @@ mod tests {
     fn test_copy_from_exact() {
         let mut data = [0.0; 8];
         let mut block = InterleavedViewMut::from_slice(&mut data, 2, 4);
-        let view = PlanarView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block_exact(&view);
 
         assert_eq!(block.num_channels(), 2);
@@ -180,7 +180,7 @@ mod tests {
     fn test_copy_data_wrong_channels() {
         let mut data = [0.0; 5];
         let mut block = InterleavedViewMut::from_slice(&mut data, 1, 5);
-        let view = PlanarView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block(&view);
     }
 
@@ -190,7 +190,7 @@ mod tests {
     fn test_copy_data_wrong_frames() {
         let mut data = [0.0; 9];
         let mut block = InterleavedViewMut::from_slice(&mut data, 3, 3);
-        let view = PlanarView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block_exact(&view);
     }
 
@@ -200,7 +200,7 @@ mod tests {
     fn test_copy_data_exact_wrong_channels() {
         let mut data = [0.0; 12];
         let mut block = InterleavedViewMut::from_slice(&mut data, 3, 4);
-        let view = PlanarView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block_exact(&view);
     }
 
@@ -210,14 +210,14 @@ mod tests {
     fn test_copy_data_exact_wrong_frames() {
         let mut data = [0.0; 10];
         let mut block = InterleavedViewMut::from_slice(&mut data, 2, 5);
-        let view = PlanarView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block_exact(&view);
     }
 
     #[test]
     fn test_for_each() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = PlanarViewMut::from_slice(&mut data, 2, 4);
+        let mut block = SequentialViewMut::from_slice(&mut data, 2, 4);
 
         let mut i = 0;
         let mut c_exp = 0;
@@ -271,7 +271,7 @@ mod tests {
     #[test]
     fn test_gain() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = PlanarViewMut::from_slice(&mut data, 2, 4);
+        let mut block = SequentialViewMut::from_slice(&mut data, 2, 4);
 
         block.apply_gain(2.0);
 
@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = PlanarViewMut::from_slice(&mut data, 2, 4);
+        let mut block = SequentialViewMut::from_slice(&mut data, 2, 4);
 
         block.clear();
 

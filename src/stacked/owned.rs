@@ -200,7 +200,7 @@ mod tests {
     use rtsan_standalone::no_sanitize_realtime;
 
     use super::*;
-    use crate::interleaved::InterleavedView;
+    use crate::interleaved::AudioBlockInterleavedView;
 
     #[test]
     fn test_samples() {
@@ -224,7 +224,7 @@ mod tests {
     }
 
     #[test]
-    fn test_channels() {
+    fn test_channel() {
         let mut block = Stacked::<f32>::empty(2, 5);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
@@ -245,6 +245,41 @@ mod tests {
         assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
         let channel = block.channel(1).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
+    }
+
+    #[test]
+    fn test_channels() {
+        let mut block = Stacked::<f32>::empty(2, 5);
+
+        let mut channels_iter = block.channels();
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
+        assert!(channels_iter.next().is_none());
+        drop(channels_iter);
+
+        let mut channels_iter = block.channels_mut();
+        channels_iter
+            .next()
+            .unwrap()
+            .enumerate()
+            .for_each(|(i, v)| *v = i as f32);
+        channels_iter
+            .next()
+            .unwrap()
+            .enumerate()
+            .for_each(|(i, v)| *v = i as f32 + 10.0);
+        assert!(channels_iter.next().is_none());
+        drop(channels_iter);
+
+        let mut channels_iter = block.channels();
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+        let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
+        assert!(channels_iter.next().is_none());
+        drop(channels_iter);
     }
 
     #[test]
@@ -278,7 +313,7 @@ mod tests {
 
     #[test]
     fn test_from_block() {
-        let block = Stacked::<f32>::from_block(&InterleavedView::from_slice(
+        let block = Stacked::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
             5,
@@ -304,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_view() {
-        let block = Stacked::<f32>::from_block(&InterleavedView::from_slice(
+        let block = Stacked::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
             5,

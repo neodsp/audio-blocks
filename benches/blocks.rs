@@ -1,5 +1,5 @@
-use audio_blocks::{interleaved::Interleaved, ops::Ops, planar::Planar, stacked::Stacked};
-use criterion::{criterion_group, criterion_main, Criterion};
+use audio_blocks::{interleaved::Interleaved, ops::Ops, sequential::Sequential, stacked::Stacked};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 pub fn bench_three_types(c: &mut Criterion, num_channels: u16, num_frames: usize) {
     let mut block = Interleaved::<f32>::empty(num_channels, num_frames);

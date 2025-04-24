@@ -15,7 +15,7 @@ pub use ops::Ops;
 
 pub mod interleaved;
 pub mod ops;
-pub mod planar;
+pub mod sequential;
 pub mod stacked;
 
 pub trait Sample: Float + 'static {}
@@ -61,91 +61,3 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// that should be visible.
     fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
 }
-
-// #[macro_export]
-// macro_rules! channels {
-//     ($block:expr, $channel:ident, $body:expr) => {
-//         for c in 0..$block.num_channels() {
-//             let $channel = $block.channel(c);
-//             $body
-//         }
-//     };
-// }
-
-// #[macro_export]
-// macro_rules! channels_mut {
-//     ($block:expr, $channel:ident, $body:expr) => {
-//         for c in 0..$block.num_channels() {
-//             let $channel = $block.channel_mut(c);
-//             $body
-//         }
-//     };
-// }
-
-// #[macro_export]
-// macro_rules! frames {
-//     ($block:expr, $channel:ident, $body:expr) => {
-//         for c in 0..$block.num_frames() {
-//             let $channel = $block.frame(c);
-//             $body
-//         }
-//     };
-// }
-
-// #[macro_export]
-// macro_rules! frames_mut {
-//     ($block:expr, $channel:ident, $body:expr) => {
-//         for c in 0..$block.num_frames() {
-//             let $channel = $block.frame_mut(c);
-//             $body
-//         }
-//     };
-// }
-
-// #[cfg(test)]
-// mod tests {
-//     use crate::{interleaved::InterleavedViewMut, planar::PlanarViewMut};
-
-//     use super::*;
-
-//     #[test]
-//     fn test_macros() {
-//         let mut data = [0.0, 1.0, 2.0, 3.0];
-//         let mut block = PlanarViewMut::from_slice(&mut data, 2, 2);
-
-//         let mut i = 0;
-//         channels!(block, channel, {
-//             for sample in channel {
-//                 assert_eq!(*sample, i as f32);
-//                 i += 1;
-//             }
-//         });
-
-//         let mut i = 0;
-//         channels_mut!(block, channel, {
-//             for sample in channel {
-//                 assert_eq!(*sample, i as f32);
-//                 i += 1;
-//             }
-//         });
-
-//         let mut data = [0.0, 1.0, 2.0, 3.0];
-//         let mut block = InterleavedViewMut::from_slice(&mut data, 2, 2);
-
-//         let mut i = 0;
-//         frames!(block, frame, {
-//             for sample in frame {
-//                 assert_eq!(*sample, i as f32);
-//                 i += 1;
-//             }
-//         });
-
-//         let mut i = 0;
-//         frames_mut!(block, frame, {
-//             for sample in frame {
-//                 assert_eq!(*sample, i as f32);
-//                 i += 1;
-//             }
-//         });
-//     }
-// }
