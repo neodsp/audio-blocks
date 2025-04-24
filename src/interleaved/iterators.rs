@@ -36,7 +36,7 @@ impl<'a, S: Sample> Iterator for InterleavedChannelIter<'a, S> {
     }
 }
 
-impl<'a, S: Sample> ExactSizeIterator for InterleavedChannelIter<'a, S> {}
+impl<S: Sample> ExactSizeIterator for InterleavedChannelIter<'_, S> {}
 // Potentially add FusedIterator if desired
 
 // --- Mutable Inner Iterator ---
@@ -69,4 +69,4 @@ impl<'a, S: Sample> Iterator for InterleavedChannelMutIter<'a, S> {
         (self.remaining, Some(self.remaining))
     }
 }
-impl<'a, S: Sample> ExactSizeIterator for InterleavedChannelMutIter<'a, S> {}
+impl<S: Sample> ExactSizeIterator for InterleavedChannelMutIter<'_, S> {}

@@ -5,19 +5,19 @@ pub fn bench_three_types(c: &mut Criterion, num_channels: u16, num_frames: usize
     let mut block = Interleaved::<f32>::empty(num_channels, num_frames);
     c.bench_function(
         &format!("for each interleaved {num_channels}ch {num_frames}fr"),
-        |b| b.iter(|| block.for_each(|_, _, v| *v *= 2.0)),
+        |b| b.iter(|| block.for_each(|v| *v *= 2.0)),
     );
 
-    let mut block = Planar::<f32>::empty(num_channels, num_frames);
+    let mut block = Sequential::<f32>::empty(num_channels, num_frames);
     c.bench_function(
         &format!("for each sequential {num_channels}ch {num_frames}fr"),
-        |b| b.iter(|| block.for_each(|_, _, v| *v *= 2.0)),
+        |b| b.iter(|| block.for_each(|v| *v *= 2.0)),
     );
 
     let mut block = Stacked::<f32>::empty(num_channels, num_frames);
     c.bench_function(
         &format!("for each stacked {num_channels}ch {num_frames}fr"),
-        |b| b.iter(|| block.for_each(|_, _, v| *v *= 2.0)),
+        |b| b.iter(|| block.for_each(|v| *v *= 2.0)),
     );
 }
 
