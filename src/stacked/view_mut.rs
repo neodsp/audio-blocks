@@ -139,14 +139,10 @@ impl<S: Sample, C: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for StackedViewMut<'_,
 
 impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<'_, S, V> {
     #[nonblocking]
-    fn set_num_channels(&mut self, num_channels: u16) {
+    fn resize(&mut self, num_channels: u16, num_frames: usize) {
         assert!(num_channels <= self.num_channels_allocated);
-        self.num_channels = num_channels;
-    }
-
-    #[nonblocking]
-    fn set_num_frames(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
+        self.num_channels = num_channels;
         self.num_frames = num_frames;
     }
 

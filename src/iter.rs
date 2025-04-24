@@ -3,14 +3,14 @@ use core::{marker::PhantomData, ptr::NonNull};
 use crate::Sample;
 
 #[derive(Clone)] // Can be cloned if S is Copy
-pub(crate) struct InterleavedChannelIter<'a, S: Sample> {
-    pub ptr: NonNull<S>,             // Pointer to the current sample for this channel
-    pub stride: usize,               // How many elements to jump to get to the next frame
-    pub remaining: usize,            // Number of frames left for this channel
-    pub _marker: PhantomData<&'a S>, // Links the output lifetime &'a S to the borrow in channels()
+pub(crate) struct InterleavedDataIter<'a, S: Sample> {
+    pub ptr: NonNull<S>,  // Pointer to the current sample for this channel or frame
+    pub stride: usize,    // How many elements to jump to get to the next frame or channel
+    pub remaining: usize, // Number of frames left for this channel or frame
+    pub _marker: PhantomData<&'a S>, // Links the output lifetime &'a S to the borrow in channels()/ frames()
 }
 
-impl<'a, S: Sample> Iterator for InterleavedChannelIter<'a, S> {
+impl<'a, S: Sample> Iterator for InterleavedDataIter<'a, S> {
     type Item = &'a S;
 
     #[inline]
@@ -36,18 +36,16 @@ impl<'a, S: Sample> Iterator for InterleavedChannelIter<'a, S> {
     }
 }
 
-impl<S: Sample> ExactSizeIterator for InterleavedChannelIter<'_, S> {}
-// Potentially add FusedIterator if desired
+impl<S: Sample> ExactSizeIterator for InterleavedDataIter<'_, S> {}
 
-// --- Mutable Inner Iterator ---
-pub(crate) struct InterleavedChannelMutIter<'a, S: Sample> {
+pub(crate) struct InterleavedDataIterMut<'a, S: Sample> {
     pub ptr: NonNull<S>,
     pub stride: usize,
     pub remaining: usize,
     pub _marker: PhantomData<&'a mut S>, // Links the output lifetime &'a mut S
 }
 
-impl<'a, S: Sample> Iterator for InterleavedChannelMutIter<'a, S> {
+impl<'a, S: Sample> Iterator for InterleavedDataIterMut<'a, S> {
     type Item = &'a mut S;
 
     #[inline]
@@ -69,4 +67,4 @@ impl<'a, S: Sample> Iterator for InterleavedChannelMutIter<'a, S> {
         (self.remaining, Some(self.remaining))
     }
 }
-impl<S: Sample> ExactSizeIterator for InterleavedChannelMutIter<'_, S> {}
+impl<S: Sample> ExactSizeIterator for InterleavedDataIterMut<'_, S> {}

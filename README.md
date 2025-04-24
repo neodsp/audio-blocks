@@ -1,6 +1,6 @@
-# Audio Buffers
+# Audio Blocks
 
-This crate provides traits for audio buffers to generalize common problems in handling audio data, like different channel layouts and varying number of samples.
+This crate provides traits for audio blocks to generalize common problems in handling audio data, like different channel layouts and varying number of samples.
 
 Audio data can have different formats:
 
@@ -33,7 +33,7 @@ pub fn process(mut block: impl AudioBlockMut<f32>) {
 
 The number of samples in audio buffers coming from audio APIs can vary with each process call and often only the maximum number of frames is given.
 This is the reason why all blocks have a number of **allocated** frames and channels and **visible** frames and channels.
-With the functions `set_num_channels` and `set_num_frames` the buffers can be resized as long as they do not grow larger than the allocated memory.
+With the function `resize` the buffers can be resized as long as they do not grow larger than the allocated memory. Resize is always real-time safe!
 When using the `copy_from_block_resize` function, the destination block will autoamtically adapt the size of the source block.
 
 > [!WARNING]
@@ -61,8 +61,7 @@ fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
 contains all of the non-mutable functions plus:
 
 ```Rust
-fn set_num_channels(&mut self, num_channels: u16);
-fn set_num_frames(&mut self, num_frames: usize);
+fn resize(&mut self, num_channels: u16, num_frames: usize);
 fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S;
 fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
 fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;

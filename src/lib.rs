@@ -14,6 +14,7 @@ use num_traits::Float;
 pub use ops::Ops;
 
 pub mod interleaved;
+mod iter;
 pub mod ops;
 pub mod sequential;
 pub mod stacked;
@@ -48,8 +49,7 @@ pub trait AudioBlock<S: Sample> {
 }
 
 pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
-    fn set_num_channels(&mut self, num_channels: u16);
-    fn set_num_frames(&mut self, num_frames: usize);
+    fn resize(&mut self, num_channels: u16, num_frames: usize);
     fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S;
     fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
     fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;

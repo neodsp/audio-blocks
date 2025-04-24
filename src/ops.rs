@@ -47,8 +47,8 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
     fn copy_from_block_resize(&mut self, block: &impl AudioBlock<S>) {
         assert!(block.num_channels() <= self.num_channels_allocated());
         assert!(block.num_frames() <= self.num_frames_allocated());
-        self.set_num_channels(block.num_channels());
-        self.set_num_frames(block.num_frames());
+        self.resize(block.num_channels(), block.num_frames());
+
         for ch in 0..self.num_channels() {
             for (sample_mut, sample) in self.channel_mut(ch).zip(block.channel(ch)) {
                 *sample_mut = *sample;

@@ -1,9 +1,8 @@
-use super::{
-    iterators::{InterleavedChannelIter, InterleavedChannelMutIter},
-    view::AudioBlockInterleavedView,
-    view_mut::InterleavedViewMut,
+use super::{view::AudioBlockInterleavedView, view_mut::InterleavedViewMut};
+use crate::{
+    AudioBlock, AudioBlockMut, Sample,
+    iter::{InterleavedDataIter, InterleavedDataIterMut},
 };
-use crate::{AudioBlock, AudioBlockMut, Sample};
 use rtsan_standalone::nonblocking;
 
 #[cfg(all(feature = "alloc", not(feature = "std")))]
@@ -46,6 +45,26 @@ impl<S: Sample> Interleaved<S> {
             num_channels_allocated: block.num_channels(),
             num_frames_allocated: block.num_frames(),
         }
+    }
+
+    #[nonblocking]
+    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+        let num_channels = self.num_channels as usize;
+        let num_channels_allocated = self.num_channels_allocated as usize;
+        self.data
+            .chunks(num_channels_allocated)
+            .take(self.num_frames)
+            .map(move |channel_chunk| channel_chunk.iter().take(num_channels))
+    }
+
+    #[nonblocking]
+    fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+        let num_channels = self.num_channels as usize;
+        let num_channels_allocated = self.num_channels_allocated as usize;
+        self.data
+            .chunks_mut(num_channels_allocated)
+            .take(self.num_frames)
+            .map(move |channel_chunk| channel_chunk.iter_mut().take(num_channels))
     }
 }
 
@@ -95,11 +114,9 @@ impl<S: Sample> AudioBlock<S> for Interleaved<S> {
     fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
-        // Stride is the number of channels the data was actually allocated with
         let stride = self.num_channels_allocated as usize;
         let data_ptr = self.data.as_ptr();
 
-        // Iterate through channel indices (0, 1, 2, ...)
         (0..num_channels).map(move |channel_idx| {
             // Safety check: Ensure data isn't empty if we calculate a start_ptr.
             // If num_frames or num_channels is 0, remaining will be 0, iterator is safe.
@@ -113,7 +130,7 @@ impl<S: Sample> AudioBlock<S> for Interleaved<S> {
                 unsafe { data_ptr.add(channel_idx) }
             };
 
-            InterleavedChannelIter::<'_, S> {
+            InterleavedDataIter::<'_, S> {
                 // Note: '_ lifetime from &self borrow
                 // Safety: Pointer is either dangling (if empty) or valid start pointer.
                 // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
@@ -159,14 +176,10 @@ impl<S: Sample> AudioBlock<S> for Interleaved<S> {
 
 impl<S: Sample> AudioBlockMut<S> for Interleaved<S> {
     #[nonblocking]
-    fn set_num_channels(&mut self, num_channels: u16) {
+    fn resize(&mut self, num_channels: u16, num_frames: usize) {
         assert!(num_channels <= self.num_channels_allocated);
-        self.num_channels = num_channels;
-    }
-
-    #[nonblocking]
-    fn set_num_frames(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
+        self.num_channels = num_channels;
         self.num_frames = num_frames;
     }
 
@@ -197,19 +210,20 @@ impl<S: Sample> AudioBlockMut<S> for Interleaved<S> {
         let stride = self.num_channels_allocated as usize;
         let data_ptr = self.data.as_mut_ptr(); // Mutable pointer
 
-        // Iterate through channel indices (0, 1, 2, ...)
         (0..num_channels).map(move |channel_idx| {
-            // Safety check similar to immutable version
-            let start_ptr = if num_channels == 0 || num_frames == 0 || stride == 0 {
-                // Check conditions leading to empty/zero-stride iteration
-                NonNull::dangling().as_ptr()
+            // Safety check: Ensure data isn't empty if we calculate a start_ptr.
+            // If num_frames or num_channels is 0, remaining will be 0, iterator is safe.
+            // If data is empty, ptr is dangling, but add(0) is okay. add(>0) is UB.
+            // But if data is empty, num_channels or num_frames must be 0.
+            let start_ptr = if self.data.is_empty() {
+                NonNull::dangling().as_ptr() // Use dangling pointer if slice is empty
             } else {
                 // Safety: channel_idx is < num_channels <= num_channels_allocated.
                 // Adding it to a valid data_ptr is safe within slice bounds.
                 unsafe { data_ptr.add(channel_idx) }
             };
 
-            InterleavedChannelMutIter::<'_, S> {
+            InterleavedDataIterMut::<'_, S> {
                 ptr: NonNull::new(start_ptr).unwrap_or(NonNull::dangling()),
                 stride,
                 remaining: num_frames,
@@ -364,6 +378,44 @@ mod tests {
     }
 
     #[test]
+    fn test_frames() {
+        let mut block = Interleaved::<f32>::empty(2, 5);
+        let num_frames = block.num_frames;
+        let mut frames_iter = block.frames();
+        for _ in 0..num_frames {
+            let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+            assert_eq!(frame, vec![0.0, 0.0]);
+        }
+        assert!(frames_iter.next().is_none());
+        drop(frames_iter);
+
+        let mut frames_iter = block.frames_mut();
+        for i in 0..num_frames {
+            let add = i as f32 * 10.0;
+            frames_iter
+                .next()
+                .unwrap()
+                .enumerate()
+                .for_each(|(i, v)| *v = i as f32 + add);
+        }
+        assert!(frames_iter.next().is_none());
+        drop(frames_iter);
+
+        let mut frames_iter = block.frames();
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![0.0, 1.0]);
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![10.0, 11.0]);
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![20.0, 21.0]);
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![30.0, 31.0]);
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![40.0, 41.0]);
+        assert!(frames_iter.next().is_none());
+    }
+
+    #[test]
     fn test_from_slice() {
         let block = Interleaved::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
@@ -467,10 +519,8 @@ mod tests {
             assert_eq!(block.frame_mut(i).count(), 3);
         }
 
-        block.set_num_channels(3);
-        block.set_num_channels(2);
-        block.set_num_frames(10);
-        block.set_num_frames(5);
+        block.resize(3, 10);
+        block.resize(2, 5);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 5);
@@ -492,7 +542,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
         let mut block = Interleaved::<f32>::empty(2, 10);
-        block.set_num_channels(3);
+        block.resize(3, 10);
     }
 
     #[test]
@@ -500,7 +550,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
         let mut block = Interleaved::<f32>::empty(2, 10);
-        block.set_num_frames(11);
+        block.resize(2, 11);
     }
 
     #[test]
@@ -508,7 +558,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_channel() {
         let mut block = Interleaved::<f32>::empty(2, 10);
-        block.set_num_channels(1);
+        block.resize(1, 10);
         let _ = block.channel(1);
     }
 
@@ -517,7 +567,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_frame() {
         let mut block = Interleaved::<f32>::empty(2, 10);
-        block.set_num_frames(5);
+        block.resize(2, 5);
         let _ = block.frame(5);
     }
 
@@ -526,7 +576,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
         let mut block = Interleaved::<f32>::empty(2, 10);
-        block.set_num_channels(1);
+        block.resize(1, 10);
         let _ = block.channel_mut(1);
     }
 
@@ -535,7 +585,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_frame_mut() {
         let mut block = Interleaved::<f32>::empty(2, 10);
-        block.set_num_frames(5);
+        block.resize(2, 5);
         let _ = block.frame_mut(5);
     }
 

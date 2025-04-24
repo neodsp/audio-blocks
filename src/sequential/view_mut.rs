@@ -1,6 +1,11 @@
+use core::{marker::PhantomData, ptr::NonNull};
+
 use rtsan_standalone::nonblocking;
 
-use crate::{AudioBlock, AudioBlockMut, Sample};
+use crate::{
+    AudioBlock, AudioBlockMut, Sample,
+    iter::{InterleavedDataIter, InterleavedDataIterMut},
+};
 
 use super::view::SequentialView;
 
@@ -100,6 +105,70 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
             num_frames_allocated,
         }
     }
+
+    #[nonblocking]
+    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+        let num_channels = self.num_channels as usize;
+        let num_frames = self.num_frames;
+        let stride = self.num_frames_allocated;
+        let data_ptr = self.data.as_ptr();
+
+        (0..num_frames).map(move |frame_idx| {
+            // Safety check: Ensure data isn't empty if we calculate a start_ptr.
+            // If num_frames or num_channels is 0, remaining will be 0, iterator is safe.
+            // If data is empty, ptr is dangling, but add(0) is okay. add(>0) is UB.
+            // But if data is empty, num_channels or num_frames must be 0.
+            let start_ptr = if self.data.is_empty() {
+                NonNull::dangling().as_ptr() // Use dangling pointer if slice is empty
+            } else {
+                // Safety: channel_idx is < num_channels <= num_channels_allocated.
+                // Adding it to a valid data_ptr is safe within slice bounds.
+                unsafe { data_ptr.add(frame_idx) }
+            };
+
+            InterleavedDataIter::<'_, S> {
+                // Note: '_ lifetime from &self borrow
+                // Safety: Pointer is either dangling (if empty) or valid start pointer.
+                // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
+                ptr: NonNull::new(start_ptr as *mut S).unwrap_or(NonNull::dangling()), // Use dangling on null/empty
+                stride,
+                remaining: num_channels, // If 0, iterator yields None immediately
+                _marker: PhantomData,
+            }
+        })
+    }
+
+    #[nonblocking]
+    fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+        let num_channels = self.num_channels as usize;
+        let num_frames = self.num_frames;
+        let stride = self.num_frames_allocated;
+        let data_ptr = self.data.as_mut_ptr();
+
+        (0..num_frames).map(move |frame_idx| {
+            // Safety check: Ensure data isn't empty if we calculate a start_ptr.
+            // If num_frames or num_channels is 0, remaining will be 0, iterator is safe.
+            // If data is empty, ptr is dangling, but add(0) is okay. add(>0) is UB.
+            // But if data is empty, num_channels or num_frames must be 0.
+            let start_ptr = if self.data.is_empty() {
+                NonNull::dangling().as_ptr() // Use dangling pointer if slice is empty
+            } else {
+                // Safety: channel_idx is < num_channels <= num_channels_allocated.
+                // Adding it to a valid data_ptr is safe within slice bounds.
+                unsafe { data_ptr.add(frame_idx) }
+            };
+
+            InterleavedDataIterMut::<'_, S> {
+                // Note: '_ lifetime from &self borrow
+                // Safety: Pointer is either dangling (if empty) or valid start pointer.
+                // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
+                ptr: NonNull::new(start_ptr).unwrap_or(NonNull::dangling()), // Use dangling on null/empty
+                stride,
+                remaining: num_channels, // If 0, iterator yields None immediately
+                _marker: PhantomData,
+            }
+        })
+    }
 }
 
 impl<S: Sample> AudioBlock<S> for SequentialViewMut<'_, S> {
@@ -189,14 +258,10 @@ impl<S: Sample> AudioBlock<S> for SequentialViewMut<'_, S> {
 
 impl<S: Sample> AudioBlockMut<S> for SequentialViewMut<'_, S> {
     #[nonblocking]
-    fn set_num_channels(&mut self, num_channels: u16) {
+    fn resize(&mut self, num_channels: u16, num_frames: usize) {
         assert!(num_channels <= self.num_channels_allocated);
-        self.num_channels = num_channels;
-    }
-
-    #[nonblocking]
-    fn set_num_frames(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
+        self.num_channels = num_channels;
         self.num_frames = num_frames;
     }
 
@@ -347,9 +412,10 @@ mod tests {
     }
 
     #[test]
-    fn test_frames() {
-        let mut data = vec![0.0; 10];
-        let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
+    fn test_frame() {
+        let mut data = vec![0.0; 12];
+        let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 6);
+        block.resize(2, 5);
 
         for i in 0..block.num_frames() {
             let frame = block.frame(i).copied().collect::<Vec<_>>();
@@ -374,6 +440,47 @@ mod tests {
         assert_eq!(channel, vec![30.0, 31.0]);
         let channel = block.frame(4).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![40.0, 41.0]);
+    }
+
+    #[test]
+    fn test_frames() {
+        let mut data = vec![0.0; 12];
+        let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 6);
+        block.resize(2, 5);
+
+        let num_frames = block.num_frames;
+        let mut frames_iter = block.frames();
+        for _ in 0..num_frames {
+            let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+            assert_eq!(frame, vec![0.0, 0.0]);
+        }
+        assert!(frames_iter.next().is_none());
+        drop(frames_iter);
+
+        let mut frames_iter = block.frames_mut();
+        for i in 0..num_frames {
+            let add = i as f32 * 10.0;
+            frames_iter
+                .next()
+                .unwrap()
+                .enumerate()
+                .for_each(|(i, v)| *v = i as f32 + add);
+        }
+        assert!(frames_iter.next().is_none());
+        drop(frames_iter);
+
+        let mut frames_iter = block.frames();
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![0.0, 1.0]);
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![10.0, 11.0]);
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![20.0, 21.0]);
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![30.0, 31.0]);
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![40.0, 41.0]);
+        assert!(frames_iter.next().is_none());
     }
 
     #[test]

@@ -2,9 +2,7 @@ use core::{marker::PhantomData, ptr::NonNull};
 
 use rtsan_standalone::nonblocking;
 
-use crate::{AudioBlock, Sample};
-
-use super::iterators::InterleavedChannelIter;
+use crate::{AudioBlock, Sample, iter::InterleavedDataIter};
 
 #[derive(Clone)]
 pub struct AudioBlockInterleavedView<'a, S: Sample> {
@@ -101,6 +99,16 @@ impl<'a, S: Sample> AudioBlockInterleavedView<'a, S> {
             num_frames_allocated,
         }
     }
+
+    #[nonblocking]
+    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+        let num_channels = self.num_channels as usize;
+        let num_channels_allocated = self.num_channels_allocated as usize;
+        self.data
+            .chunks(num_channels_allocated)
+            .take(self.num_frames)
+            .map(move |channel_chunk| channel_chunk.iter().take(num_channels))
+    }
 }
 
 impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedView<'_, S> {
@@ -149,11 +157,9 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedView<'_, S> {
     fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
-        // Stride is the number of channels the data was actually allocated with
         let stride = self.num_channels_allocated as usize;
         let data_ptr = self.data.as_ptr();
 
-        // Iterate through channel indices (0, 1, 2, ...)
         (0..num_channels).map(move |channel_idx| {
             // Safety check: Ensure data isn't empty if we calculate a start_ptr.
             // If num_frames or num_channels is 0, remaining will be 0, iterator is safe.
@@ -167,7 +173,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedView<'_, S> {
                 unsafe { data_ptr.add(channel_idx) }
             };
 
-            InterleavedChannelIter::<'_, S> {
+            InterleavedDataIter::<'_, S> {
                 // Note: '_ lifetime from &self borrow
                 // Safety: Pointer is either dangling (if empty) or valid start pointer.
                 // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
@@ -256,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn test_frames() {
+    fn test_frame() {
         let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let block = AudioBlockInterleavedView::<f32>::from_slice(&data, 2, 5);
 
@@ -269,6 +275,24 @@ mod tests {
         let channel = block.frame(3).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![6.0, 7.0]);
         let channel = block.frame(4).copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![8.0, 9.0]);
+    }
+
+    #[test]
+    fn test_frames() {
+        let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = AudioBlockInterleavedView::<f32>::from_slice(&data, 2, 5);
+
+        let mut frames_iter = block.frames();
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0]);
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![2.0, 3.0]);
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![4.0, 5.0]);
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![6.0, 7.0]);
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![8.0, 9.0]);
     }
 

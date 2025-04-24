@@ -1,4 +1,3 @@
-mod iterators;
 #[cfg(any(feature = "std", feature = "alloc"))]
 mod owned;
 mod view;

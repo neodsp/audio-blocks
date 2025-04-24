@@ -131,14 +131,10 @@ impl<S: Sample> AudioBlock<S> for Stacked<S> {
 
 impl<S: Sample> AudioBlockMut<S> for Stacked<S> {
     #[nonblocking]
-    fn set_num_channels(&mut self, num_channels: u16) {
+    fn resize(&mut self, num_channels: u16, num_frames: usize) {
         assert!(num_channels <= self.num_channels_allocated);
-        self.num_channels = num_channels;
-    }
-
-    #[nonblocking]
-    fn set_num_frames(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
+        self.num_channels = num_channels;
         self.num_frames = num_frames;
     }
 
@@ -395,10 +391,8 @@ mod tests {
             assert_eq!(block.frame_mut(i).count(), 3);
         }
 
-        block.set_num_channels(3);
-        block.set_num_channels(2);
-        block.set_num_frames(10);
-        block.set_num_frames(5);
+        block.resize(3, 10);
+        block.resize(2, 5);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 5);
@@ -420,7 +414,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
         let mut block = Stacked::<f32>::empty(2, 10);
-        block.set_num_channels(3);
+        block.resize(3, 10);
     }
 
     #[test]
@@ -428,7 +422,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
         let mut block = Stacked::<f32>::empty(2, 10);
-        block.set_num_frames(11);
+        block.resize(2, 11);
     }
 
     #[test]
@@ -436,7 +430,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_channel() {
         let mut block = Stacked::<f32>::empty(2, 10);
-        block.set_num_channels(1);
+        block.resize(1, 10);
         let _ = block.channel(1);
     }
 
@@ -445,7 +439,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_frame() {
         let mut block = Stacked::<f32>::empty(2, 10);
-        block.set_num_frames(5);
+        block.resize(2, 5);
         let _ = block.frame(5);
     }
 
@@ -454,7 +448,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
         let mut block = Stacked::<f32>::empty(2, 10);
-        block.set_num_channels(1);
+        block.resize(1, 10);
         let _ = block.channel_mut(1);
     }
 
@@ -463,7 +457,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_frame_mut() {
         let mut block = Stacked::<f32>::empty(2, 10);
-        block.set_num_frames(5);
+        block.resize(2, 5);
         let _ = block.frame_mut(5);
     }
 
