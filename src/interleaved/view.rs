@@ -99,16 +99,6 @@ impl<'a, S: Sample> AudioBlockInterleavedView<'a, S> {
             num_frames_allocated,
         }
     }
-
-    #[nonblocking]
-    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
-        let num_channels = self.num_channels as usize;
-        let num_channels_allocated = self.num_channels_allocated as usize;
-        self.data
-            .chunks(num_channels_allocated)
-            .take(self.num_frames)
-            .map(move |channel_chunk| channel_chunk.iter().take(num_channels))
-    }
 }
 
 impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedView<'_, S> {
@@ -192,6 +182,16 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedView<'_, S> {
             .iter()
             .skip(frame * self.num_channels_allocated as usize)
             .take(self.num_channels as usize)
+    }
+
+    #[nonblocking]
+    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+        let num_channels = self.num_channels as usize;
+        let num_channels_allocated = self.num_channels_allocated as usize;
+        self.data
+            .chunks(num_channels_allocated)
+            .take(self.num_frames)
+            .map(move |channel_chunk| channel_chunk.iter().take(num_channels))
     }
 
     #[nonblocking]
@@ -294,6 +294,7 @@ mod tests {
         assert_eq!(channel, vec![6.0, 7.0]);
         let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![8.0, 9.0]);
+        assert!(frames_iter.next().is_none());
     }
 
     #[test]

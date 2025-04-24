@@ -96,38 +96,6 @@ impl<'a, S: Sample> SequentialView<'a, S> {
             num_frames_allocated,
         }
     }
-
-    #[nonblocking]
-    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
-        let num_channels = self.num_channels as usize;
-        let num_frames = self.num_frames;
-        let stride = self.num_frames_allocated;
-        let data_ptr = self.data.as_ptr();
-
-        (0..num_frames).map(move |frame_idx| {
-            // Safety check: Ensure data isn't empty if we calculate a start_ptr.
-            // If num_frames or num_channels is 0, remaining will be 0, iterator is safe.
-            // If data is empty, ptr is dangling, but add(0) is okay. add(>0) is UB.
-            // But if data is empty, num_channels or num_frames must be 0.
-            let start_ptr = if self.data.is_empty() {
-                NonNull::dangling().as_ptr() // Use dangling pointer if slice is empty
-            } else {
-                // Safety: channel_idx is < num_channels <= num_channels_allocated.
-                // Adding it to a valid data_ptr is safe within slice bounds.
-                unsafe { data_ptr.add(frame_idx) }
-            };
-
-            InterleavedDataIter::<'_, S> {
-                // Note: '_ lifetime from &self borrow
-                // Safety: Pointer is either dangling (if empty) or valid start pointer.
-                // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
-                ptr: NonNull::new(start_ptr as *mut S).unwrap_or(NonNull::dangling()), // Use dangling on null/empty
-                stride,
-                remaining: num_channels, // If 0, iterator yields None immediately
-                _marker: PhantomData,
-            }
-        })
-    }
 }
 
 impl<S: Sample> AudioBlock<S> for SequentialView<'_, S> {
@@ -190,6 +158,38 @@ impl<S: Sample> AudioBlock<S> for SequentialView<'_, S> {
             .skip(frame)
             .step_by(self.num_frames_allocated)
             .take(self.num_channels as usize)
+    }
+
+    #[nonblocking]
+    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+        let num_channels = self.num_channels as usize;
+        let num_frames = self.num_frames;
+        let stride = self.num_frames_allocated;
+        let data_ptr = self.data.as_ptr();
+
+        (0..num_frames).map(move |frame_idx| {
+            // Safety check: Ensure data isn't empty if we calculate a start_ptr.
+            // If num_frames or num_channels is 0, remaining will be 0, iterator is safe.
+            // If data is empty, ptr is dangling, but add(0) is okay. add(>0) is UB.
+            // But if data is empty, num_channels or num_frames must be 0.
+            let start_ptr = if self.data.is_empty() {
+                NonNull::dangling().as_ptr() // Use dangling pointer if slice is empty
+            } else {
+                // Safety: channel_idx is < num_channels <= num_channels_allocated.
+                // Adding it to a valid data_ptr is safe within slice bounds.
+                unsafe { data_ptr.add(frame_idx) }
+            };
+
+            InterleavedDataIter::<'_, S> {
+                // Note: '_ lifetime from &self borrow
+                // Safety: Pointer is either dangling (if empty) or valid start pointer.
+                // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
+                ptr: NonNull::new(start_ptr as *mut S).unwrap_or(NonNull::dangling()), // Use dangling on null/empty
+                stride,
+                remaining: num_channels, // If 0, iterator yields None immediately
+                _marker: PhantomData,
+            }
+        })
     }
 
     #[nonblocking]
@@ -260,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn test_frames() {
+    fn test_frame() {
         let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let block = SequentialView::<f32>::from_slice(&data, 2, 5);
 
@@ -274,6 +274,25 @@ mod tests {
         assert_eq!(channel, vec![3.0, 8.0]);
         let channel = block.frame(4).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![4.0, 9.0]);
+    }
+
+    #[test]
+    fn test_frames() {
+        let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = SequentialView::<f32>::from_slice(&data, 2, 5);
+
+        let mut frames_iter = block.frames();
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 5.0]);
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![1.0, 6.0]);
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![2.0, 7.0]);
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![3.0, 8.0]);
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![4.0, 9.0]);
+        assert!(frames_iter.next().is_none());
     }
 
     #[test]

@@ -39,6 +39,7 @@ pub trait AudioBlock<S: Sample> {
     fn channel(&self, channel: u16) -> impl Iterator<Item = &S>;
     fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S>;
+    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
     fn view(&self) -> impl AudioBlock<S>;
     fn layout(&self) -> BlockLayout;
     /// In case of Layout::Stacked, this will return just one channel.
@@ -54,6 +55,7 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
     fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
     fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
+    fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
     fn view_mut(&mut self) -> impl AudioBlockMut<S>;
     /// In case of Layout::Stacked, this will return just one channel.
     /// Otherwise you will get all data in interleaved or planar layout.

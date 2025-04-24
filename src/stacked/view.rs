@@ -118,6 +118,28 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
     }
 
     #[nonblocking]
+    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &'_ S> + '_> + '_ {
+        let num_channels = self.num_channels as usize;
+        let num_frames = self.num_frames;
+        let data_slice: &[V] = self.data;
+
+        (0..num_frames).map(move |frame_idx| {
+            // For each frame index, create an iterator over the relevant channel views.
+            data_slice[..num_channels]
+                .iter() // Yields `&'a V`
+                .map(move |channel_view: &V| {
+                    // Get the immutable slice `&[S]` from the view using AsRef.
+                    let channel_slice: &[S] = channel_view.as_ref();
+                    // Access the sample immutably using safe indexing.
+                    // Assumes frame_idx is valid based on outer loop and struct invariants.
+                    &channel_slice[frame_idx]
+                    // For max performance (if bounds are absolutely guaranteed):
+                    // unsafe { channel_slice.get_unchecked(frame_idx) }
+                })
+        })
+    }
+
+    #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
         StackedView::<S, V>::from_slices_limited(self.data, self.num_channels, self.num_frames)
     }
@@ -229,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn test_frames() {
+    fn test_frame() {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
         let data = vec![ch1.as_slice(), ch2.as_slice()];
@@ -245,6 +267,27 @@ mod tests {
         assert_eq!(channel, vec![6.0, 7.0]);
         let channel = block.frame(4).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![8.0, 9.0]);
+    }
+
+    #[test]
+    fn test_frames() {
+        let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
+        let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
+        let data = vec![ch1.as_slice(), ch2.as_slice()];
+        let block = StackedView::from_slices(&data);
+
+        let mut frames_iter = block.frames();
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![0.0, 1.0]);
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![2.0, 3.0]);
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![4.0, 5.0]);
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![6.0, 7.0]);
+        let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(channel, vec![8.0, 9.0]);
+        assert!(frames_iter.next().is_none());
     }
 
     #[test]

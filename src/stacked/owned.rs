@@ -112,6 +112,33 @@ impl<S: Sample> AudioBlock<S> for Stacked<S> {
     }
 
     #[nonblocking]
+    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+        let num_channels = self.num_channels as usize;
+        let num_frames = self.num_frames;
+        // Get an immutable slice of the channel boxes: `&[Box<[S]>]`
+        let data_slice: &[Box<[S]>] = &self.data;
+
+        // Assumes the struct guarantees that for all `chan` in `0..num_channels`,
+        // `self.data[chan].len() >= num_frames`.
+
+        (0..num_frames).map(move |frame_idx| {
+            // For each frame index, create an iterator over the relevant channel boxes.
+            // `data_slice` is captured immutably, which is allowed by nested closures.
+            data_slice[..num_channels]
+                .iter() // Yields `&'a Box<[S]>`
+                .map(move |channel_slice_box: &Box<[S]>| {
+                    // Get the immutable slice `&[S]` from the box.
+                    let channel_slice: &[S] = &**channel_slice_box;
+                    // Access the sample immutably using safe indexing.
+                    // Assumes frame_idx is valid based on outer loop and struct invariants.
+                    &channel_slice[frame_idx]
+                    // For max performance (if bounds are absolutely guaranteed):
+                    // unsafe { channel_slice.get_unchecked(frame_idx) }
+                })
+        })
+    }
+
+    #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
         StackedView::from_slices_limited(&self.data, self.num_channels, self.num_frames)
     }
@@ -176,6 +203,31 @@ impl<S: Sample> AudioBlockMut<S> for Stacked<S> {
             .iter_mut()
             .take(self.num_channels as usize)
             .map(move |channel_data| unsafe { channel_data.get_unchecked_mut(frame) })
+    }
+
+    #[nonblocking]
+    fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+        let num_channels = self.num_channels as usize;
+        let num_frames = self.num_frames;
+        let data_slice: &mut [Box<[S]>] = &mut self.data;
+        let data_ptr: *mut [Box<[S]>] = data_slice;
+
+        (0..num_frames).map(move |frame_idx| {
+            // Re-borrow mutably inside the closure via the raw pointer.
+            // Safety: Safe because the outer iterator executes this sequentially per frame.
+            let current_channel_boxes: &mut [Box<[S]>] = unsafe { &mut *data_ptr };
+
+            // Iterate over the relevant channel boxes up to num_channels
+            current_channel_boxes[..num_channels]
+                .iter_mut() // Yields `&'a mut Box<[S]>`
+                .map(move |channel_slice_box: &mut Box<[S]>| {
+                    // Get the mutable slice `&mut [S]` from the box.
+                    let channel_slice: &mut [S] = &mut **channel_slice_box;
+                    // Access the sample for the current channel at the current frame index.
+                    // Safety: Relies on `frame_idx < channel_slice.len()`.
+                    unsafe { channel_slice.get_unchecked_mut(frame_idx) }
+                })
+        })
     }
 
     #[nonblocking]
@@ -279,7 +331,7 @@ mod tests {
     }
 
     #[test]
-    fn test_frames() {
+    fn test_frame() {
         let mut block = Stacked::<f32>::empty(2, 5);
 
         for i in 0..block.num_frames() {
@@ -305,6 +357,46 @@ mod tests {
         assert_eq!(channel, vec![30.0, 31.0]);
         let channel = block.frame(4).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![40.0, 41.0]);
+    }
+
+    #[test]
+    fn test_frames() {
+        let mut block = Stacked::<f32>::empty(3, 6);
+        block.resize(2, 5);
+
+        let num_frames = block.num_frames;
+        let mut frames_iter = block.frames();
+        for _ in 0..num_frames {
+            let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+            assert_eq!(frame, vec![0.0, 0.0]);
+        }
+        assert!(frames_iter.next().is_none());
+        drop(frames_iter);
+
+        let mut frames_iter = block.frames_mut();
+        for i in 0..num_frames {
+            let add = i as f32 * 10.0;
+            frames_iter
+                .next()
+                .unwrap()
+                .enumerate()
+                .for_each(|(i, v)| *v = i as f32 + add);
+        }
+        assert!(frames_iter.next().is_none());
+        drop(frames_iter);
+
+        let mut frames_iter = block.frames();
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![0.0, 1.0]);
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![10.0, 11.0]);
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![20.0, 21.0]);
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![30.0, 31.0]);
+        let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
+        assert_eq!(frame, vec![40.0, 41.0]);
+        assert!(frames_iter.next().is_none());
     }
 
     #[test]

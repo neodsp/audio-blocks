@@ -52,6 +52,7 @@ fn sample(&self, channel: u16, frame: usize) -> S;
 fn channel(&self, channel: u16) -> impl Iterator<Item = &S>;
 fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 fn frame(&self, frame: usize) -> impl Iterator<Item = &S>;
+fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 fn view(&self) -> impl AudioBlock<S>;
 fn layout(&self) -> BlockLayout;
 fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
@@ -66,6 +67,7 @@ fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S;
 fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
 fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
+fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 fn view_mut(&mut self) -> impl AudioBlockMut<S>;
 fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
 ```

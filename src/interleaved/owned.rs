@@ -46,26 +46,6 @@ impl<S: Sample> Interleaved<S> {
             num_frames_allocated: block.num_frames(),
         }
     }
-
-    #[nonblocking]
-    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
-        let num_channels = self.num_channels as usize;
-        let num_channels_allocated = self.num_channels_allocated as usize;
-        self.data
-            .chunks(num_channels_allocated)
-            .take(self.num_frames)
-            .map(move |channel_chunk| channel_chunk.iter().take(num_channels))
-    }
-
-    #[nonblocking]
-    fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
-        let num_channels = self.num_channels as usize;
-        let num_channels_allocated = self.num_channels_allocated as usize;
-        self.data
-            .chunks_mut(num_channels_allocated)
-            .take(self.num_frames)
-            .map(move |channel_chunk| channel_chunk.iter_mut().take(num_channels))
-    }
 }
 
 impl<S: Sample> AudioBlock<S> for Interleaved<S> {
@@ -149,6 +129,16 @@ impl<S: Sample> AudioBlock<S> for Interleaved<S> {
             .iter()
             .skip(frame * self.num_channels_allocated as usize)
             .take(self.num_channels as usize)
+    }
+
+    #[nonblocking]
+    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+        let num_channels = self.num_channels as usize;
+        let num_channels_allocated = self.num_channels_allocated as usize;
+        self.data
+            .chunks(num_channels_allocated)
+            .take(self.num_frames)
+            .map(move |channel_chunk| channel_chunk.iter().take(num_channels))
     }
 
     #[nonblocking]
@@ -239,6 +229,16 @@ impl<S: Sample> AudioBlockMut<S> for Interleaved<S> {
             .iter_mut()
             .skip(frame * self.num_channels_allocated as usize)
             .take(self.num_channels as usize)
+    }
+
+    #[nonblocking]
+    fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+        let num_channels = self.num_channels as usize;
+        let num_channels_allocated = self.num_channels_allocated as usize;
+        self.data
+            .chunks_mut(num_channels_allocated)
+            .take(self.num_frames)
+            .map(move |channel_chunk| channel_chunk.iter_mut().take(num_channels))
     }
 
     #[nonblocking]
