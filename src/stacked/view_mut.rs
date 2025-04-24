@@ -292,12 +292,11 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
 
     #[inline]
     pub fn data_slices_mut(&mut self) -> &mut [&'a mut [S]] {
-        let initialized_part: &[MaybeUninit<&'a mut [S]>] =
-            &self.data[..self.num_channels as usize];
-        // SAFETY: See previous explanation for this conversion
+        let initialized_part: &mut [MaybeUninit<&'a mut [S]>] =
+            &mut self.data[..self.num_channels as usize];
         unsafe {
             core::slice::from_raw_parts_mut(
-                initialized_part.as_ptr() as *mut &'a mut [S],
+                initialized_part.as_mut_ptr() as *mut &'a mut [S],
                 self.num_channels as usize,
             )
         }
