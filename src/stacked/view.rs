@@ -1,3 +1,4 @@
+use core::mem::MaybeUninit;
 use rtsan_standalone::nonblocking;
 use std::marker::PhantomData;
 
@@ -158,7 +159,7 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
 }
 
 pub struct StackedPtrAdapter<'a, S: Sample, const MAX_CHANNELS: usize> {
-    data: [&'a [S]; MAX_CHANNELS],
+    data: [MaybeUninit<&'a [S]>; MAX_CHANNELS],
     num_channels: u16,
 }
 
@@ -173,30 +174,43 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHAN
     /// - The pointed memory must remain valid for the lifetime of the returned adapter
     /// - The data must not be modified through other pointers for the lifetime of the returned adapter
     #[nonblocking]
+    #[nonblocking]
     pub unsafe fn new(ptr: *const *const S, num_channels: u16, num_frames: usize) -> Self {
-        assert!(num_channels as usize <= MAX_CHANNELS);
+        assert!(
+            num_channels as usize <= MAX_CHANNELS,
+            "num_channels exceeds MAX_CHANNELS"
+        );
 
-        let mut data: [std::mem::MaybeUninit<&[S]>; MAX_CHANNELS] =
-            unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+        let mut data: [core::mem::MaybeUninit<&'a [S]>; MAX_CHANNELS] =
+            unsafe { core::mem::MaybeUninit::uninit().assume_init() }; // Or other safe initialization
 
+        // SAFETY: Caller guarantees `ptr` is valid for `num_channels` elements.
         let ptr_slice: &[*const S] =
-            unsafe { std::slice::from_raw_parts(ptr, num_channels as usize) };
+            unsafe { core::slice::from_raw_parts(ptr, num_channels as usize) };
 
         for ch in 0..num_channels as usize {
-            data[ch] = std::mem::MaybeUninit::new(unsafe {
-                std::slice::from_raw_parts(ptr_slice[ch], num_frames)
-            });
+            // SAFETY: See previous explanation
+            data[ch].write(unsafe { core::slice::from_raw_parts(ptr_slice[ch], num_frames) });
         }
 
-        Self {
-            data: unsafe { std::mem::transmute_copy(&data) },
-            num_channels,
+        Self { data, num_channels }
+    }
+
+    #[inline]
+    pub fn data_slices(&self) -> &[&'a [S]] {
+        let initialized_part: &[MaybeUninit<&'a [S]>] = &self.data[..self.num_channels as usize];
+        // SAFETY: See previous explanation for this conversion
+        unsafe {
+            core::slice::from_raw_parts(
+                initialized_part.as_ptr() as *const &'a [S],
+                self.num_channels as usize,
+            )
         }
     }
 
     #[nonblocking]
     pub fn stacked_view(&self) -> StackedView<'a, S, &[S]> {
-        StackedView::from_slices(&self.data[..self.num_channels as usize])
+        StackedView::from_slices(self.data_slices())
     }
 }
 

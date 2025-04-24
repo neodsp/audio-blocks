@@ -15,21 +15,22 @@ use std::{boxed::Box, vec, vec::Vec};
 
 #[derive(Clone)]
 pub struct Interleaved<S: Sample> {
-    pub(super) data: Box<[S]>,
-    pub(super) num_channels: u16,
-    pub(super) num_frames: usize,
-    pub(super) num_channels_allocated: u16,
-    pub(super) num_frames_allocated: usize,
+    data: Box<[S]>,
+    num_channels: u16,
+    num_frames: usize,
+    num_channels_allocated: u16,
+    num_frames_allocated: usize,
 }
 
 impl<S: Sample> Interleaved<S> {
-    pub fn empty(num_channels: u16, num_frames: usize) -> Self {
+    pub fn zeros(num_channels: u16, num_frames: usize) -> Self {
+        let total_samples = (num_channels as usize).saturating_mul(num_frames);
         Self {
-            data: vec![S::zero(); num_channels as usize * num_frames].into_boxed_slice(),
+            data: vec![S::zero(); total_samples].into_boxed_slice(),
             num_channels,
             num_frames,
-            num_channels_allocated: num_channels,
-            num_frames_allocated: num_frames,
+            num_channels_allocated: num_channels, // Assuming allocation matches exactly
+            num_frames_allocated: num_frames,     // Assuming allocation matches exactly
         }
     }
 
@@ -95,28 +96,34 @@ impl<S: Sample> AudioBlock<S> for Interleaved<S> {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let stride = self.num_channels_allocated as usize;
+
+        // If the data slice is empty (num_channels or num_frames was 0),
+        // the effective number of frames any iterator should yield is 0.
+        let effective_num_frames = if self.data.is_empty() { 0 } else { num_frames };
+
+        // Get base pointer. If data is empty, it's dangling, but this is fine
+        // because effective_num_frames will be 0, preventing its use in next().
         let data_ptr = self.data.as_ptr();
 
         (0..num_channels).map(move |channel_idx| {
-            // Safety check: Ensure data isn't empty if we calculate a start_ptr.
-            // If num_frames or num_channels is 0, remaining will be 0, iterator is safe.
-            // If data is empty, ptr is dangling, but add(0) is okay. add(>0) is UB.
-            // But if data is empty, num_channels or num_frames must be 0.
-            let start_ptr = if self.data.is_empty() {
-                NonNull::dangling().as_ptr() // Use dangling pointer if slice is empty
-            } else {
-                // Safety: channel_idx is < num_channels <= num_channels_allocated.
-                // Adding it to a valid data_ptr is safe within slice bounds.
-                unsafe { data_ptr.add(channel_idx) }
-            };
+            // Calculate start pointer for the channel.
+            // Safety: If data is not empty, data_ptr is valid and channel_idx is
+            // within bounds [0, num_channels), which is <= num_channels_allocated.
+            // Pointer arithmetic is contained within the allocation.
+            // If data is empty, data_ptr is dangling, but add(0) is okay.
+            // If channel_idx > 0 and data is empty, this relies on num_channels being 0
+            // (so this closure doesn't run) or effective_num_frames being 0
+            // (so the resulting iterator is a no-op).
+            // We rely on effective_num_frames == 0 when data is empty.
+            let start_ptr = unsafe { data_ptr.add(channel_idx) };
 
             InterleavedDataIter::<'_, S> {
-                // Note: '_ lifetime from &self borrow
-                // Safety: Pointer is either dangling (if empty) or valid start pointer.
-                // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
-                ptr: NonNull::new(start_ptr as *mut S).unwrap_or(NonNull::dangling()), // Use dangling on null/empty
+                // Safety: Cast to *mut S for NonNull::new.
+                // If effective_num_frames is 0, ptr can be dangling (NonNull::dangling()).
+                // If effective_num_frames > 0, data is not empty, start_ptr is valid and non-null.
+                ptr: NonNull::new(start_ptr as *mut S).unwrap_or(NonNull::dangling()),
                 stride,
-                remaining: num_frames, // If 0, iterator yields None immediately
+                remaining: effective_num_frames, // Use the safe frame count
                 _marker: PhantomData,
             }
         })
@@ -198,25 +205,23 @@ impl<S: Sample> AudioBlockMut<S> for Interleaved<S> {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let stride = self.num_channels_allocated as usize;
-        let data_ptr = self.data.as_mut_ptr(); // Mutable pointer
+
+        // Ensure iterator is empty if underlying data is empty.
+        let effective_num_frames = if self.data.is_empty() { 0 } else { num_frames };
+
+        // Get base mutable pointer.
+        let data_ptr = self.data.as_mut_ptr();
 
         (0..num_channels).map(move |channel_idx| {
-            // Safety check: Ensure data isn't empty if we calculate a start_ptr.
-            // If num_frames or num_channels is 0, remaining will be 0, iterator is safe.
-            // If data is empty, ptr is dangling, but add(0) is okay. add(>0) is UB.
-            // But if data is empty, num_channels or num_frames must be 0.
-            let start_ptr = if self.data.is_empty() {
-                NonNull::dangling().as_ptr() // Use dangling pointer if slice is empty
-            } else {
-                // Safety: channel_idx is < num_channels <= num_channels_allocated.
-                // Adding it to a valid data_ptr is safe within slice bounds.
-                unsafe { data_ptr.add(channel_idx) }
-            };
+            // Calculate start pointer.
+            // Safety: Same reasoning as the immutable version applies.
+            let start_ptr = unsafe { data_ptr.add(channel_idx) };
 
             InterleavedDataIterMut::<'_, S> {
+                // Safety: Same reasoning as the immutable version applies.
                 ptr: NonNull::new(start_ptr).unwrap_or(NonNull::dangling()),
                 stride,
-                remaining: num_frames,
+                remaining: effective_num_frames, // Use the safe frame count
                 _marker: PhantomData,
             }
         })
@@ -268,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_samples() {
-        let mut block = Interleaved::<f32>::empty(2, 5);
+        let mut block = Interleaved::<f32>::zeros(2, 5);
 
         let num_frames = block.num_frames();
         for ch in 0..block.num_channels() {
@@ -291,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_channel() {
-        let mut block = Interleaved::<f32>::empty(2, 5);
+        let mut block = Interleaved::<f32>::zeros(2, 5);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -315,7 +320,7 @@ mod tests {
 
     #[test]
     fn test_channels() {
-        let mut block = Interleaved::<f32>::empty(2, 5);
+        let mut block = Interleaved::<f32>::zeros(2, 5);
 
         let mut channels_iter = block.channels();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -350,7 +355,7 @@ mod tests {
 
     #[test]
     fn test_frame() {
-        let mut block = Interleaved::<f32>::empty(2, 5);
+        let mut block = Interleaved::<f32>::zeros(2, 5);
 
         for i in 0..block.num_frames() {
             let frame = block.frame(i).copied().collect::<Vec<_>>();
@@ -379,7 +384,7 @@ mod tests {
 
     #[test]
     fn test_frames() {
-        let mut block = Interleaved::<f32>::empty(2, 5);
+        let mut block = Interleaved::<f32>::zeros(2, 5);
         let num_frames = block.num_frames;
         let mut frames_iter = block.frames();
         for _ in 0..num_frames {
@@ -461,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_view_mut() {
-        let mut block = Interleaved::<f32>::empty(2, 5);
+        let mut block = Interleaved::<f32>::zeros(2, 5);
         {
             let mut view = block.view_mut();
             view.channel_mut(0)
@@ -504,7 +509,7 @@ mod tests {
 
     #[test]
     fn test_resize() {
-        let mut block = Interleaved::<f32>::empty(3, 10);
+        let mut block = Interleaved::<f32>::zeros(3, 10);
         assert_eq!(block.num_channels(), 3);
         assert_eq!(block.num_frames(), 10);
         assert_eq!(block.num_channels_allocated(), 3);
@@ -541,7 +546,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
-        let mut block = Interleaved::<f32>::empty(2, 10);
+        let mut block = Interleaved::<f32>::zeros(2, 10);
         block.resize(3, 10);
     }
 
@@ -549,7 +554,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
-        let mut block = Interleaved::<f32>::empty(2, 10);
+        let mut block = Interleaved::<f32>::zeros(2, 10);
         block.resize(2, 11);
     }
 
@@ -557,7 +562,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_channel() {
-        let mut block = Interleaved::<f32>::empty(2, 10);
+        let mut block = Interleaved::<f32>::zeros(2, 10);
         block.resize(1, 10);
         let _ = block.channel(1);
     }
@@ -566,7 +571,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_frame() {
-        let mut block = Interleaved::<f32>::empty(2, 10);
+        let mut block = Interleaved::<f32>::zeros(2, 10);
         block.resize(2, 5);
         let _ = block.frame(5);
     }
@@ -575,7 +580,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
-        let mut block = Interleaved::<f32>::empty(2, 10);
+        let mut block = Interleaved::<f32>::zeros(2, 10);
         block.resize(1, 10);
         let _ = block.channel_mut(1);
     }
@@ -584,7 +589,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_frame_mut() {
-        let mut block = Interleaved::<f32>::empty(2, 10);
+        let mut block = Interleaved::<f32>::zeros(2, 10);
         block.resize(2, 5);
         let _ = block.frame_mut(5);
     }

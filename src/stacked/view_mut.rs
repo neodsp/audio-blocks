@@ -1,3 +1,4 @@
+use core::mem::MaybeUninit;
 use rtsan_standalone::nonblocking;
 use std::marker::PhantomData;
 
@@ -253,7 +254,7 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<
 }
 
 pub struct StackedPtrAdapterMut<'a, S: Sample, const MAX_CHANNELS: usize> {
-    data: [&'a mut [S]; MAX_CHANNELS],
+    data: [MaybeUninit<&'a mut [S]>; MAX_CHANNELS],
     num_channels: u16,
 }
 
@@ -268,35 +269,43 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
     /// - The pointed memory must remain valid for the lifetime of the returned adapter
     /// - The data must not be modified through other pointers for the lifetime of the returned adapter
     #[nonblocking]
-    pub unsafe fn new(ptr: *const *mut S, num_channels: u16, num_frames: usize) -> Self {
-        assert!(num_channels as usize <= MAX_CHANNELS);
+    pub unsafe fn new(ptr: *mut *mut S, num_channels: u16, num_frames: usize) -> Self {
+        assert!(
+            num_channels as usize <= MAX_CHANNELS,
+            "num_channels exceeds MAX_CHANNELS"
+        );
 
-        let mut data: [std::mem::MaybeUninit<&mut [S]>; MAX_CHANNELS] =
-            unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+        let mut data: [MaybeUninit<&'a mut [S]>; MAX_CHANNELS] =
+            unsafe { MaybeUninit::uninit().assume_init() }; // Or other safe initialization
 
+        // SAFETY: Caller guarantees `ptr` is valid for `num_channels` elements.
         let ptr_slice: &mut [*mut S] =
-            unsafe { std::slice::from_raw_parts_mut(ptr as *mut *mut S, num_channels as usize) };
+            unsafe { core::slice::from_raw_parts_mut(ptr, num_channels as usize) };
 
         for ch in 0..num_channels as usize {
-            data[ch] = std::mem::MaybeUninit::new(unsafe {
-                std::slice::from_raw_parts_mut(ptr_slice[ch], num_frames)
-            });
+            // SAFETY: See previous explanation
+            data[ch].write(unsafe { core::slice::from_raw_parts_mut(ptr_slice[ch], num_frames) });
         }
 
-        Self {
-            data: unsafe { std::mem::transmute_copy(&data) },
-            num_channels,
-        }
+        Self { data, num_channels }
     }
 
-    #[nonblocking]
-    pub fn stacked_view(&mut self) -> StackedView<'a, S, &mut [S]> {
-        StackedView::from_slices(&self.data[..self.num_channels as usize])
+    #[inline]
+    pub fn data_slices_mut(&mut self) -> &mut [&'a mut [S]] {
+        let initialized_part: &[MaybeUninit<&'a mut [S]>] =
+            &self.data[..self.num_channels as usize];
+        // SAFETY: See previous explanation for this conversion
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                initialized_part.as_ptr() as *mut &'a mut [S],
+                self.num_channels as usize,
+            )
+        }
     }
 
     #[nonblocking]
     pub fn stacked_view_mut(&mut self) -> StackedViewMut<'a, S, &mut [S]> {
-        StackedViewMut::from_slices(&mut self.data[..self.num_channels as usize])
+        StackedViewMut::from_slices(self.data_slices_mut())
     }
 }
 

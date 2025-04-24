@@ -6,11 +6,11 @@ use crate::{AudioBlock, Sample, iter::InterleavedDataIter};
 
 #[derive(Clone)]
 pub struct AudioBlockInterleavedView<'a, S: Sample> {
-    pub(super) data: &'a [S],
-    pub(super) num_channels: u16,
-    pub(super) num_frames: usize,
-    pub(super) num_channels_allocated: u16,
-    pub(super) num_frames_allocated: usize,
+    data: &'a [S],
+    num_channels: u16,
+    num_frames: usize,
+    num_channels_allocated: u16,
+    num_frames_allocated: usize,
 }
 
 impl<'a, S: Sample> AudioBlockInterleavedView<'a, S> {

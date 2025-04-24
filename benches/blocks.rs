@@ -2,19 +2,19 @@ use audio_blocks::{interleaved::Interleaved, ops::Ops, sequential::Sequential, s
 use criterion::{Criterion, criterion_group, criterion_main};
 
 pub fn bench_three_types(c: &mut Criterion, num_channels: u16, num_frames: usize) {
-    let mut block = Interleaved::<f32>::empty(num_channels, num_frames);
+    let mut block = Interleaved::<f32>::zeros(num_channels, num_frames);
     c.bench_function(
         &format!("for each interleaved {num_channels}ch {num_frames}fr"),
         |b| b.iter(|| block.for_each(|v| *v *= 2.0)),
     );
 
-    let mut block = Sequential::<f32>::empty(num_channels, num_frames);
+    let mut block = Sequential::<f32>::zeros(num_channels, num_frames);
     c.bench_function(
         &format!("for each sequential {num_channels}ch {num_frames}fr"),
         |b| b.iter(|| block.for_each(|v| *v *= 2.0)),
     );
 
-    let mut block = Stacked::<f32>::empty(num_channels, num_frames);
+    let mut block = Stacked::<f32>::zeros(num_channels, num_frames);
     c.bench_function(
         &format!("for each stacked {num_channels}ch {num_frames}fr"),
         |b| b.iter(|| block.for_each(|v| *v *= 2.0)),

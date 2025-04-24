@@ -19,11 +19,19 @@ impl<'a, S: Sample> Iterator for InterleavedDataIter<'a, S> {
             None
         } else {
             unsafe {
-                let current_ptr = self.ptr;
-                // Advance pointer for the *next* call. Use NonNull::new unchecked or expect
-                // as stride should not make a valid pointer null.
-                self.ptr = NonNull::new_unchecked(self.ptr.as_ptr().add(self.stride));
-                self.remaining -= 1;
+                let current_ptr = self.ptr; // Pointer to the item to return
+                self.remaining -= 1; // Decrement remaining count first
+
+                // Only calculate the *next* pointer if there are more items after this one
+                if self.remaining > 0 {
+                    // This add operation should now always result in a pointer
+                    // within the allocation or at most one-past-the-end,
+                    // because we know `current_ptr` isn't the absolute last pointer
+                    // this iterator instance will access.
+                    self.ptr = NonNull::new_unchecked(current_ptr.as_ptr().add(self.stride));
+                }
+                // else: No need to advance self.ptr, iterator is finished.
+
                 // Return reference to the *current* sample
                 Some(&*current_ptr.as_ptr())
             }
@@ -54,14 +62,23 @@ impl<'a, S: Sample> Iterator for InterleavedDataIterMut<'a, S> {
             None
         } else {
             unsafe {
-                let current_ptr = self.ptr;
-                self.ptr = NonNull::new_unchecked(self.ptr.as_ptr().add(self.stride));
-                self.remaining -= 1;
-                // Return mutable reference
-                Some(&mut *current_ptr.as_ptr())
+                // Get pointer to the current item. Need to cast to *mut for the return type.
+                let current_mut_ptr = self.ptr.as_ptr();
+                self.remaining -= 1; // Decrement remaining count first
+
+                // Only calculate the *next* pointer if there are more items after this one
+                if self.remaining > 0 {
+                    // Same safety reasoning as the immutable version.
+                    self.ptr = NonNull::new_unchecked(current_mut_ptr.add(self.stride));
+                }
+                // else: No need to advance self.ptr, iterator is finished.
+
+                // Return mutable reference to the *current* sample
+                Some(&mut *current_mut_ptr)
             }
         }
     }
+
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.remaining, Some(self.remaining))

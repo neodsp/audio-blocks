@@ -21,7 +21,7 @@ pub struct Stacked<S: Sample> {
 }
 
 impl<S: Sample> Stacked<S> {
-    pub fn empty(num_channels: u16, num_frames: usize) -> Self {
+    pub fn zeros(num_channels: u16, num_frames: usize) -> Self {
         Self {
             data: vec![vec![S::zero(); num_frames].into_boxed_slice(); num_channels as usize]
                 .into_boxed_slice(),
@@ -126,9 +126,9 @@ impl<S: Sample> AudioBlock<S> for Stacked<S> {
             // `data_slice` is captured immutably, which is allowed by nested closures.
             data_slice[..num_channels]
                 .iter() // Yields `&'a Box<[S]>`
-                .map(move |channel_slice_box: &Box<[S]>| {
+                .map(move |channel_slice_box| {
                     // Get the immutable slice `&[S]` from the box.
-                    let channel_slice: &[S] = &**channel_slice_box;
+                    let channel_slice: &[S] = channel_slice_box;
                     // Access the sample immutably using safe indexing.
                     // Assumes frame_idx is valid based on outer loop and struct invariants.
                     &channel_slice[frame_idx]
@@ -220,9 +220,9 @@ impl<S: Sample> AudioBlockMut<S> for Stacked<S> {
             // Iterate over the relevant channel boxes up to num_channels
             current_channel_boxes[..num_channels]
                 .iter_mut() // Yields `&'a mut Box<[S]>`
-                .map(move |channel_slice_box: &mut Box<[S]>| {
+                .map(move |channel_slice_box| {
                     // Get the mutable slice `&mut [S]` from the box.
-                    let channel_slice: &mut [S] = &mut **channel_slice_box;
+                    let channel_slice: &mut [S] = channel_slice_box;
                     // Access the sample for the current channel at the current frame index.
                     // Safety: Relies on `frame_idx < channel_slice.len()`.
                     unsafe { channel_slice.get_unchecked_mut(frame_idx) }
@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn test_samples() {
-        let mut block = Stacked::<f32>::empty(2, 5);
+        let mut block = Stacked::<f32>::zeros(2, 5);
 
         let num_frames = block.num_frames();
         for ch in 0..block.num_channels() {
@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_channel() {
-        let mut block = Stacked::<f32>::empty(2, 5);
+        let mut block = Stacked::<f32>::zeros(2, 5);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn test_channels() {
-        let mut block = Stacked::<f32>::empty(2, 5);
+        let mut block = Stacked::<f32>::zeros(2, 5);
 
         let mut channels_iter = block.channels();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -332,7 +332,7 @@ mod tests {
 
     #[test]
     fn test_frame() {
-        let mut block = Stacked::<f32>::empty(2, 5);
+        let mut block = Stacked::<f32>::zeros(2, 5);
 
         for i in 0..block.num_frames() {
             let frame = block.frame(i).copied().collect::<Vec<_>>();
@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     fn test_frames() {
-        let mut block = Stacked::<f32>::empty(3, 6);
+        let mut block = Stacked::<f32>::zeros(3, 6);
         block.resize(2, 5);
 
         let num_frames = block.num_frames;
@@ -445,7 +445,7 @@ mod tests {
 
     #[test]
     fn test_view_mut() {
-        let mut block = Stacked::<f32>::empty(2, 5);
+        let mut block = Stacked::<f32>::zeros(2, 5);
         {
             let mut view = block.view_mut();
             view.channel_mut(0)
@@ -468,7 +468,7 @@ mod tests {
 
     #[test]
     fn test_resize() {
-        let mut block = Stacked::<f32>::empty(3, 10);
+        let mut block = Stacked::<f32>::zeros(3, 10);
         assert_eq!(block.num_channels(), 3);
         assert_eq!(block.num_frames(), 10);
         assert_eq!(block.num_channels_allocated(), 3);
@@ -505,7 +505,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
-        let mut block = Stacked::<f32>::empty(2, 10);
+        let mut block = Stacked::<f32>::zeros(2, 10);
         block.resize(3, 10);
     }
 
@@ -513,7 +513,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
-        let mut block = Stacked::<f32>::empty(2, 10);
+        let mut block = Stacked::<f32>::zeros(2, 10);
         block.resize(2, 11);
     }
 
@@ -521,7 +521,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_channel() {
-        let mut block = Stacked::<f32>::empty(2, 10);
+        let mut block = Stacked::<f32>::zeros(2, 10);
         block.resize(1, 10);
         let _ = block.channel(1);
     }
@@ -530,7 +530,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_frame() {
-        let mut block = Stacked::<f32>::empty(2, 10);
+        let mut block = Stacked::<f32>::zeros(2, 10);
         block.resize(2, 5);
         let _ = block.frame(5);
     }
@@ -539,7 +539,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
-        let mut block = Stacked::<f32>::empty(2, 10);
+        let mut block = Stacked::<f32>::zeros(2, 10);
         block.resize(1, 10);
         let _ = block.channel_mut(1);
     }
@@ -548,7 +548,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_frame_mut() {
-        let mut block = Stacked::<f32>::empty(2, 10);
+        let mut block = Stacked::<f32>::zeros(2, 10);
         block.resize(2, 5);
         let _ = block.frame_mut(5);
     }
