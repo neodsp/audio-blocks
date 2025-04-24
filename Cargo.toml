@@ -4,7 +4,9 @@ name = "audio-blocks"
 version = "0.1.0"
 
 [dependencies]
-num-traits = { version = "0.2.19", default-features = false }
+num-traits = { version = "0.2.19", default-features = false, features = [
+    "libm",
+] }
 rtsan-standalone = "0.1.1"
 
 [dev-dependencies]
@@ -14,7 +16,6 @@ criterion = "0.5.1"
 default = ["std"]
 
 alloc = []
-libm = ["num-traits/libm"]
 rtsan = ["rtsan-standalone/enable"]
 std = ["num-traits/std"]
 
