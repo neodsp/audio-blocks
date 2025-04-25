@@ -2,7 +2,7 @@ use core::{marker::PhantomData, ptr::NonNull};
 
 use rtsan_standalone::nonblocking;
 
-use super::view::AudioBlockInterleavedView;
+use super::view::InterleavedView;
 use crate::{
     AudioBlock, AudioBlockMut, Sample,
     iter::{InterleavedDataIter, InterleavedDataIterMut},
@@ -201,7 +201,7 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        AudioBlockInterleavedView::from_slice_limited(
+        InterleavedView::from_slice_limited(
             self.data,
             self.num_channels,
             self.num_frames,

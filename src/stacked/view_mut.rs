@@ -17,17 +17,17 @@ pub struct StackedViewMut<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> {
 
 impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> StackedViewMut<'a, S, V> {
     #[nonblocking]
-    pub fn from_slices(data: &'a mut [V]) -> Self {
+    pub fn from_slice(data: &'a mut [V]) -> Self {
         let num_frames_available = if data.is_empty() {
             0
         } else {
             data[0].as_ref().len()
         };
-        Self::from_slices_limited(data, data.len() as u16, num_frames_available)
+        Self::from_slice_limited(data, data.len() as u16, num_frames_available)
     }
 
     #[nonblocking]
-    pub fn from_slices_limited(
+    pub fn from_slice_limited(
         data: &'a mut [V],
         num_channels_visible: u16,
         num_frames_visible: usize,
@@ -148,7 +148,7 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for StackedViewMut<'_,
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        StackedView::from_slices_limited(self.data, self.num_channels, self.num_frames)
+        StackedView::from_slice_limited(self.data, self.num_channels, self.num_frames)
     }
 
     #[nonblocking]
@@ -242,7 +242,7 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<
 
     #[nonblocking]
     fn view_mut(&mut self) -> impl AudioBlockMut<S> {
-        StackedViewMut::from_slices_limited(self.data, self.num_channels, self.num_frames)
+        StackedViewMut::from_slice_limited(self.data, self.num_channels, self.num_frames)
     }
 
     #[nonblocking]
@@ -269,7 +269,7 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
     /// - The pointed memory must remain valid for the lifetime of the returned adapter
     /// - The data must not be modified through other pointers for the lifetime of the returned adapter
     #[nonblocking]
-    pub unsafe fn new(ptr: *mut *mut S, num_channels: u16, num_frames: usize) -> Self {
+    pub unsafe fn from_ptr(ptrs: *mut *mut S, num_channels: u16, num_frames: usize) -> Self {
         assert!(
             num_channels as usize <= MAX_CHANNELS,
             "num_channels exceeds MAX_CHANNELS"
@@ -280,7 +280,7 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
 
         // SAFETY: Caller guarantees `ptr` is valid for `num_channels` elements.
         let ptr_slice: &mut [*mut S] =
-            unsafe { core::slice::from_raw_parts_mut(ptr, num_channels as usize) };
+            unsafe { core::slice::from_raw_parts_mut(ptrs, num_channels as usize) };
 
         for ch in 0..num_channels as usize {
             // SAFETY: See previous explanation
@@ -291,7 +291,7 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
     }
 
     #[inline]
-    pub fn data_slices_mut(&mut self) -> &mut [&'a mut [S]] {
+    pub fn data_slice_mut(&mut self) -> &mut [&'a mut [S]] {
         let initialized_part: &mut [MaybeUninit<&'a mut [S]>] =
             &mut self.data[..self.num_channels as usize];
         unsafe {
@@ -304,7 +304,7 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
 
     #[nonblocking]
     pub fn stacked_view_mut(&mut self) -> StackedViewMut<'a, S, &mut [S]> {
-        StackedViewMut::from_slices(self.data_slices_mut())
+        StackedViewMut::from_slice(self.data_slice_mut())
     }
 }
 
@@ -318,7 +318,7 @@ mod tests {
         let mut ch1 = vec![0.0; 5];
         let mut ch2 = vec![0.0; 5];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice()];
-        let mut block = StackedViewMut::from_slices(&mut data);
+        let mut block = StackedViewMut::from_slice(&mut data);
 
         let num_frames = block.num_frames();
         for ch in 0..block.num_channels() {
@@ -342,7 +342,7 @@ mod tests {
         let mut ch1 = vec![0.0; 5];
         let mut ch2 = vec![0.0; 5];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice()];
-        let mut block = StackedViewMut::from_slices(&mut data);
+        let mut block = StackedViewMut::from_slice(&mut data);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -369,7 +369,7 @@ mod tests {
         let mut ch1 = vec![0.0; 5];
         let mut ch2 = vec![0.0; 5];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice()];
-        let mut block = StackedViewMut::from_slices(&mut data);
+        let mut block = StackedViewMut::from_slice(&mut data);
 
         let mut channels_iter = block.channels();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -407,7 +407,7 @@ mod tests {
         let mut ch1 = vec![0.0; 5];
         let mut ch2 = vec![0.0; 5];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice()];
-        let mut block = StackedViewMut::from_slices(&mut data);
+        let mut block = StackedViewMut::from_slice(&mut data);
 
         for i in 0..block.num_frames() {
             let frame = block.frame(i).copied().collect::<Vec<_>>();
@@ -440,7 +440,7 @@ mod tests {
         let mut ch2 = vec![0.0; 10];
         let mut ch3 = vec![0.0; 10];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice(), ch3.as_mut_slice()];
-        let mut block = StackedViewMut::from_slices(&mut data);
+        let mut block = StackedViewMut::from_slice(&mut data);
         block.resize(2, 5);
 
         let num_frames = block.num_frames;
@@ -481,7 +481,7 @@ mod tests {
     #[test]
     fn test_from_vec() {
         let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = StackedViewMut::from_slices(&mut vec);
+        let block = StackedViewMut::from_slice(&mut vec);
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 5);
         assert_eq!(
@@ -502,7 +502,7 @@ mod tests {
     #[test]
     fn test_view() {
         let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = StackedViewMut::from_slices(&mut vec);
+        let block = StackedViewMut::from_slice(&mut vec);
         let view = block.view();
         assert_eq!(
             view.channel(0).copied().collect::<Vec<_>>(),
@@ -517,7 +517,7 @@ mod tests {
     #[test]
     fn test_view_mut() {
         let mut data = vec![vec![0.0; 5]; 2];
-        let mut block = StackedViewMut::from_slices(&mut data);
+        let mut block = StackedViewMut::from_slice(&mut data);
 
         {
             let mut view = block.view_mut();
@@ -543,7 +543,7 @@ mod tests {
     fn test_limited() {
         let mut data = vec![vec![0.0; 4]; 3];
 
-        let mut block = StackedViewMut::from_slices_limited(&mut data, 2, 3);
+        let mut block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -573,7 +573,8 @@ mod tests {
                 .collect();
             let ptr = ptr_vec.as_mut_ptr();
 
-            let mut adaptor = StackedPtrAdapterMut::<_, 16>::new(ptr, num_channels, num_frames);
+            let mut adaptor =
+                StackedPtrAdapterMut::<_, 16>::from_ptr(ptr, num_channels, num_frames);
 
             let stacked = adaptor.stacked_view_mut();
 
@@ -592,7 +593,7 @@ mod tests {
     #[test]
     fn test_raw_data() {
         let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let mut block = StackedViewMut::from_slices(&mut vec);
+        let mut block = StackedViewMut::from_slice(&mut vec);
 
         assert_eq!(block.layout(), crate::BlockLayout::Stacked);
 

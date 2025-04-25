@@ -1,9 +1,9 @@
-use super::{view::AudioBlockInterleavedView, view_mut::InterleavedViewMut};
+use super::{view::InterleavedView, view_mut::InterleavedViewMut};
 use crate::{
     AudioBlock, AudioBlockMut, Sample,
     iter::{InterleavedDataIter, InterleavedDataIterMut},
 };
-use rtsan_standalone::nonblocking;
+use rtsan_standalone::{blocking, nonblocking};
 
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::{boxed::Box, vec, vec::Vec};
@@ -23,10 +23,14 @@ pub struct Interleaved<S: Sample> {
 }
 
 impl<S: Sample> Interleaved<S> {
-    pub fn zeros(num_channels: u16, num_frames: usize) -> Self {
-        let total_samples = (num_channels as usize).saturating_mul(num_frames);
+    #[blocking]
+    pub fn new(num_channels: u16, num_frames: usize) -> Self {
+        let total_samples = (num_channels as usize)
+            .checked_mul(num_frames)
+            .expect("Multiplication overflow: num_channels * num_frames is too large");
+
         Self {
-            data: vec![S::zero(); total_samples].into_boxed_slice(),
+            data: vec![S::default(); total_samples].into_boxed_slice(),
             num_channels,
             num_frames,
             num_channels_allocated: num_channels, // Assuming allocation matches exactly
@@ -34,6 +38,7 @@ impl<S: Sample> Interleaved<S> {
         }
     }
 
+    #[blocking]
     pub fn from_block(block: &impl AudioBlock<S>) -> Self {
         let mut data = Vec::with_capacity(block.num_channels() as usize * block.num_frames());
         for i in 0..block.num_frames() {
@@ -150,7 +155,7 @@ impl<S: Sample> AudioBlock<S> for Interleaved<S> {
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        AudioBlockInterleavedView::from_slice_limited(
+        InterleavedView::from_slice_limited(
             &self.data,
             self.num_channels,
             self.num_frames,
@@ -269,11 +274,11 @@ mod tests {
     use rtsan_standalone::no_sanitize_realtime;
 
     use super::*;
-    use crate::sequential::Sequential;
+    use crate::sequential::SequentialView;
 
     #[test]
     fn test_samples() {
-        let mut block = Interleaved::<f32>::zeros(2, 5);
+        let mut block = Interleaved::<f32>::new(2, 5);
 
         let num_frames = block.num_frames();
         for ch in 0..block.num_channels() {
@@ -296,7 +301,7 @@ mod tests {
 
     #[test]
     fn test_channel() {
-        let mut block = Interleaved::<f32>::zeros(2, 5);
+        let mut block = Interleaved::<f32>::new(2, 5);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -320,7 +325,7 @@ mod tests {
 
     #[test]
     fn test_channels() {
-        let mut block = Interleaved::<f32>::zeros(2, 5);
+        let mut block = Interleaved::<f32>::new(2, 5);
 
         let mut channels_iter = block.channels();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -355,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_frame() {
-        let mut block = Interleaved::<f32>::zeros(2, 5);
+        let mut block = Interleaved::<f32>::new(2, 5);
 
         for i in 0..block.num_frames() {
             let frame = block.frame(i).copied().collect::<Vec<_>>();
@@ -384,7 +389,7 @@ mod tests {
 
     #[test]
     fn test_frames() {
-        let mut block = Interleaved::<f32>::zeros(2, 5);
+        let mut block = Interleaved::<f32>::new(2, 5);
         let num_frames = block.num_frames;
         let mut frames_iter = block.frames();
         for _ in 0..num_frames {
@@ -422,7 +427,7 @@ mod tests {
 
     #[test]
     fn test_from_slice() {
-        let block = Interleaved::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
+        let block = Interleaved::<f32>::from_block(&InterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
             5,
@@ -448,7 +453,7 @@ mod tests {
 
     #[test]
     fn test_view() {
-        let block = Interleaved::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
+        let block = Interleaved::<f32>::from_block(&InterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
             5,
@@ -466,7 +471,7 @@ mod tests {
 
     #[test]
     fn test_view_mut() {
-        let mut block = Interleaved::<f32>::zeros(2, 5);
+        let mut block = Interleaved::<f32>::new(2, 5);
         {
             let mut view = block.view_mut();
             view.channel_mut(0)
@@ -489,7 +494,7 @@ mod tests {
 
     #[test]
     fn test_from_block() {
-        let block = Sequential::<f32>::from_slice(
+        let block = SequentialView::<f32>::from_slice(
             &[0.0, 2.0, 4.0, 6.0, 8.0, 1.0, 3.0, 5.0, 7.0, 9.0],
             2,
             5,
@@ -509,7 +514,7 @@ mod tests {
 
     #[test]
     fn test_resize() {
-        let mut block = Interleaved::<f32>::zeros(3, 10);
+        let mut block = Interleaved::<f32>::new(3, 10);
         assert_eq!(block.num_channels(), 3);
         assert_eq!(block.num_frames(), 10);
         assert_eq!(block.num_channels_allocated(), 3);
@@ -546,7 +551,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
-        let mut block = Interleaved::<f32>::zeros(2, 10);
+        let mut block = Interleaved::<f32>::new(2, 10);
         block.resize(3, 10);
     }
 
@@ -554,7 +559,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
-        let mut block = Interleaved::<f32>::zeros(2, 10);
+        let mut block = Interleaved::<f32>::new(2, 10);
         block.resize(2, 11);
     }
 
@@ -562,7 +567,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_channel() {
-        let mut block = Interleaved::<f32>::zeros(2, 10);
+        let mut block = Interleaved::<f32>::new(2, 10);
         block.resize(1, 10);
         let _ = block.channel(1);
     }
@@ -571,7 +576,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_frame() {
-        let mut block = Interleaved::<f32>::zeros(2, 10);
+        let mut block = Interleaved::<f32>::new(2, 10);
         block.resize(2, 5);
         let _ = block.frame(5);
     }
@@ -580,7 +585,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
-        let mut block = Interleaved::<f32>::zeros(2, 10);
+        let mut block = Interleaved::<f32>::new(2, 10);
         block.resize(1, 10);
         let _ = block.channel_mut(1);
     }
@@ -589,7 +594,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_frame_mut() {
-        let mut block = Interleaved::<f32>::zeros(2, 10);
+        let mut block = Interleaved::<f32>::new(2, 10);
         block.resize(2, 5);
         let _ = block.frame_mut(5);
     }
@@ -597,9 +602,8 @@ mod tests {
     #[test]
     fn test_raw_data() {
         let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let mut block = Interleaved::<f32>::from_block(
-            &AudioBlockInterleavedView::<f32>::from_slice(&data, 2, 5),
-        );
+        let mut block =
+            Interleaved::<f32>::from_block(&InterleavedView::<f32>::from_slice(&data, 2, 5));
 
         assert_eq!(block.layout(), crate::BlockLayout::Interleaved);
 

@@ -23,11 +23,11 @@ pub trait Ops<S: Sample> {
     ///
     /// This is faster than `enumerate` by not checking bounds of the block.
     /// It can be used if your algorithm does not change if wrong samples are accessed.
-    /// For example this is the case for gain, clear, etc.
+    /// For example this is the case for applying a gain, clear, etc.
     fn enumerate_including_non_visible(&mut self, f: impl FnMut(u16, usize, &mut S));
-    /// Applies a linear gain to all samples in the buffer
-    fn apply_gain(&mut self, gain: S);
-    /// Sets all samples in the block to zero
+    /// Sets all samples in the block to the specified value
+    fn fill_with(&mut self, sample: S);
+    /// Sets all samples in the block to the default value
     fn clear(&mut self);
 }
 
@@ -162,13 +162,13 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
     }
 
     #[nonblocking]
-    fn apply_gain(&mut self, gain: S) {
-        self.for_each_including_non_visible(|v| *v = *v * gain);
+    fn fill_with(&mut self, sample: S) {
+        self.for_each_including_non_visible(|v| *v = sample);
     }
 
     #[nonblocking]
     fn clear(&mut self) {
-        self.for_each_including_non_visible(|v| *v = S::zero());
+        self.fill_with(S::default());
     }
 }
 
@@ -305,7 +305,7 @@ mod tests {
         });
 
         let mut data = [[0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0]];
-        let mut block = StackedViewMut::from_slices(&mut data);
+        let mut block = StackedViewMut::from_slice(&mut data);
 
         let mut i = 0;
         let mut c_exp = 0;
@@ -323,26 +323,20 @@ mod tests {
     }
 
     #[test]
-    fn test_gain() {
-        let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = SequentialViewMut::from_slice(&mut data, 2, 4);
-
-        block.apply_gain(2.0);
-
-        assert_eq!(
-            block.channel(0).copied().collect::<Vec<_>>(),
-            vec![0.0, 2.0, 4.0, 6.0]
-        );
-        assert_eq!(
-            block.channel(1).copied().collect::<Vec<_>>(),
-            vec![8.0, 10.0, 12.0, 14.0]
-        );
-    }
-
-    #[test]
     fn test_clear() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
         let mut block = SequentialViewMut::from_slice(&mut data, 2, 4);
+
+        block.fill_with(1.0);
+
+        assert_eq!(
+            block.channel(0).copied().collect::<Vec<_>>(),
+            vec![1.0, 1.0, 1.0, 1.0]
+        );
+        assert_eq!(
+            block.channel(1).copied().collect::<Vec<_>>(),
+            vec![1.0, 1.0, 1.0, 1.0]
+        );
 
         block.clear();
 

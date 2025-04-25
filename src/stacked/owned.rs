@@ -1,4 +1,4 @@
-use rtsan_standalone::nonblocking;
+use rtsan_standalone::{blocking, nonblocking};
 
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::{boxed::Box, vec, vec::Vec};
@@ -21,9 +21,10 @@ pub struct Stacked<S: Sample> {
 }
 
 impl<S: Sample> Stacked<S> {
-    pub fn zeros(num_channels: u16, num_frames: usize) -> Self {
+    #[blocking]
+    pub fn new(num_channels: u16, num_frames: usize) -> Self {
         Self {
-            data: vec![vec![S::zero(); num_frames].into_boxed_slice(); num_channels as usize]
+            data: vec![vec![S::default(); num_frames].into_boxed_slice(); num_channels as usize]
                 .into_boxed_slice(),
             num_channels,
             num_frames,
@@ -32,6 +33,7 @@ impl<S: Sample> Stacked<S> {
         }
     }
 
+    #[blocking]
     pub fn from_block(block: &impl AudioBlock<S>) -> Self {
         let mut data = Vec::new();
         for i in 0..block.num_channels() {
@@ -140,7 +142,7 @@ impl<S: Sample> AudioBlock<S> for Stacked<S> {
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        StackedView::from_slices_limited(&self.data, self.num_channels, self.num_frames)
+        StackedView::from_slice_limited(&self.data, self.num_channels, self.num_frames)
     }
 
     #[nonblocking]
@@ -232,7 +234,7 @@ impl<S: Sample> AudioBlockMut<S> for Stacked<S> {
 
     #[nonblocking]
     fn view_mut(&mut self) -> impl AudioBlockMut<S> {
-        StackedViewMut::from_slices_limited(&mut self.data, self.num_channels, self.num_frames)
+        StackedViewMut::from_slice_limited(&mut self.data, self.num_channels, self.num_frames)
     }
 
     #[nonblocking]
@@ -248,11 +250,11 @@ mod tests {
     use rtsan_standalone::no_sanitize_realtime;
 
     use super::*;
-    use crate::interleaved::AudioBlockInterleavedView;
+    use crate::interleaved::InterleavedView;
 
     #[test]
     fn test_samples() {
-        let mut block = Stacked::<f32>::zeros(2, 5);
+        let mut block = Stacked::<f32>::new(2, 5);
 
         let num_frames = block.num_frames();
         for ch in 0..block.num_channels() {
@@ -273,7 +275,7 @@ mod tests {
 
     #[test]
     fn test_channel() {
-        let mut block = Stacked::<f32>::zeros(2, 5);
+        let mut block = Stacked::<f32>::new(2, 5);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -297,7 +299,7 @@ mod tests {
 
     #[test]
     fn test_channels() {
-        let mut block = Stacked::<f32>::zeros(2, 5);
+        let mut block = Stacked::<f32>::new(2, 5);
 
         let mut channels_iter = block.channels();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -332,7 +334,7 @@ mod tests {
 
     #[test]
     fn test_frame() {
-        let mut block = Stacked::<f32>::zeros(2, 5);
+        let mut block = Stacked::<f32>::new(2, 5);
 
         for i in 0..block.num_frames() {
             let frame = block.frame(i).copied().collect::<Vec<_>>();
@@ -361,7 +363,7 @@ mod tests {
 
     #[test]
     fn test_frames() {
-        let mut block = Stacked::<f32>::zeros(3, 6);
+        let mut block = Stacked::<f32>::new(3, 6);
         block.resize(2, 5);
 
         let num_frames = block.num_frames;
@@ -401,7 +403,7 @@ mod tests {
 
     #[test]
     fn test_from_block() {
-        let block = Stacked::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
+        let block = Stacked::<f32>::from_block(&InterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
             5,
@@ -427,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_view() {
-        let block = Stacked::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
+        let block = Stacked::<f32>::from_block(&InterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
             5,
@@ -445,7 +447,7 @@ mod tests {
 
     #[test]
     fn test_view_mut() {
-        let mut block = Stacked::<f32>::zeros(2, 5);
+        let mut block = Stacked::<f32>::new(2, 5);
         {
             let mut view = block.view_mut();
             view.channel_mut(0)
@@ -468,7 +470,7 @@ mod tests {
 
     #[test]
     fn test_resize() {
-        let mut block = Stacked::<f32>::zeros(3, 10);
+        let mut block = Stacked::<f32>::new(3, 10);
         assert_eq!(block.num_channels(), 3);
         assert_eq!(block.num_frames(), 10);
         assert_eq!(block.num_channels_allocated(), 3);
@@ -505,7 +507,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
-        let mut block = Stacked::<f32>::zeros(2, 10);
+        let mut block = Stacked::<f32>::new(2, 10);
         block.resize(3, 10);
     }
 
@@ -513,7 +515,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
-        let mut block = Stacked::<f32>::zeros(2, 10);
+        let mut block = Stacked::<f32>::new(2, 10);
         block.resize(2, 11);
     }
 
@@ -521,7 +523,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_channel() {
-        let mut block = Stacked::<f32>::zeros(2, 10);
+        let mut block = Stacked::<f32>::new(2, 10);
         block.resize(1, 10);
         let _ = block.channel(1);
     }
@@ -530,7 +532,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_frame() {
-        let mut block = Stacked::<f32>::zeros(2, 10);
+        let mut block = Stacked::<f32>::new(2, 10);
         block.resize(2, 5);
         let _ = block.frame(5);
     }
@@ -539,7 +541,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
-        let mut block = Stacked::<f32>::zeros(2, 10);
+        let mut block = Stacked::<f32>::new(2, 10);
         block.resize(1, 10);
         let _ = block.channel_mut(1);
     }
@@ -548,7 +550,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_frame_mut() {
-        let mut block = Stacked::<f32>::zeros(2, 10);
+        let mut block = Stacked::<f32>::new(2, 10);
         block.resize(2, 5);
         let _ = block.frame_mut(5);
     }
@@ -556,7 +558,7 @@ mod tests {
     #[test]
     fn test_raw_data() {
         let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let mut block = Stacked::from_block(&StackedViewMut::from_slices(&mut vec));
+        let mut block = Stacked::from_block(&StackedViewMut::from_slice(&mut vec));
 
         assert_eq!(block.layout(), crate::BlockLayout::Stacked);
 

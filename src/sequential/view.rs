@@ -46,7 +46,7 @@ impl<'a, S: Sample> SequentialView<'a, S> {
         }
     }
 
-    /// Creates a new `SequentialView` from raw parts.
+    /// Creates a new `SequentialView` from a raw pointers.
     ///
     /// # Safety
     ///
@@ -55,7 +55,7 @@ impl<'a, S: Sample> SequentialView<'a, S> {
     /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
     /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]
-    pub unsafe fn from_raw(ptr: *const S, num_channels: u16, num_frames: usize) -> Self {
+    pub unsafe fn from_ptr(ptr: *const S, num_channels: u16, num_frames: usize) -> Self {
         Self {
             data: unsafe { std::slice::from_raw_parts(ptr, num_channels as usize * num_frames) },
             num_channels,
@@ -65,7 +65,7 @@ impl<'a, S: Sample> SequentialView<'a, S> {
         }
     }
 
-    /// Creates a new `SequentialView` from raw parts with a limited amount of channels and/or frames.
+    /// Creates a new `SequentialView` from a pointer with a limited amount of channels and/or frames.
     ///
     /// # Safety
     ///
@@ -74,7 +74,7 @@ impl<'a, S: Sample> SequentialView<'a, S> {
     /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
     /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]
-    pub unsafe fn from_raw_limited(
+    pub unsafe fn from_ptr_limited(
         ptr: *const S,
         num_channels_visible: u16,
         num_frames_visible: usize,
@@ -355,7 +355,7 @@ mod tests {
     #[test]
     fn test_from_raw() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = unsafe { SequentialView::<f32>::from_raw(data.as_mut_ptr(), 2, 5) };
+        let block = unsafe { SequentialView::<f32>::from_ptr(data.as_mut_ptr(), 2, 5) };
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated, 2);
         assert_eq!(block.num_frames(), 5);
@@ -379,7 +379,7 @@ mod tests {
     fn test_from_raw_limited() {
         let data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
 
-        let block = unsafe { SequentialView::from_raw_limited(data.as_ptr(), 2, 3, 3, 4) };
+        let block = unsafe { SequentialView::from_ptr_limited(data.as_ptr(), 2, 3, 3, 4) };
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
