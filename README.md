@@ -12,23 +12,25 @@ Everything in this library, except for generating new owned blocks, is real-time
 
 The main problem this crate is solving is that audio data can have different formats:
 
-* Interleaved: `[ch0, ch1, ch0, ch1, ch0, ch1]`
-  * Layout: frames first in one single buffer
-  * Often used in system APIs, as the hardware most often operates on frame-by-frame basis (each frame needs to be played at the same time)
+* **Interleaved:** `[ch0, ch1, ch0, ch1, ch0, ch1]`
+  * **Interpretation:** Each group of channel samples represents a frame. So, this layout stores frames one after another.
+  * **Terminology:** Described as “packed” or “frames first” because each time step is grouped and processed as a unit (a frame).
+  * **Usage:** Often used in APIs or hardware-level interfaces, where synchronized playback across channels is crucial.
 
-* Sequential: `[ch0, ch0, ch0, ch1, ch1, ch1]`
-  * Layout: channels first in one single buffer
-  * Often used in DSP code, as effects often operate on channel-by-channel basis
+* **Sequential:** `[ch0, ch0, ch0, ch1, ch1, ch1]`
+  * **Interpretation:** All samples from `ch0` are stored first, followed by all from `ch1`, etc.
+  * **Terminology:** Described as “planar” or “channels first” in the sense that all data for one channel appears before any data for the next.
+  * **Usage:** Used in DSP pipelines where per-channel processing is easier and more efficient.
 
-* Stacked: `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
-  * Layout: channels first in individual buffers
-  * Often used in DSP code, as effects often operate on channel-by-channel basis
-  * Packing each channel in an individual buffer can have performance improvements
+* **Stacked:** `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
+  * **Interpretation:** Each channel has its own separate buffer or array.
+  * **Terminology:** Also described as “planar” or “channels first” though more specifically it’s channel-isolated buffers.
+  * **Usage:** Very common in real-time DSP, as it simplifies memory access and can improve SIMD/vectorization efficiency.
 
 So if you write your processor functions expecting an `impl AudioBlock<S>` you can receive any kind of audio data, no matter which layout the audio API is using.
 AudioBlocks can contain any type of sample that is `Copy`, `Default` and `'static` which is true for all kinds of numbers.
 
-As you mostly don't want your process function to work with any kind of number, you can write a specialized process block, expecting only `f32` samples.
+As you mostly don't want your process function to work with any kind of number type, you can write a specialized process block, expecting only `f32` samples.
 
 ```rust
 fn process(block: &mut impl AudioBlockMut<f32>) {
