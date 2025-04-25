@@ -1,26 +1,29 @@
-# Audio Blocks
+# neodsp audio-blocks
 
 ![image](docs/audio-blocks-logo.png)
 
-This crate provides traits for audio blocks to generalize common problems in handling audio data, like different channel layouts and varying number of samples.
-You will get `Interleaved`, `Sequential` and `Stacked` blocks and you can select where the data is stored by choosing between `Owned`, `View` and `ViewMut`.
-Owned blocks will store the data on the heap, while views can be created over slices or raw pointers.
-All of them implement the `AudioBlock` / `AudioBlockMut` traits and the mutable blocks implement multiple operations like `clear`, `gain` and `copy_from_block`.
+This crate provides traits for audio blocks to generalize common problems in handling audio data, like different channel layouts, adapting between them and receiving varying number of samples.
+You will get `Interleaved`, `Sequential` and `Stacked` blocks and you can select where the data is stored by choosing between owned data, views and mutable views.
+Owned blocks will store the data on the heap, while views can be created over slices, raw pointers or from any other block.
+All of them implement the `AudioBlock` / `AudioBlockMut` traits and the mutable blocks implement operations like `clear`, `fill_with`, `for_each`, and `enumerate`.
+
+This crate can be used in `no_std` contexts when disabling the default features. Owned blocks are stored on the heap and thus need either the `alloc` or the `std` feature.
+Everything in this library, except for generating new owned blocks, is real-time safe.
 
 The main problem this crate is solving is that audio data can have different formats:
 
 * Interleaved: `[ch0, ch1, ch0, ch1, ch0, ch1]`
   * Layout: frames first in one single buffer
-  * often used in system APIs, as the hardware most often operates on frame-by-frame basis (each frame needs to be played at the same time)
+  * Often used in system APIs, as the hardware most often operates on frame-by-frame basis (each frame needs to be played at the same time)
 
 * Sequential: `[ch0, ch0, ch0, ch1, ch1, ch1]`
   * Layout: channels first in one single buffer
-  * often used in dsp code, as effects often operate on channel-by-channel basis
+  * Often used in DSP code, as effects often operate on channel-by-channel basis
 
 * Stacked: `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
   * Layout: channels first in individual buffers
-  * often used in dsp code, as effects often operate on channel-by-channel basis
-  * packing each channel in an individual buffer can have performance improvements
+  * Often used in DSP code, as effects often operate on channel-by-channel basis
+  * Packing each channel in an individual buffer can have performance improvements
 
 So if you write your processor functions expecting an `impl AudioBlock<S>` you can receive any kind of audio data, no matter which layout the audio API is using.
 AudioBlocks can contain any type of sample that is `Copy`, `Default` and `'static` which is true for all kinds of numbers.
@@ -100,6 +103,7 @@ fn for_each_including_non_visible(&mut self, f: impl FnMut(&mut S));
 fn enumerate(&mut self, f: impl FnMut(u16, usize, &mut S));
 fn enumerate_including_non_visible(&mut self, f: impl FnMut(u16, usize, &mut S));
 fn fill_with(&mut self, sample: S);
+fn clear(&mut self);
 ```
 
 ## Handling Varying Number of Frames
@@ -138,7 +142,7 @@ let block = Sequential::<f32>::new(2, 64);
 let block = Stacked::<f32>::new(2, 64);
 ```
 
-Other than that you can generate an owned block from any kind of exisiting block:
+Other than that you can generate an owned block from any kind of existing block:
 
 ```rust
 let block = Interleaved::from_block(old_block);
@@ -153,20 +157,20 @@ let block = Stacked::from_block(old_block);
 
 > [!NOTE]
 > All views exist as mutable or non-mutable version, depending if the underlying data should be mutable or not.
-> `InterleavedView`, `SequentialView` and `StackedView` are non-mutable, `InterleavedViewMut` and `SequentialViewMut` and `StackedViewMut` are mutable.
-> All mentiond constructor functions exist for the mutable and non-mutable versions and are real-time safe!
+> `InterleavedView`, `SequentialView` and `StackedView` are non-mutable, `InterleavedViewMut`, `SequentialViewMut` and `StackedViewMut` are mutable.
+> All mentioned constructor functions exist for the mutable and non-mutable versions and are real-time safe!
 
 Views can be generated from slices, from pointers and any block can generate a new view.
-Views are extremly cheap to create, so you can do this in every audio callback.
+Views are extremely cheap to create, so you can do this in every audio callback.
 
-This is how you generate views from exisiting blocks (no matter if they are owned or already a view):
+This is how you generate views from existing blocks (no matter if they are owned or already a view):
 
 ```rust
 let view = block.view();
 let view_mut = block.view_mut();
 ```
 
-This is how you generate a new view from exisiting data:
+This is how you generate a new view from existing data:
 
 ```rust
 let data = [0.0, 1.0, 0.0, 1.0, 0.0, 1.0];
@@ -184,7 +188,7 @@ fn c_api_callback_interleaved(data: *mut f32, num_channels: u16, num_frames: usi
 }
 ```
 
-There also exist `limited` functions that can be handy when the underlying data store more channels and/or frames than you want to make visible in the block.
+There also exist `limited` functions that can be handy when the underlying data stores more channels and/or frames than you want to make visible in the block.
 
 ```rust
 let block = InterleavedViewMut::from_slice_limited(&mut data, /* visible */ 2, 3, /* allocated */ 4, 6);
@@ -219,7 +223,7 @@ let block = StackedView::from_slices(&slices);
 
 To generate stacked views from pointers, a special adapter is needed to avoid allocations.
 Note that in this case you have to provide the maximum number of channels you want to support as a constant value.
-In this case we limit this adaptor to 16 channels.
+In this case we limit this adapter to 16 channels.
 
 ```rust
 fn c_api_stacked(data: *mut *mut f32, num_channels: u16, num_frames: usize) {
@@ -236,3 +240,14 @@ fn c_api_stacked(data: *const *mut f32, num_channels: u16, num_frames: usize) {
     let block = adapter.stacked_view_mut();
 }
 ```
+
+## Performance Optimizations
+
+The most performant way to iterate over blocks will be by accessing the raw data. But this can be dangerous because in limited blocks it will retrieve samples that
+are not meant to be visible and you have to figure out the data layout. For simple operations that do not depend on other samples like applying a gain, doing so for all samples,
+can be faster (if the amount of invisible samples is not exceptionally high). In the `Ops` you will find `for_each` and `for_each_including_non_visible` or `enumerate` and `enumerate_including_non_visible` for this reason.
+
+If you use the iterators `channels` or `frames` it depends on the layout which one will be more performant.
+For `Sequential` and `Stacked` it will be always faster to iterate over the channels, for `Interleaved` with higher channel counts it can be faster to iterate over frames.
+
+The layout of a block can be retrieved using the `layout` function.

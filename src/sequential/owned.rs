@@ -161,7 +161,7 @@ impl<S: Sample> AudioBlock<S> for Sequential<S> {
 
     #[nonblocking]
     fn layout(&self) -> crate::BlockLayout {
-        crate::BlockLayout::Planar
+        crate::BlockLayout::Sequential
     }
 
     #[nonblocking]

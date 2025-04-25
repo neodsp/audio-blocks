@@ -214,7 +214,7 @@ impl<S: Sample> AudioBlock<S> for SequentialViewMut<'_, S> {
 
     #[nonblocking]
     fn layout(&self) -> crate::BlockLayout {
-        crate::BlockLayout::Planar
+        crate::BlockLayout::Sequential
     }
 
     #[nonblocking]
@@ -617,7 +617,7 @@ mod tests {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
 
-        assert_eq!(block.layout(), crate::BlockLayout::Planar);
+        assert_eq!(block.layout(), crate::BlockLayout::Sequential);
 
         assert_eq!(
             block.raw_data(None),

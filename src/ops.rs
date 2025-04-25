@@ -65,7 +65,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
             }
         } else {
             match self.layout() {
-                BlockLayout::Planar | BlockLayout::Stacked => {
+                BlockLayout::Sequential | BlockLayout::Stacked => {
                     for channel in self.channels_mut() {
                         channel.for_each(&mut f);
                     }
@@ -82,7 +82,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
     #[nonblocking]
     fn for_each_including_non_visible(&mut self, mut f: impl FnMut(&mut S)) {
         match self.layout() {
-            BlockLayout::Planar => {
+            BlockLayout::Sequential => {
                 self.raw_data_mut(None).iter_mut().for_each(&mut f);
             }
             BlockLayout::Interleaved => {
@@ -107,7 +107,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
             }
         } else {
             match self.layout() {
-                BlockLayout::Planar | BlockLayout::Stacked => {
+                BlockLayout::Sequential | BlockLayout::Stacked => {
                     for ch in 0..self.num_channels() {
                         self.channel_mut(ch)
                             .enumerate()
@@ -128,7 +128,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
     #[nonblocking]
     fn enumerate_including_non_visible(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
         match self.layout() {
-            BlockLayout::Planar => {
+            BlockLayout::Sequential => {
                 let num_frames = self.num_frames_allocated();
                 self.raw_data_mut(None)
                     .iter_mut()

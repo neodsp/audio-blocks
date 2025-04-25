@@ -20,8 +20,8 @@ pub mod stacked;
 
 #[derive(PartialEq, Debug)]
 pub enum BlockLayout {
-    Planar,
     Interleaved,
+    Sequential,
     Stacked,
 }
 
