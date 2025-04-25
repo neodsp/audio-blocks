@@ -73,9 +73,9 @@ impl<S: Sample> Sequential<S> {
         }
     }
 
-    /// Creates a new [`Sequential`] audio block by copying data from another [`AudioBlock`](crate::AudioBlock).
+    /// Creates a new [`Sequential`] audio block by copying data from another [`AudioBlock`].
     ///
-    /// Converts any [`AudioBlock`](crate::AudioBlock) implementation to a sequential format by iterating
+    /// Converts any [`AudioBlock`] implementation to a sequential format by iterating
     /// through each channel of the source block and copying its samples. The new block
     /// will have the same dimensions as the source block.
     ///

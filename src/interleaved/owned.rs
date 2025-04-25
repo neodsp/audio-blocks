@@ -74,9 +74,9 @@ impl<S: Sample> Interleaved<S> {
         }
     }
 
-    /// Creates a new [`Interleaved`] audio block by copying data from another [`AudioBlock`](crate::AudioBlock).
+    /// Creates a new [`Interleaved`] audio block by copying data from another [`AudioBlock`].
     ///
-    /// Converts any [`AudioBlock`](crate::AudioBlock) implementation to an interleaved format by iterating
+    /// Converts any [`AudioBlock`] implementation to an interleaved format by iterating
     /// through each frame of the source block and copying its samples. The new block
     /// will have the same dimensions as the source block.
     ///
