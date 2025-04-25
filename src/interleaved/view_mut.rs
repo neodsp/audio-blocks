@@ -1,13 +1,32 @@
-use core::{marker::PhantomData, ptr::NonNull};
-
 use rtsan_standalone::nonblocking;
+
+use core::{marker::PhantomData, ptr::NonNull};
 
 use super::view::InterleavedView;
 use crate::{
     AudioBlock, AudioBlockMut, Sample,
-    iter::{InterleavedDataIter, InterleavedDataIterMut},
+    iter::{StridedSampleIter, StridedSampleIterMut},
 };
 
+/// A mutable view of interleaved audio data.
+///
+/// * **Layout:** `[ch0, ch1, ch0, ch1, ch0, ch1]`
+/// * **Interpretation:** Each group of channel samples represents a frame. So, this layout stores frames one after another.
+/// * **Terminology:** Described as “packed” or “frames first” because each time step is grouped and processed as a unit (a frame).
+/// * **Usage:** Often used in APIs or hardware-level interfaces, where synchronized playback across channels is crucial.
+///
+/// # Example
+///
+/// ```
+/// use audio_blocks::*;
+///
+/// let mut data = vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0];
+///
+/// let block = InterleavedViewMut::from_slice(&mut data, 2, 3);
+///
+/// block.channel(0).for_each(|&v| assert_eq!(v, 0.0));
+/// block.channel(1).for_each(|&v| assert_eq!(v, 1.0));
+/// ```
 pub struct InterleavedViewMut<'a, S: Sample> {
     data: &'a mut [S],
     num_channels: u16,
@@ -17,6 +36,15 @@ pub struct InterleavedViewMut<'a, S: Sample> {
 }
 
 impl<'a, S: Sample> InterleavedViewMut<'a, S> {
+    /// Creates a new [`InterleavedViewMut`] from a mutable slice of interleaved audio data.
+    ///
+    /// # Parameters
+    /// * `data` - The slice containing mutable interleaved audio samples
+    /// * `num_channels` - Number of audio channels in the data
+    /// * `num_frames` - Number of audio frames in the data
+    ///
+    /// # Panics
+    /// Panics if the length of `data` doesn't equal `num_channels * num_frames`.
     #[nonblocking]
     pub fn from_slice(data: &'a mut [S], num_channels: u16, num_frames: usize) -> Self {
         assert_eq!(data.len(), num_channels as usize * num_frames);
@@ -29,6 +57,22 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
         }
     }
 
+    /// Creates a new [`InterleavedViewMut`] from a mutable slice with limited visibility.
+    ///
+    /// This function allows creating a view that exposes only a subset of the allocated channels
+    /// and frames, which is useful for working with a logical section of a larger buffer.
+    ///
+    /// # Parameters
+    /// * `data` - The mutable slice containing interleaved audio samples
+    /// * `num_channels_visible` - Number of audio channels to expose in the view
+    /// * `num_frames_visible` - Number of audio frames to expose in the view
+    /// * `num_channels_allocated` - Total number of channels allocated in the data buffer
+    /// * `num_frames_allocated` - Total number of frames allocated in the data buffer
+    ///
+    /// # Panics
+    /// * Panics if the length of `data` doesn't equal `num_channels_allocated * num_frames_allocated`
+    /// * Panics if `num_channels_visible` exceeds `num_channels_allocated`
+    /// * Panics if `num_frames_visible` exceeds `num_frames_allocated`
     #[nonblocking]
     pub fn from_slice_limited(
         data: &'a mut [S],
@@ -52,7 +96,7 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
         }
     }
 
-    /// Creates a new `SequentialView` from raw parts with.
+    /// Creates a new [`InterleavedViewMut`] from raw parts with.
     ///
     /// # Safety
     ///
@@ -73,7 +117,7 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
         }
     }
 
-    /// Creates a new `SequentialViewMut` from raw parts with a limited amount of channels and/or frames.
+    /// Creates a new [`InterleavedViewMut`] from raw parts with a limited amount of channels and/or frames.
     ///
     /// # Safety
     ///
@@ -168,7 +212,7 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
                 unsafe { data_ptr.add(channel_idx) }
             };
 
-            InterleavedDataIter::<'_, S> {
+            StridedSampleIter::<'_, S> {
                 // Note: '_ lifetime from &self borrow
                 // Safety: Pointer is either dangling (if empty) or valid start pointer.
                 // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
@@ -216,8 +260,7 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, ch: Option<u16>) -> &[S] {
-        assert!(ch.is_none());
+    fn raw_data(&self, _: Option<u16>) -> &[S] {
         self.data
     }
 }
@@ -271,7 +314,7 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
                 unsafe { data_ptr.add(channel_idx) }
             };
 
-            InterleavedDataIterMut::<'_, S> {
+            StridedSampleIterMut::<'_, S> {
                 ptr: NonNull::new(start_ptr).unwrap_or(NonNull::dangling()),
                 stride,
                 remaining: num_frames,
@@ -311,8 +354,7 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn raw_data_mut(&mut self, ch: Option<u16>) -> &mut [S] {
-        assert!(ch.is_none());
+    fn raw_data_mut(&mut self, _: Option<u16>) -> &mut [S] {
         self.data
     }
 }

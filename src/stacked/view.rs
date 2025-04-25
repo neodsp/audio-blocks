@@ -4,6 +4,25 @@ use std::marker::PhantomData;
 
 use crate::{AudioBlock, Sample};
 
+/// A read-only view of stacked / separate-channel audio data.
+///
+/// * **Layout:** `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
+/// * **Interpretation:** Each channel has its own separate buffer or array.
+/// * **Terminology:** Also described as “planar” or “channels first” though more specifically it’s channel-isolated buffers.
+/// * **Usage:** Very common in real-time DSP, as it simplifies memory access and can improve SIMD/vectorization efficiency.
+///
+/// # Example
+///
+/// ```
+/// use audio_blocks::*;
+///
+/// let data = vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]];
+///
+/// let block = StackedView::from_slice(&data);
+///
+/// block.channel(0).for_each(|&v| assert_eq!(v, 0.0));
+/// block.channel(1).for_each(|&v| assert_eq!(v, 1.0));
+/// ```
 pub struct StackedView<'a, S: Sample, V: AsRef<[S]>> {
     data: &'a [V],
     num_channels: u16,
@@ -14,6 +33,13 @@ pub struct StackedView<'a, S: Sample, V: AsRef<[S]>> {
 }
 
 impl<'a, S: Sample, V: AsRef<[S]>> StackedView<'a, S, V> {
+    /// Creates a new [`StackedView`] from a slice of stacked audio data.
+    ///
+    /// # Parameters
+    /// * `data` - The slice containing stacked audio samples (one slice per channel)
+    ///
+    /// # Panics
+    /// Panics if the channel slices have different lengths.
     #[nonblocking]
     pub fn from_slice(data: &'a [V]) -> Self {
         let num_frames_available = if data.is_empty() {
@@ -24,6 +50,20 @@ impl<'a, S: Sample, V: AsRef<[S]>> StackedView<'a, S, V> {
         Self::from_slice_limited(data, data.len() as u16, num_frames_available)
     }
 
+    /// Creates a new [`StackedView`] from a slice with limited visibility.
+    ///
+    /// This function allows creating a view that exposes only a subset of the allocated channels
+    /// and frames, which is useful for working with a logical section of a larger buffer.
+    ///
+    /// # Parameters
+    /// * `data` - The slice containing stacked audio samples (one slice per channel)
+    /// * `num_channels_visible` - Number of audio channels to expose in the view
+    /// * `num_frames_visible` - Number of audio frames to expose in the view
+    ///
+    /// # Panics
+    /// * Panics if `num_channels_visible` exceeds the number of channels in `data`
+    /// * Panics if `num_frames_visible` exceeds the length of any channel buffer
+    /// * Panics if channel slices have different lengths
     #[nonblocking]
     pub fn from_slice_limited(
         data: &'a [V],
@@ -158,6 +198,43 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
     }
 }
 
+/// Adapter for creating stacked audio block views from raw pointers.
+///
+/// This adapter provides a safe interface to work with audio data stored in external buffers,
+/// which is common when interfacing with audio APIs or hardware.
+///
+/// # Example
+///
+/// ```
+/// use audio_blocks::*;
+///
+/// // Create sample data for two channels with five frames each
+/// let ch1 = vec![0.0f32, 1.0, 2.0, 3.0, 4.0];
+/// let ch2 = vec![5.0f32, 6.0, 7.0, 8.0, 9.0];
+///
+/// // Create pointers to the channel data
+/// let ptrs = [ch1.as_ptr(), ch2.as_ptr()];
+/// let data = ptrs.as_ptr();
+/// let num_channels = 2u16;
+/// let num_frames = 5;
+///
+/// // Create an adapter from raw pointers to audio channel data
+/// let adapter = unsafe { StackedPtrAdapter::<f32, 16>::from_ptr(data, num_channels, num_frames) };
+///
+/// // Get a safe view of the audio data
+/// let block = adapter.stacked_view();
+///
+/// // Verify the data access works
+/// assert_eq!(block.sample(0, 2), 2.0);
+/// assert_eq!(block.sample(1, 3), 8.0);
+/// ```
+///
+/// # Safety
+///
+/// When creating an adapter from raw pointers, you must ensure that:
+/// - The pointers are valid and properly aligned
+/// - The memory they point to remains valid for the lifetime of the adapter
+/// - The channel count doesn't exceed the adapter's `MAX_CHANNELS` capacity
 pub struct StackedPtrAdapter<'a, S: Sample, const MAX_CHANNELS: usize> {
     data: [MaybeUninit<&'a [S]>; MAX_CHANNELS],
     num_channels: u16,
@@ -196,10 +273,13 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHAN
         Self { data, num_channels }
     }
 
+    /// Returns a slice of references to the initialized channel data buffers.
+    ///
+    /// This method provides access to the underlying audio data as a slice of slices,
+    /// with each inner slice representing one audio channel.
     #[inline]
     pub fn data_slice(&self) -> &[&'a [S]] {
         let initialized_part: &[MaybeUninit<&'a [S]>] = &self.data[..self.num_channels as usize];
-        // SAFETY: See previous explanation for this conversion
         unsafe {
             core::slice::from_raw_parts(
                 initialized_part.as_ptr() as *const &'a [S],
@@ -208,6 +288,15 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHAN
         }
     }
 
+    /// Creates a safe [`StackedView`] for accessing the audio data.
+    ///
+    /// This provides a convenient way to interact with the audio data through
+    /// the full [`AudioBlock`] interface, enabling operations like iterating
+    /// through channels or frames.
+    ///
+    /// # Returns
+    ///
+    /// A [`StackedView`] that provides safe, immutable access to the audio data.
     #[nonblocking]
     pub fn stacked_view(&self) -> StackedView<'a, S, &[S]> {
         StackedView::from_slice(self.data_slice())

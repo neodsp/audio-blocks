@@ -11,7 +11,27 @@ use crate::{AudioBlock, AudioBlockMut, Sample};
 
 use super::{view::StackedView, view_mut::StackedViewMut};
 
-#[derive(Clone)]
+/// A stacked / seperate-channel audio block that owns its data.
+///
+/// * **Layout:** `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
+/// * **Interpretation:** Each channel has its own separate buffer or array.
+/// * **Terminology:** Also described as “planar” or “channels first” though more specifically it’s channel-isolated buffers.
+/// * **Usage:** Very common in real-time DSP, as it simplifies memory access and can improve SIMD/vectorization efficiency.
+///
+/// # Example
+///
+/// ```
+/// use audio_blocks::*;
+///
+/// let block = Stacked::new(2, 3);
+/// let mut block = Stacked::from_block(&block);
+///
+/// block.channel_mut(0).for_each(|v| *v = 0.0);
+/// block.channel_mut(1).for_each(|v| *v = 1.0);
+///
+/// assert_eq!(block.raw_data(Some(0)), &[0.0, 0.0, 0.0]);
+/// assert_eq!(block.raw_data(Some(1)), &[1.0, 1.0, 1.0]);
+/// ```
 pub struct Stacked<S: Sample> {
     data: Box<[Box<[S]>]>,
     num_channels: u16,
@@ -21,6 +41,22 @@ pub struct Stacked<S: Sample> {
 }
 
 impl<S: Sample> Stacked<S> {
+    /// Creates a new [`Stacked`] audio block with the specified dimensions.
+    ///
+    /// Allocates memory for a new stacked audio block with exactly the specified
+    /// number of channels and frames. The block is initialized with the default value
+    /// for the sample type.
+    ///
+    /// Do not use in real-time processes!
+    ///
+    /// # Arguments
+    ///
+    /// * `num_channels` - The number of audio channels
+    /// * `num_frames` - The number of frames per channel
+    ///
+    /// # Panics
+    ///
+    /// Panics if the multiplication of `num_channels` and `num_frames` would overflow a usize.
     #[blocking]
     pub fn new(num_channels: u16, num_frames: usize) -> Self {
         Self {
@@ -33,12 +69,22 @@ impl<S: Sample> Stacked<S> {
         }
     }
 
+    /// Creates a new [`Stacked`] audio block by copying data from another [`AudioBlock`](crate::AudioBlock).
+    ///
+    /// Converts any [`AudioBlock`](crate::AudioBlock) implementation to a stacked format by iterating
+    /// through each channel of the source block and copying its samples. The new block
+    /// will have the same dimensions as the source block.
+    ///
+    /// # Warning
+    ///
+    /// This function allocates memory and should not be used in real-time audio processing contexts.
+    ///
+    /// # Arguments
+    ///
+    /// * `block` - The source audio block to copy data from
     #[blocking]
     pub fn from_block(block: &impl AudioBlock<S>) -> Self {
-        let mut data = Vec::new();
-        for i in 0..block.num_channels() {
-            data.push(block.channel(i).copied().collect());
-        }
+        let data: Vec<Box<[S]>> = block.channels().map(|c| c.copied().collect()).collect();
         Self {
             data: data.into_boxed_slice(),
             num_channels: block.num_channels(),

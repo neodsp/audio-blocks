@@ -6,6 +6,25 @@ use crate::{AudioBlock, AudioBlockMut, Sample};
 
 use super::StackedView;
 
+/// A mutable view of stacked / separate-channel audio data.
+///
+/// * **Layout:** `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
+/// * **Interpretation:** Each channel has its own separate buffer or array.
+/// * **Terminology:** Also described as “planar” or “channels first” though more specifically it’s channel-isolated buffers.
+/// * **Usage:** Very common in real-time DSP, as it simplifies memory access and can improve SIMD/vectorization efficiency.
+///
+/// # Example
+///
+/// ```
+/// use audio_blocks::*;
+///
+/// let mut data = vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]];
+///
+/// let block = StackedViewMut::from_slice(&mut data);
+///
+/// block.channel(0).for_each(|&v| assert_eq!(v, 0.0));
+/// block.channel(1).for_each(|&v| assert_eq!(v, 1.0));
+/// ```
 pub struct StackedViewMut<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> {
     data: &'a mut [V],
     num_channels: u16,
@@ -16,6 +35,13 @@ pub struct StackedViewMut<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> {
 }
 
 impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> StackedViewMut<'a, S, V> {
+    /// Creates a new [`StackedViewMut`] from a mutable slice of stacked audio data.
+    ///
+    /// # Parameters
+    /// * `data` - The mutable slice containing stacked audio samples (one slice per channel)
+    ///
+    /// # Panics
+    /// Panics if the channel slices have different lengths.
     #[nonblocking]
     pub fn from_slice(data: &'a mut [V]) -> Self {
         let num_frames_available = if data.is_empty() {
@@ -26,6 +52,20 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> StackedViewMut<'a, S, V> {
         Self::from_slice_limited(data, data.len() as u16, num_frames_available)
     }
 
+    /// Creates a new [`StackedViewMut`] from a mutable slice with limited visibility.
+    ///
+    /// This function allows creating a view that exposes only a subset of the allocated channels
+    /// and frames, which is useful for working with a logical section of a larger buffer.
+    ///
+    /// # Parameters
+    /// * `data` - The mutable slice containing stacked audio samples (one slice per channel)
+    /// * `num_channels_visible` - Number of audio channels to expose in the view
+    /// * `num_frames_visible` - Number of audio frames to expose in the view
+    ///
+    /// # Panics
+    /// * Panics if `num_channels_visible` exceeds the number of channels in `data`
+    /// * Panics if `num_frames_visible` exceeds the length of any channel buffer
+    /// * Panics if channel slices have different lengths
     #[nonblocking]
     pub fn from_slice_limited(
         data: &'a mut [V],
@@ -253,6 +293,45 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<
     }
 }
 
+/// Adapter for creating mutable stacked audio block views from raw pointers.
+///
+/// This adapter provides a safe interface to work with mutable audio data stored in external buffers,
+/// which is common when interfacing with audio APIs or hardware.
+///
+/// # Example
+///
+/// ```
+/// use audio_blocks::*;
+///
+/// // Create sample data for two channels with five frames each
+/// let mut ch1 = vec![0.0f32, 1.0, 2.0, 3.0, 4.0];
+/// let mut ch2 = vec![5.0f32, 6.0, 7.0, 8.0, 9.0];
+///
+/// // Create mutable pointers to the channel data
+/// let mut ptrs = [ch1.as_mut_ptr(), ch2.as_mut_ptr()];
+/// let data = ptrs.as_mut_ptr();
+/// let num_channels = 2u16;
+/// let num_frames = 5;
+///
+/// // Create an adapter from raw pointers to audio channel data
+/// let mut adapter = unsafe { StackedPtrAdapterMut::<f32, 16>::from_ptr(data, num_channels, num_frames) };
+///
+/// // Get a safe mutable view of the audio data
+/// let mut block = adapter.stacked_view_mut();
+///
+/// // Verify the data access works and can be modified
+/// assert_eq!(block.sample(0, 2), 2.0);
+/// assert_eq!(block.sample(1, 3), 8.0);
+/// *block.sample_mut(0, 1) = 10.0; // Modify a sample
+/// ```
+///
+/// # Safety
+///
+/// When creating an adapter from raw pointers, you must ensure that:
+/// - The pointers are valid and properly aligned
+/// - The memory they point to remains valid for the lifetime of the adapter
+/// - The data is not accessed through other pointers during the adapter's lifetime
+/// - The channel count doesn't exceed the adapter's `MAX_CHANNELS` capacity
 pub struct StackedPtrAdapterMut<'a, S: Sample, const MAX_CHANNELS: usize> {
     data: [MaybeUninit<&'a mut [S]>; MAX_CHANNELS],
     num_channels: u16,
@@ -290,6 +369,10 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
         Self { data, num_channels }
     }
 
+    /// Returns a mutable slice of references to the initialized channel data buffers.
+    ///
+    /// This method provides access to the underlying audio data as a slice of mutable slices,
+    /// with each inner slice representing one audio channel.
     #[inline]
     pub fn data_slice_mut(&mut self) -> &mut [&'a mut [S]] {
         let initialized_part: &mut [MaybeUninit<&'a mut [S]>] =
@@ -302,6 +385,15 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
         }
     }
 
+    /// Creates a safe [`StackedViewMut`] for accessing the audio data.
+    ///
+    /// This provides a convenient way to interact with the audio data through
+    /// the full [`AudioBlockMut`] interface, enabling operations like iterating
+    /// through channels or frames and modifying the underlying audio samples.
+    ///
+    /// # Returns
+    ///
+    /// A [`StackedViewMut`] that provides safe, mutable access to the audio data.
     #[nonblocking]
     pub fn stacked_view_mut(&mut self) -> StackedViewMut<'a, S, &mut [S]> {
         StackedViewMut::from_slice(self.data_slice_mut())

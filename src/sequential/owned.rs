@@ -8,13 +8,32 @@ use std::{boxed::Box, vec, vec::Vec};
 #[cfg(all(feature = "std", feature = "alloc"))]
 use std::{boxed::Box, vec, vec::Vec};
 
+use super::{view::SequentialView, view_mut::SequentialViewMut};
 use crate::{
     AudioBlock, AudioBlockMut, Sample,
-    iter::{InterleavedDataIter, InterleavedDataIterMut},
+    iter::{StridedSampleIter, StridedSampleIterMut},
 };
 
-use super::{view::SequentialView, view_mut::SequentialViewMut};
-
+/// A sequential / planar audio block that owns its data.
+///
+/// * **Layout:** `[ch0, ch0, ch0, ch1, ch1, ch1]`
+/// * **Interpretation:** All samples from `ch0` are stored first, followed by all from `ch1`, etc.
+/// * **Terminology:** Described as “planar” or “channels first” in the sense that all data for one channel appears before any data for the next.
+/// * **Usage:** Used in DSP pipelines where per-channel processing is easier and more efficient.
+///
+/// # Example
+///
+/// ```
+/// use audio_blocks::*;
+///
+/// let block = Sequential::new(2, 3);
+/// let mut block = Sequential::from_block(&block);
+///
+/// block.channel_mut(0).for_each(|v| *v = 0.0);
+/// block.channel_mut(1).for_each(|v| *v = 1.0);
+///
+/// assert_eq!(block.raw_data(None), &[0.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
+/// ```
 pub struct Sequential<S: Sample> {
     data: Box<[S]>,
     num_channels: u16,
@@ -24,6 +43,22 @@ pub struct Sequential<S: Sample> {
 }
 
 impl<S: Sample> Sequential<S> {
+    /// Creates a new [`Sequential`] audio block with the specified dimensions.
+    ///
+    /// Allocates memory for a new sequential audio block with exactly the specified
+    /// number of channels and frames. The block is initialized with the default value
+    /// for the sample type.
+    ///
+    /// Do not use in real-time processes!
+    ///
+    /// # Arguments
+    ///
+    /// * `num_channels` - The number of audio channels
+    /// * `num_frames` - The number of frames per channel
+    ///
+    /// # Panics
+    ///
+    /// Panics if the multiplication of `num_channels` and `num_frames` would overflow a usize.
     #[blocking]
     pub fn new(num_channels: u16, num_frames: usize) -> Self {
         let total_samples = (num_channels as usize)
@@ -38,12 +73,23 @@ impl<S: Sample> Sequential<S> {
         }
     }
 
+    /// Creates a new [`Sequential`] audio block by copying data from another [`AudioBlock`](crate::AudioBlock).
+    ///
+    /// Converts any [`AudioBlock`](crate::AudioBlock) implementation to a sequential format by iterating
+    /// through each channel of the source block and copying its samples. The new block
+    /// will have the same dimensions as the source block.
+    ///
+    /// # Warning
+    ///
+    /// This function allocates memory and should not be used in real-time audio processing contexts.
+    ///
+    /// # Arguments
+    ///
+    /// * `block` - The source audio block to copy data from
     #[blocking]
     pub fn from_block(block: &impl AudioBlock<S>) -> Self {
         let mut data = Vec::with_capacity(block.num_channels() as usize * block.num_frames());
-        for i in 0..block.num_channels() {
-            block.channel(i).for_each(|&v| data.push(v));
-        }
+        block.channels().for_each(|c| c.for_each(|&v| data.push(v)));
         Self {
             data: data.into_boxed_slice(),
             num_channels: block.num_channels(),
@@ -136,7 +182,7 @@ impl<S: Sample> AudioBlock<S> for Sequential<S> {
                 unsafe { data_ptr.add(frame_idx) }
             };
 
-            InterleavedDataIter::<'_, S> {
+            StridedSampleIter::<'_, S> {
                 // Note: '_ lifetime from &self borrow
                 // Safety: Pointer is either dangling (if empty) or valid start pointer.
                 // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
@@ -165,8 +211,7 @@ impl<S: Sample> AudioBlock<S> for Sequential<S> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, ch: Option<u16>) -> &[S] {
-        assert!(ch.is_none());
+    fn raw_data(&self, _: Option<u16>) -> &[S] {
         &self.data
     }
 }
@@ -239,7 +284,7 @@ impl<S: Sample> AudioBlockMut<S> for Sequential<S> {
                 unsafe { data_ptr.add(frame_idx) }
             };
 
-            InterleavedDataIterMut::<'_, S> {
+            StridedSampleIterMut::<'_, S> {
                 // Note: '_ lifetime from &self borrow
                 // Safety: Pointer is either dangling (if empty) or valid start pointer.
                 // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
@@ -263,8 +308,7 @@ impl<S: Sample> AudioBlockMut<S> for Sequential<S> {
     }
 
     #[nonblocking]
-    fn raw_data_mut(&mut self, ch: Option<u16>) -> &mut [S] {
-        assert!(ch.is_none());
+    fn raw_data_mut(&mut self, _: Option<u16>) -> &mut [S] {
         &mut self.data
     }
 }
