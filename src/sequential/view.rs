@@ -1,9 +1,28 @@
-use core::{marker::PhantomData, ptr::NonNull};
-
 use rtsan_standalone::nonblocking;
 
-use crate::{AudioBlock, Sample, iter::InterleavedDataIter};
+use core::{marker::PhantomData, ptr::NonNull};
 
+use crate::{AudioBlock, Sample, iter::StridedSampleIter};
+
+/// A read-only view of sequential / planar audio data.
+///
+/// * **Layout:** `[ch0, ch0, ch0, ch1, ch1, ch1]`
+/// * **Interpretation:** All samples from `ch0` are stored first, followed by all from `ch1`, etc.
+/// * **Terminology:** Described as “planar” or “channels first” in the sense that all data for one channel appears before any data for the next.
+/// * **Usage:** Used in DSP pipelines where per-channel processing is easier and more efficient.
+///
+/// # Example
+///
+/// ```
+/// use audio_blocks::*;
+///
+/// let data = vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0];
+///
+/// let block = SequentialView::from_slice(&data, 2, 3);
+///
+/// block.channel(0).for_each(|&v| assert_eq!(v, 0.0));
+/// block.channel(1).for_each(|&v| assert_eq!(v, 1.0));
+/// ```
 pub struct SequentialView<'a, S: Sample> {
     data: &'a [S],
     num_channels: u16,
@@ -13,6 +32,15 @@ pub struct SequentialView<'a, S: Sample> {
 }
 
 impl<'a, S: Sample> SequentialView<'a, S> {
+    /// Creates a new [`SequentialView`] from a slice of sequential audio data.
+    ///
+    /// # Parameters
+    /// * `data` - The slice containing sequential audio samples
+    /// * `num_channels` - Number of audio channels in the data
+    /// * `num_frames` - Number of audio frames in the data
+    ///
+    /// # Panics
+    /// Panics if the length of `data` doesn't equal `num_channels * num_frames`.
     #[nonblocking]
     pub fn from_slice(data: &'a [S], num_channels: u16, num_frames: usize) -> Self {
         assert_eq!(data.len(), num_channels as usize * num_frames);
@@ -25,6 +53,22 @@ impl<'a, S: Sample> SequentialView<'a, S> {
         }
     }
 
+    /// Creates a new [`SequentialView`] from a slice with limited visibility.
+    ///
+    /// This function allows creating a view that exposes only a subset of the allocated channels
+    /// and frames, which is useful for working with a logical section of a larger buffer.
+    ///
+    /// # Parameters
+    /// * `data` - The slice containing sequential audio samples
+    /// * `num_channels_visible` - Number of audio channels to expose in the view
+    /// * `num_frames_visible` - Number of audio frames to expose in the view
+    /// * `num_channels_allocated` - Total number of channels allocated in the data buffer
+    /// * `num_frames_allocated` - Total number of frames allocated in the data buffer
+    ///
+    /// # Panics
+    /// * Panics if the length of `data` doesn't equal `num_channels_allocated * num_frames_allocated`
+    /// * Panics if `num_channels_visible` exceeds `num_channels_allocated`
+    /// * Panics if `num_frames_visible` exceeds `num_frames_allocated`
     #[nonblocking]
     pub fn from_slice_limited(
         data: &'a [S],
@@ -46,7 +90,7 @@ impl<'a, S: Sample> SequentialView<'a, S> {
         }
     }
 
-    /// Creates a new `SequentialView` from a raw pointers.
+    /// Creates a new [`SequentialView`] from a raw pointers.
     ///
     /// # Safety
     ///
@@ -65,7 +109,7 @@ impl<'a, S: Sample> SequentialView<'a, S> {
         }
     }
 
-    /// Creates a new `SequentialView` from a pointer with a limited amount of channels and/or frames.
+    /// Creates a new [`SequentialView`] from a pointer with a limited amount of channels and/or frames.
     ///
     /// # Safety
     ///
@@ -180,7 +224,7 @@ impl<S: Sample> AudioBlock<S> for SequentialView<'_, S> {
                 unsafe { data_ptr.add(frame_idx) }
             };
 
-            InterleavedDataIter::<'_, S> {
+            StridedSampleIter::<'_, S> {
                 // Note: '_ lifetime from &self borrow
                 // Safety: Pointer is either dangling (if empty) or valid start pointer.
                 // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
@@ -209,8 +253,7 @@ impl<S: Sample> AudioBlock<S> for SequentialView<'_, S> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, ch: Option<u16>) -> &[S] {
-        assert!(ch.is_none());
+    fn raw_data(&self, _: Option<u16>) -> &[S] {
         self.data
     }
 }

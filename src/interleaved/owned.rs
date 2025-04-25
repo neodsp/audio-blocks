@@ -1,8 +1,3 @@
-use super::{view::InterleavedView, view_mut::InterleavedViewMut};
-use crate::{
-    AudioBlock, AudioBlockMut, Sample,
-    iter::{InterleavedDataIter, InterleavedDataIterMut},
-};
 use rtsan_standalone::{blocking, nonblocking};
 
 #[cfg(all(feature = "alloc", not(feature = "std")))]
@@ -13,7 +8,32 @@ use std::{boxed::Box, vec, vec::Vec};
 #[cfg(all(feature = "std", feature = "alloc"))]
 use std::{boxed::Box, vec, vec::Vec};
 
-#[derive(Clone)]
+use super::{view::InterleavedView, view_mut::InterleavedViewMut};
+use crate::{
+    AudioBlock, AudioBlockMut, Sample,
+    iter::{StridedSampleIter, StridedSampleIterMut},
+};
+
+/// An interleaved audio block that owns its data.
+///
+/// * **Layout:** `[ch0, ch1, ch0, ch1, ch0, ch1]`
+/// * **Interpretation:** Each group of channel samples represents a frame. So, this layout stores frames one after another.
+/// * **Terminology:** Described as “packed” or “frames first” because each time step is grouped and processed as a unit (a frame).
+/// * **Usage:** Often used in APIs or hardware-level interfaces, where synchronized playback across channels is crucial.
+///
+/// # Example
+///
+/// ```
+/// use audio_blocks::*;
+///
+/// let block = Interleaved::new(2, 3);
+/// let mut block = Interleaved::from_block(&block);
+///
+/// block.channel_mut(0).for_each(|v| *v = 0.0);
+/// block.channel_mut(1).for_each(|v| *v = 1.0);
+///
+/// assert_eq!(block.raw_data(None), &[0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
+/// ```
 pub struct Interleaved<S: Sample> {
     data: Box<[S]>,
     num_channels: u16,
@@ -23,6 +43,22 @@ pub struct Interleaved<S: Sample> {
 }
 
 impl<S: Sample> Interleaved<S> {
+    /// Creates a new [`Interleaved`] audio block with the specified dimensions.
+    ///
+    /// Allocates memory for a new interleaved audio block with exactly the specified
+    /// number of channels and frames. The block is initialized with the default value
+    /// for the sample type.
+    ///
+    /// Do not use in real-time processes!
+    ///
+    /// # Arguments
+    ///
+    /// * `num_channels` - The number of audio channels
+    /// * `num_frames` - The number of frames per channel
+    ///
+    /// # Panics
+    ///
+    /// Panics if the multiplication of `num_channels` and `num_frames` would overflow a usize.
     #[blocking]
     pub fn new(num_channels: u16, num_frames: usize) -> Self {
         let total_samples = (num_channels as usize)
@@ -33,17 +69,28 @@ impl<S: Sample> Interleaved<S> {
             data: vec![S::default(); total_samples].into_boxed_slice(),
             num_channels,
             num_frames,
-            num_channels_allocated: num_channels, // Assuming allocation matches exactly
-            num_frames_allocated: num_frames,     // Assuming allocation matches exactly
+            num_channels_allocated: num_channels,
+            num_frames_allocated: num_frames,
         }
     }
 
+    /// Creates a new [`Interleaved`] audio block by copying data from another [`AudioBlock`].
+    ///
+    /// Converts any [`AudioBlock`] implementation to an interleaved format by iterating
+    /// through each frame of the source block and copying its samples. The new block
+    /// will have the same dimensions as the source block.
+    ///
+    /// # Warning
+    ///
+    /// This function allocates memory and should not be used in real-time audio processing contexts.
+    ///
+    /// # Arguments
+    ///
+    /// * `block` - The source audio block to copy data from
     #[blocking]
     pub fn from_block(block: &impl AudioBlock<S>) -> Self {
         let mut data = Vec::with_capacity(block.num_channels() as usize * block.num_frames());
-        for i in 0..block.num_frames() {
-            block.frame(i).for_each(|&v| data.push(v));
-        }
+        block.frames().for_each(|f| f.for_each(|&v| data.push(v)));
         Self {
             data: data.into_boxed_slice(),
             num_channels: block.num_channels(),
@@ -122,7 +169,7 @@ impl<S: Sample> AudioBlock<S> for Interleaved<S> {
             // We rely on effective_num_frames == 0 when data is empty.
             let start_ptr = unsafe { data_ptr.add(channel_idx) };
 
-            InterleavedDataIter::<'_, S> {
+            StridedSampleIter::<'_, S> {
                 // Safety: Cast to *mut S for NonNull::new.
                 // If effective_num_frames is 0, ptr can be dangling (NonNull::dangling()).
                 // If effective_num_frames > 0, data is not empty, start_ptr is valid and non-null.
@@ -170,8 +217,7 @@ impl<S: Sample> AudioBlock<S> for Interleaved<S> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, ch: Option<u16>) -> &[S] {
-        assert!(ch.is_none());
+    fn raw_data(&self, _: Option<u16>) -> &[S] {
         &self.data
     }
 }
@@ -222,7 +268,7 @@ impl<S: Sample> AudioBlockMut<S> for Interleaved<S> {
             // Safety: Same reasoning as the immutable version applies.
             let start_ptr = unsafe { data_ptr.add(channel_idx) };
 
-            InterleavedDataIterMut::<'_, S> {
+            StridedSampleIterMut::<'_, S> {
                 // Safety: Same reasoning as the immutable version applies.
                 ptr: NonNull::new(start_ptr).unwrap_or(NonNull::dangling()),
                 stride,
@@ -263,8 +309,7 @@ impl<S: Sample> AudioBlockMut<S> for Interleaved<S> {
     }
 
     #[nonblocking]
-    fn raw_data_mut(&mut self, ch: Option<u16>) -> &mut [S] {
-        assert!(ch.is_none());
+    fn raw_data_mut(&mut self, _: Option<u16>) -> &mut [S] {
         &mut self.data
     }
 }
