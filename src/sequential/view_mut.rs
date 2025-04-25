@@ -53,7 +53,7 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
         }
     }
 
-    /// Creates a new `SequentialViewMut` from raw parts.
+    /// Creates a new `SequentialViewMut` from a pointer.
     ///
     /// # Safety
     ///
@@ -62,7 +62,7 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
     /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
     /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]
-    pub unsafe fn from_raw(ptr: *mut S, num_channels: u16, num_frames: usize) -> Self {
+    pub unsafe fn from_ptr(ptr: *mut S, num_channels: u16, num_frames: usize) -> Self {
         Self {
             data: unsafe {
                 std::slice::from_raw_parts_mut(ptr, num_channels as usize * num_frames)
@@ -74,7 +74,7 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
         }
     }
 
-    /// Creates a new `SequentialViewMut` from raw parts with a limited amount of channels and/or frames.
+    /// Creates a new `SequentialViewMut` from a pointer with a limited amount of channels and/or frames.
     ///
     /// # Safety
     ///
@@ -83,7 +83,7 @@ impl<'a, S: Sample> SequentialViewMut<'a, S> {
     /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
     /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]
-    pub unsafe fn from_raw_limited(
+    pub unsafe fn from_ptr_limited(
         ptr: *mut S,
         num_channels_visible: u16,
         num_frames_visible: usize,
@@ -214,7 +214,7 @@ impl<S: Sample> AudioBlock<S> for SequentialViewMut<'_, S> {
 
     #[nonblocking]
     fn layout(&self) -> crate::BlockLayout {
-        crate::BlockLayout::Planar
+        crate::BlockLayout::Sequential
     }
 
     #[nonblocking]
@@ -570,7 +570,7 @@ mod tests {
     #[test]
     fn test_from_raw() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = unsafe { SequentialViewMut::<f32>::from_raw(data.as_mut_ptr(), 2, 5) };
+        let block = unsafe { SequentialViewMut::<f32>::from_ptr(data.as_mut_ptr(), 2, 5) };
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated, 2);
         assert_eq!(block.num_frames(), 5);
@@ -595,7 +595,7 @@ mod tests {
         let mut data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
 
         let mut block =
-            unsafe { SequentialViewMut::from_raw_limited(data.as_mut_ptr(), 2, 3, 3, 4) };
+            unsafe { SequentialViewMut::from_ptr_limited(data.as_mut_ptr(), 2, 3, 3, 4) };
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -617,7 +617,7 @@ mod tests {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let mut block = SequentialViewMut::<f32>::from_slice(&mut data, 2, 5);
 
-        assert_eq!(block.layout(), crate::BlockLayout::Planar);
+        assert_eq!(block.layout(), crate::BlockLayout::Sequential);
 
         assert_eq!(
             block.raw_data(None),

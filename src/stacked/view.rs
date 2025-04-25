@@ -15,17 +15,17 @@ pub struct StackedView<'a, S: Sample, V: AsRef<[S]>> {
 
 impl<'a, S: Sample, V: AsRef<[S]>> StackedView<'a, S, V> {
     #[nonblocking]
-    pub fn from_slices(data: &'a [V]) -> Self {
+    pub fn from_slice(data: &'a [V]) -> Self {
         let num_frames_available = if data.is_empty() {
             0
         } else {
             data[0].as_ref().len()
         };
-        Self::from_slices_limited(data, data.len() as u16, num_frames_available)
+        Self::from_slice_limited(data, data.len() as u16, num_frames_available)
     }
 
     #[nonblocking]
-    pub fn from_slices_limited(
+    pub fn from_slice_limited(
         data: &'a [V],
         num_channels_visible: u16,
         num_frames_visible: usize,
@@ -142,7 +142,7 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        StackedView::<S, V>::from_slices_limited(self.data, self.num_channels, self.num_frames)
+        StackedView::<S, V>::from_slice_limited(self.data, self.num_channels, self.num_frames)
     }
 
     #[nonblocking]
@@ -175,7 +175,7 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHAN
     /// - The data must not be modified through other pointers for the lifetime of the returned adapter
     #[nonblocking]
     #[nonblocking]
-    pub unsafe fn new(ptr: *const *const S, num_channels: u16, num_frames: usize) -> Self {
+    pub unsafe fn from_ptr(ptr: *const *const S, num_channels: u16, num_frames: usize) -> Self {
         assert!(
             num_channels as usize <= MAX_CHANNELS,
             "num_channels exceeds MAX_CHANNELS"
@@ -197,7 +197,7 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHAN
     }
 
     #[inline]
-    pub fn data_slices(&self) -> &[&'a [S]] {
+    pub fn data_slice(&self) -> &[&'a [S]] {
         let initialized_part: &[MaybeUninit<&'a [S]>] = &self.data[..self.num_channels as usize];
         // SAFETY: See previous explanation for this conversion
         unsafe {
@@ -210,7 +210,7 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHAN
 
     #[nonblocking]
     pub fn stacked_view(&self) -> StackedView<'a, S, &[S]> {
-        StackedView::from_slices(self.data_slices())
+        StackedView::from_slice(self.data_slice())
     }
 }
 
@@ -220,10 +220,10 @@ mod tests {
 
     #[test]
     fn test_samples() {
-        let ch1 = vec![0.0, 1.0, 2.0, 3.0, 4.0];
-        let ch2 = vec![5.0, 6.0, 7.0, 8.0, 9.0];
-        let data = [ch1.as_slice(), ch2.as_slice()];
-        let block = StackedView::from_slices(&data);
+        let ch1 = &[0.0, 1.0, 2.0, 3.0, 4.0];
+        let ch2 = &[5.0, 6.0, 7.0, 8.0, 9.0];
+        let data = [ch1, ch2];
+        let block = StackedView::from_slice(&data);
 
         for ch in 0..block.num_channels() {
             for f in 0..block.num_frames() {
@@ -239,8 +239,8 @@ mod tests {
     fn test_channel() {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
-        let data = vec![ch1.as_slice(), ch2.as_slice()];
-        let block = StackedView::from_slices(&data);
+        let data = vec![ch1, ch2];
+        let block = StackedView::from_slice(&data);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 2.0, 4.0, 6.0, 8.0]);
@@ -252,8 +252,8 @@ mod tests {
     fn test_channels() {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
-        let data = vec![ch1.as_slice(), ch2.as_slice()];
-        let block = StackedView::from_slices(&data);
+        let data = vec![ch1, ch2];
+        let block = StackedView::from_slice(&data);
 
         let mut channels_iter = block.channels();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -269,7 +269,7 @@ mod tests {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
         let data = vec![ch1.as_slice(), ch2.as_slice()];
-        let block = StackedView::from_slices(&data);
+        let block = StackedView::from_slice(&data);
 
         let channel = block.frame(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0]);
@@ -288,7 +288,7 @@ mod tests {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
         let data = vec![ch1.as_slice(), ch2.as_slice()];
-        let block = StackedView::from_slices(&data);
+        let block = StackedView::from_slice(&data);
 
         let mut frames_iter = block.frames();
         let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn test_from_vec() {
         let vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = StackedView::from_slices(&vec);
+        let block = StackedView::from_slice(&vec);
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 5);
         assert_eq!(
@@ -328,7 +328,7 @@ mod tests {
     #[test]
     fn test_view() {
         let vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = StackedView::from_slices(&vec);
+        let block = StackedView::from_slice(&vec);
         let view = block.view();
         assert_eq!(
             view.channel(0).copied().collect::<Vec<_>>(),
@@ -344,7 +344,7 @@ mod tests {
     fn test_limited() {
         let data = vec![vec![0.0; 4]; 3];
 
-        let block = StackedView::from_slices_limited(&data, 2, 3);
+        let block = StackedView::from_slice_limited(&data, 2, 3);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -370,7 +370,7 @@ mod tests {
                 vec.iter_mut().map(|inner_vec| inner_vec.as_ptr()).collect();
             let ptr = ptr_vec.as_ptr();
 
-            let adapter = StackedPtrAdapter::<_, 16>::new(ptr, num_channels, num_frames);
+            let adapter = StackedPtrAdapter::<_, 16>::from_ptr(ptr, num_channels, num_frames);
             let stacked = adapter.stacked_view();
 
             assert_eq!(
@@ -388,7 +388,7 @@ mod tests {
     #[test]
     fn test_raw_data() {
         let vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = StackedView::from_slices(&vec);
+        let block = StackedView::from_slice(&vec);
 
         assert_eq!(block.layout(), crate::BlockLayout::Stacked);
 

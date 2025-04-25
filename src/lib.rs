@@ -10,7 +10,6 @@ extern crate core as std;
 #[cfg(feature = "std")]
 extern crate std;
 
-use num_traits::Float;
 pub use ops::Ops;
 
 pub mod interleaved;
@@ -19,47 +18,46 @@ pub mod ops;
 pub mod sequential;
 pub mod stacked;
 
-pub trait Sample: Float + 'static {}
-impl Sample for f32 {}
-impl Sample for f64 {}
-
 #[derive(PartialEq, Debug)]
 pub enum BlockLayout {
-    Planar,
     Interleaved,
+    Sequential,
     Stacked,
 }
 
-pub trait AudioBlock<S: Sample> {
+pub trait Sample: Copy + Default + 'static {}
+impl<T> Sample for T where T: Copy + Default + 'static {}
+
+pub trait AudioBlock<T: Sample> {
     fn num_channels(&self) -> u16;
     fn num_frames(&self) -> usize;
     fn num_channels_allocated(&self) -> u16;
     fn num_frames_allocated(&self) -> usize;
-    fn sample(&self, channel: u16, frame: usize) -> S;
-    fn channel(&self, channel: u16) -> impl Iterator<Item = &S>;
-    fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
-    fn frame(&self, frame: usize) -> impl Iterator<Item = &S>;
-    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
-    fn view(&self) -> impl AudioBlock<S>;
+    fn sample(&self, channel: u16, frame: usize) -> T;
+    fn channel(&self, channel: u16) -> impl Iterator<Item = &T>;
+    fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &T> + '_> + '_;
+    fn frame(&self, frame: usize) -> impl Iterator<Item = &T>;
+    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &T> + '_> + '_;
+    fn view(&self) -> impl AudioBlock<T>;
     fn layout(&self) -> BlockLayout;
     /// In case of Layout::Stacked, this will return just one channel.
     /// Otherwise you will get all data in interleaved or planar layout.
     /// The returned slice includes all allocated data and not only the one
     /// that should be visible.
-    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
+    fn raw_data(&self, stacked_ch: Option<u16>) -> &[T];
 }
 
-pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
+pub trait AudioBlockMut<T: Sample>: AudioBlock<T> {
     fn resize(&mut self, num_channels: u16, num_frames: usize);
-    fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S;
-    fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
-    fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
-    fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
-    fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
-    fn view_mut(&mut self) -> impl AudioBlockMut<S>;
+    fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut T;
+    fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut T>;
+    fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut T> + '_> + '_;
+    fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut T>;
+    fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut T> + '_> + '_;
+    fn view_mut(&mut self) -> impl AudioBlockMut<T>;
     /// In case of Layout::Stacked, this will return just one channel.
     /// Otherwise you will get all data in interleaved or planar layout.
     /// The returned slice includes all allocated data and not only the one
     /// that should be visible.
-    fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
+    fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [T];
 }
