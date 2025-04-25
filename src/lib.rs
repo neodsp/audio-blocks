@@ -30,7 +30,7 @@
 //!
 //! As you mostly don't want your process function to work with any kind of number type, you can write a specialized process block, expecting only `f32` samples.
 //!
-//! ```rust
+//! ```ignore
 //! fn process(block: &mut impl AudioBlockMut<f32>) {
 //!     for channel in block.channels_mut() {
 //!         for sample in channel {
@@ -42,7 +42,7 @@
 //!
 //! or you can write a generic process block which works on all floating point values (`f32`, `f64` and optionally `half::f16`) by using the `Float` trait from the `num` or `num_traits` crate:
 //!
-//! ```rust
+//! ```ignore
 //! use num_traits::Float;
 //!
 //! fn process<F: Float>(block: &mut impl AudioBlockMut<F>) {
@@ -62,7 +62,7 @@
 //!
 //! ### [`AudioBlock`]
 //!
-//! ```rust
+//! ```ignore
 //! fn num_channels(&self) -> u16;
 //! fn num_frames(&self) -> usize;
 //! fn num_channels_allocated(&self) -> u16;
@@ -80,7 +80,7 @@
 //!
 //! contains all of the non-mutable functions plus:
 //!
-//! ```rust
+//! ```ignore
 //! fn resize(&mut self, num_channels: u16, num_frames: usize);
 //! fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S;
 //! fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
@@ -95,7 +95,7 @@
 //!
 //! There are multiple operations defined on audio blocks, which allow copying data between them and applying an operation on each sample.
 //!
-//! ```rust
+//! ```ignore
 //! fn copy_from_block(&mut self, block: &impl AudioBlock<S>);
 //! fn copy_from_block_resize(&mut self, block: &impl AudioBlock<S>);
 //! fn for_each(&mut self, f: impl FnMut(&mut S));
@@ -115,7 +115,7 @@
 //! * [`Sequential`]
 //! * [`Stacked`]
 //!
-//! ```rust
+//! ```ignore
 //! fn new(num_channels: u16, num_frames: usize) -> Self;
 //! fn from_block(block: &impl AudioBlock<S>) -> Self;
 //! ```
@@ -127,21 +127,21 @@
 //! * [`SequentialView`] / [`SequentialViewMut`]
 //! * [`StackedView`] / [`StackedViewMut`]
 //!
-//! ```rust
+//! ```ignore
 //! fn from_slice(data: &'a [S], num_channels: u16, num_frames: usize) -> Self;
 //! fn from_slice_limited(data: &'a [S], num_channels_visible: u16, num_frames_visible: usize, num_channels_allocated: u16, num_frames_allocated: usize) -> Self;
 //! ```
 //!
 //! Interleaved and sequential blocks can be directly generated from pointers:
 //!
-//! ```rust
+//! ```ignore
 //! unsafe fn from_ptr(data: *const S, num_channels: u16, num_frames: usize) -> Self;
 //! unsafe fn from_ptr_limited(data: *const S, num_channels_visible: u16, num_frames_visible: usize, num_channels_allocated: u16, num_frames_allocated: usize) -> Self;
 //! ```
 //!
 //! Stacked blocks can only be generated from pointers using [`StackedPtrAdapter`]:
 //!
-//! ```rust
+//! ```ignore
 //! let mut adapter = unsafe { StackedPtrAdapter::<_, 16>::from_ptr(data, num_channels, num_frames) };
 //! let block = adapter.stacked_view();
 //! ```
@@ -157,7 +157,7 @@
 //!
 //! Here you see how you adapt your block size to incoming blocks with changing sizes if you need to copy the data for any reason:
 //!
-//! ```rust
+//! ```ignore
 //! fn process(&mut self, other_block: &mut impl AudioBlock<f32>) {
 //!     self.block.copy_from_block_resize(other_block);
 //! }
@@ -355,7 +355,7 @@ pub trait AudioBlock<T: Sample> {
     /// # Parameters
     ///
     /// * `stacked_ch` - For `Layout::Stacked`, specifies which channel to access (required).
-    ///                  For other layouts, this parameter is ignored.
+    /// For other layouts, this parameter is ignored.
     ///
     /// # Returns
     ///
@@ -456,7 +456,7 @@ pub trait AudioBlockMut<T: Sample>: AudioBlock<T> {
     /// # Parameters
     ///
     /// * `stacked_ch` - For `BlockLayout::Stacked`, specifies which channel to access (required).
-    ///                  For other layouts, this parameter is ignored.
+    /// For other layouts, this parameter is ignored.
     ///
     /// # Returns
     ///
