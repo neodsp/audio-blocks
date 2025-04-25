@@ -355,7 +355,7 @@ pub trait AudioBlock<T: Sample> {
     /// # Parameters
     ///
     /// * `stacked_ch` - For `Layout::Stacked`, specifies which channel to access (required).
-    /// For other layouts, this parameter is ignored.
+    ///   For other layouts, this parameter is ignored.
     ///
     /// # Returns
     ///
@@ -456,7 +456,7 @@ pub trait AudioBlockMut<T: Sample>: AudioBlock<T> {
     /// # Parameters
     ///
     /// * `stacked_ch` - For `BlockLayout::Stacked`, specifies which channel to access (required).
-    /// For other layouts, this parameter is ignored.
+    ///   For other layouts, this parameter is ignored.
     ///
     /// # Returns
     ///
