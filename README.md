@@ -1,5 +1,7 @@
 # Audio Blocks
 
+![image](docs/audio-blocks-logo.png)
+
 This crate provides traits for audio blocks to generalize common problems in handling audio data, like different channel layouts and varying number of samples.
 You will get `Interleaved`, `Sequential` and `Stacked` blocks and you can select where the data is stored by choosing between `Owned`, `View` and `ViewMut`.
 Owned blocks will store the data on the heap, while views can be created over slices or raw pointers.
