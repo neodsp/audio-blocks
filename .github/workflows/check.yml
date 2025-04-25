@@ -94,7 +94,7 @@ jobs:
       # - name: Install cargo-docs-rs
       #   uses: dtolnay/install@cargo-docs-rs
       - name: Doc warnings
-        run: RUSTDOCFLAGS="--deny warnings" cargo doc --locked -- --document-private-items
+        run: RUSTDOCFLAGS="--deny warnings" cargo doc --locked --document-private-items
       # - name: cargo docs-rs
       #   run: cargo docs-rs
   hack:
