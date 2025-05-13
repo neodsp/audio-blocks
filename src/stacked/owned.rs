@@ -197,6 +197,12 @@ impl<S: Sample> AudioBlock<S> for Stacked<S> {
     }
 
     #[nonblocking]
+    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
+        assert!(channel < self.num_channels);
+        Some(&self.data[channel as usize].as_ref()[..self.num_frames])
+    }
+
+    #[nonblocking]
     fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
         let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
         assert!(ch < self.num_channels_allocated);
@@ -281,6 +287,12 @@ impl<S: Sample> AudioBlockMut<S> for Stacked<S> {
     #[nonblocking]
     fn view_mut(&mut self) -> impl AudioBlockMut<S> {
         StackedViewMut::from_slice_limited(&mut self.data, self.num_channels, self.num_frames)
+    }
+
+    #[nonblocking]
+    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
+        assert!(channel < self.num_channels);
+        Some(&mut self.data[channel as usize].as_mut()[..self.num_frames])
     }
 
     #[nonblocking]
@@ -599,6 +611,37 @@ mod tests {
         let mut block = Stacked::<f32>::new(2, 10);
         block.resize(2, 5);
         let _ = block.frame_mut(5);
+    }
+
+    #[test]
+    fn test_slice() {
+        let mut block = Stacked::<f32>::new(3, 4);
+        block.resize(2, 3);
+
+        assert!(block.frame_slice(0).is_none());
+
+        block.channel_slice_mut(0).unwrap().fill(1.0);
+        block.channel_slice_mut(1).unwrap().fill(2.0);
+        assert_eq!(block.channel_slice(0).unwrap(), &[1.0; 3]);
+        assert_eq!(block.channel_slice(1).unwrap(), &[2.0; 3]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_slice_out_of_bounds() {
+        let mut block = Stacked::<f32>::new(3, 4);
+        block.resize(2, 3);
+
+        block.channel_slice(2);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_slice_out_of_bounds_mut() {
+        let mut block = Stacked::<f32>::new(3, 4);
+        block.resize(2, 3);
+
+        block.channel_slice_mut(2);
     }
 
     #[test]

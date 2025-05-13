@@ -191,6 +191,12 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
     }
 
     #[nonblocking]
+    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
+        assert!(channel < self.num_channels);
+        Some(&self.data[channel as usize].as_ref()[..self.num_frames])
+    }
+
+    #[nonblocking]
     fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
         let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
         assert!(ch < self.num_channels_allocated);
@@ -472,6 +478,26 @@ mod tests {
                 vec![1.0, 3.0, 5.0, 7.0, 9.0]
             );
         }
+    }
+
+    #[test]
+    fn test_slice() {
+        let data = [[1.0; 4], [2.0; 4], [0.0; 4]];
+        let block = StackedView::from_slice_limited(&data, 2, 3);
+
+        assert!(block.frame_slice(0).is_none());
+
+        assert_eq!(block.channel_slice(0).unwrap(), &[1.0; 3]);
+        assert_eq!(block.channel_slice(1).unwrap(), &[2.0; 3]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_slice_out_of_bounds() {
+        let data = [[1.0; 4], [2.0; 4], [0.0; 4]];
+        let block = StackedView::from_slice_limited(&data, 2, 3);
+
+        block.channel_slice(2);
     }
 
     #[test]

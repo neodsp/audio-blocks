@@ -197,6 +197,12 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for StackedViewMut<'_,
     }
 
     #[nonblocking]
+    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
+        assert!(channel < self.num_channels);
+        Some(&self.data[channel as usize].as_ref()[..self.num_frames])
+    }
+
+    #[nonblocking]
     fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
         let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
         assert!(ch < self.num_channels_allocated);
@@ -283,6 +289,12 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<
     #[nonblocking]
     fn view_mut(&mut self) -> impl AudioBlockMut<S> {
         StackedViewMut::from_slice_limited(self.data, self.num_channels, self.num_frames)
+    }
+
+    #[nonblocking]
+    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
+        assert!(channel < self.num_channels);
+        Some(&mut self.data[channel as usize].as_mut()[..self.num_frames])
     }
 
     #[nonblocking]
@@ -680,6 +692,37 @@ mod tests {
                 vec![1.0, 3.0, 5.0, 7.0, 9.0]
             );
         }
+    }
+
+    #[test]
+    fn test_slice() {
+        let mut data = [[0.0; 4]; 3];
+        let mut block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
+
+        assert!(block.frame_slice(0).is_none());
+
+        block.channel_slice_mut(0).unwrap().fill(1.0);
+        block.channel_slice_mut(1).unwrap().fill(2.0);
+        assert_eq!(block.channel_slice(0).unwrap(), &[1.0; 3]);
+        assert_eq!(block.channel_slice(1).unwrap(), &[2.0; 3]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_slice_out_of_bounds() {
+        let mut data = [[0.0; 4]; 3];
+        let block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
+
+        block.channel_slice(2);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_slice_out_of_bounds_mut() {
+        let mut data = [[0.0; 4]; 3];
+        let mut block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
+
+        block.channel_slice_mut(2);
     }
 
     #[test]

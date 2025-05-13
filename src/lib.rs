@@ -350,6 +350,18 @@ pub trait AudioBlock<T: Sample> {
     /// Returns the memory layout of this audio block (interleaved, sequential, or stacked).
     fn layout(&self) -> BlockLayout;
 
+    /// Returns a slice of the data in case of sequential or stacked layout.
+    fn channel_slice(&self, channel: u16) -> Option<&[T]> {
+        let _ = channel;
+        None
+    }
+
+    /// Returns a slice of the data in case of interleaved memory layout.
+    fn frame_slice(&self, frame: usize) -> Option<&[T]> {
+        let _ = frame;
+        None
+    }
+
     /// Provides direct access to the underlying memory as a slice.
     ///
     /// # Parameters
@@ -450,6 +462,18 @@ pub trait AudioBlockMut<T: Sample>: AudioBlock<T> {
     /// This operation is zero-cost (no allocation or copying) and real-time safe,
     /// as it returns a lightweight wrapper around the original data.
     fn view_mut(&mut self) -> impl AudioBlockMut<T>;
+
+    /// Returns a slice of the data in case of sequential or stacked layout.
+    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [T]> {
+        let _ = channel;
+        None
+    }
+
+    /// Returns a slice of the data in case of interleaved memory layout.
+    fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [T]> {
+        let _ = frame;
+        None
+    }
 
     /// Provides direct mutable access to the underlying memory as a slice.
     ///

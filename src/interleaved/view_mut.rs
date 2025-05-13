@@ -260,6 +260,14 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
+    fn frame_slice(&self, frame: usize) -> Option<&[S]> {
+        assert!(frame < self.num_frames);
+        let start = frame * self.num_channels_allocated as usize;
+        let end = start + self.num_channels as usize;
+        Some(&self.data[start..end])
+    }
+
+    #[nonblocking]
     fn raw_data(&self, _: Option<u16>) -> &[S] {
         self.data
     }
@@ -351,6 +359,14 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
             self.num_channels_allocated,
             self.num_frames_allocated,
         )
+    }
+
+    #[nonblocking]
+    fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [S]> {
+        assert!(frame < self.num_frames);
+        let start = frame * self.num_channels_allocated as usize;
+        let end = start + self.num_channels as usize;
+        Some(&mut self.data[start..end])
     }
 
     #[nonblocking]
@@ -645,6 +661,39 @@ mod tests {
             assert_eq!(block.frame(i).count(), 2);
             assert_eq!(block.frame_mut(i).count(), 2);
         }
+    }
+
+    #[test]
+    fn test_slice() {
+        // let mut data = [1.0, 2.0, 3.0, 0.0, 1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let mut data = [0.0; 12];
+        let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
+        assert!(block.channel_slice(0).is_none());
+
+        block.frame_slice_mut(0).unwrap().fill(1.0);
+        block.frame_slice_mut(1).unwrap().fill(2.0);
+        block.frame_slice_mut(2).unwrap().fill(3.0);
+        assert_eq!(block.frame_slice(0).unwrap(), &[1.0; 2]);
+        assert_eq!(block.frame_slice(1).unwrap(), &[2.0; 2]);
+        assert_eq!(block.frame_slice(2).unwrap(), &[3.0; 2]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_slice_out_of_bounds() {
+        let mut data = [0.0; 12];
+        let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
+        block.resize(2, 5);
+        block.frame_slice(5);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_slice_out_of_bounds_mut() {
+        let mut data = [0.0; 12];
+        let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
+        block.resize(2, 5);
+        block.frame_slice(5);
     }
 
     #[test]

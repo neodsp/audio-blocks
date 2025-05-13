@@ -211,6 +211,14 @@ impl<S: Sample> AudioBlock<S> for Sequential<S> {
     }
 
     #[nonblocking]
+    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
+        assert!(channel < self.num_channels);
+        let start = channel as usize * self.num_frames_allocated;
+        let end = start + self.num_frames;
+        Some(&self.data[start..end])
+    }
+
+    #[nonblocking]
     fn raw_data(&self, _: Option<u16>) -> &[S] {
         &self.data
     }
@@ -305,6 +313,14 @@ impl<S: Sample> AudioBlockMut<S> for Sequential<S> {
             self.num_channels_allocated,
             self.num_frames_allocated,
         )
+    }
+
+    #[nonblocking]
+    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
+        assert!(channel < self.num_channels);
+        let start = channel as usize * self.num_frames_allocated;
+        let end = start + self.num_frames;
+        Some(&mut self.data[start..end])
     }
 
     #[nonblocking]
@@ -536,6 +552,34 @@ mod tests {
             block.channel(1).copied().collect::<Vec<_>>(),
             vec![10.0, 11.0, 12.0, 13.0, 14.0]
         );
+    }
+
+    #[test]
+    fn test_slice() {
+        let mut block = Sequential::<f32>::new(3, 6);
+        block.resize(2, 5);
+        assert!(block.frame_slice(0).is_none());
+
+        block.channel_slice_mut(0).unwrap().fill(1.0);
+        block.channel_slice_mut(1).unwrap().fill(2.0);
+        assert_eq!(block.channel_slice(0).unwrap(), &[1.0; 5]);
+        assert_eq!(block.channel_slice(1).unwrap(), &[2.0; 5]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_slice_out_of_bounds() {
+        let mut block = Sequential::<f32>::new(3, 6);
+        block.resize(2, 5);
+        block.channel_slice(2);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_slice_out_of_bounds_mut() {
+        let mut block = Sequential::<f32>::new(3, 6);
+        block.resize(2, 5);
+        block.channel_slice_mut(2);
     }
 
     #[test]
