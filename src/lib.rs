@@ -190,6 +190,11 @@ pub trait AudioBlock<S: Sample> {
 
     /// Provides direct access to the underlying memory as a slice.
     ///
+    /// # Safety
+    ///
+    /// This function gives access to all allocated data, including any reserved capacity
+    /// beyond the active range, but it is safe in terms of memory safety.
+    ///
     /// # Parameters
     ///
     /// * `stacked_ch` - For `Layout::Stacked`, specifies which channel to access (required).
@@ -197,10 +202,9 @@ pub trait AudioBlock<S: Sample> {
     ///
     /// # Returns
     ///
-    /// A slice containing all allocated data, including any reserved capacity beyond
-    /// the visible/active range. The data format follows the block's layout:
-    /// - For `Interleaved`: returns interleaved samples across all channels
-    /// - For `Sequential`: returns planar data with all channels
+    /// A slice containing all allocated data. The data format follows the block's layout:
+    /// - For `Interleaved`: returns interleaved samples across all allocated channels
+    /// - For `Sequential`: returns planar data with all allocated channels
     /// - For `Stacked`: returns data for the specified channel only
     unsafe fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
 }
@@ -317,6 +321,11 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
 
     /// Provides direct mutable access to the underlying memory as a slice.
     ///
+    /// # Safety
+    ///
+    /// This function gives access to all allocated data, including any reserved capacity
+    /// beyond the active range, but it is safe in terms of memory safety.
+    ///
     /// # Parameters
     ///
     /// * `stacked_ch` - For `BlockLayout::Stacked`, specifies which channel to access (required).
@@ -324,10 +333,9 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     ///
     /// # Returns
     ///
-    /// A mutable slice containing all allocated data, including any reserved capacity beyond
-    /// the visible/active range. The data format follows the block's layout:
-    /// - For `Interleaved`: returns interleaved samples across all channels
-    /// - For `Sequential`: returns planar data with all channels
+    /// A mutable slice containing all allocated data. The data format follows the block's layout:
+    /// - For `Interleaved`: returns interleaved samples across all allocated channels
+    /// - For `Sequential`: returns planar data with all allocated channels
     /// - For `Stacked`: returns data for the specified channel only
     unsafe fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
 }
