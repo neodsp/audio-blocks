@@ -11,6 +11,7 @@ repository = "https://github.com/neodsp/audio-blocks"
 version = "0.1.0"
 
 [dependencies]
+num = { version = "0.4.3", default-features = false }
 rtsan-standalone = "0.1.2"
 
 [dev-dependencies]

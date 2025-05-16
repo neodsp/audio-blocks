@@ -238,6 +238,14 @@ impl<S: Sample> AudioBlock<S> for InterleavedView<'_, S> {
     }
 
     #[nonblocking]
+    fn frame_slice(&self, frame: usize) -> Option<&[S]> {
+        assert!(frame < self.num_frames);
+        let start = frame * self.num_channels_allocated as usize;
+        let end = start + self.num_channels as usize;
+        Some(&self.data[start..end])
+    }
+
+    #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
         InterleavedView::from_slice_limited(
             self.data,
@@ -251,14 +259,6 @@ impl<S: Sample> AudioBlock<S> for InterleavedView<'_, S> {
     #[nonblocking]
     fn layout(&self) -> crate::BlockLayout {
         crate::BlockLayout::Interleaved
-    }
-
-    #[nonblocking]
-    fn frame_slice(&self, frame: usize) -> Option<&[S]> {
-        assert!(frame < self.num_frames);
-        let start = frame * self.num_channels_allocated as usize;
-        let end = start + self.num_channels as usize;
-        Some(&self.data[start..end])
     }
 
     #[nonblocking]

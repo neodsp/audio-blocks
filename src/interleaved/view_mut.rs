@@ -244,6 +244,14 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
+    fn frame_slice(&self, frame: usize) -> Option<&[S]> {
+        assert!(frame < self.num_frames);
+        let start = frame * self.num_channels_allocated as usize;
+        let end = start + self.num_channels as usize;
+        Some(&self.data[start..end])
+    }
+
+    #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
         InterleavedView::from_slice_limited(
             self.data,
@@ -260,14 +268,6 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn frame_slice(&self, frame: usize) -> Option<&[S]> {
-        assert!(frame < self.num_frames);
-        let start = frame * self.num_channels_allocated as usize;
-        let end = start + self.num_channels as usize;
-        Some(&self.data[start..end])
-    }
-
-    #[nonblocking]
     fn raw_data(&self, _: Option<u16>) -> &[S] {
         self.data
     }
@@ -275,10 +275,14 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
 
 impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
     #[nonblocking]
-    fn resize(&mut self, num_channels: u16, num_frames: usize) {
+    fn set_active_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
-        assert!(num_frames <= self.num_frames_allocated);
         self.num_channels = num_channels;
+    }
+
+    #[nonblocking]
+    fn set_active_num_frames(&mut self, num_frames: usize) {
+        assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
 
@@ -351,6 +355,14 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
+    fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [S]> {
+        assert!(frame < self.num_frames);
+        let start = frame * self.num_channels_allocated as usize;
+        let end = start + self.num_channels as usize;
+        Some(&mut self.data[start..end])
+    }
+
+    #[nonblocking]
     fn view_mut(&mut self) -> impl AudioBlockMut<S> {
         InterleavedViewMut::from_slice_limited(
             self.data,
@@ -359,14 +371,6 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
             self.num_channels_allocated,
             self.num_frames_allocated,
         )
-    }
-
-    #[nonblocking]
-    fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [S]> {
-        assert!(frame < self.num_frames);
-        let start = frame * self.num_channels_allocated as usize;
-        let end = start + self.num_channels as usize;
-        Some(&mut self.data[start..end])
     }
 
     #[nonblocking]
@@ -683,7 +687,7 @@ mod tests {
     fn test_slice_out_of_bounds() {
         let mut data = [0.0; 12];
         let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
-        block.resize(2, 5);
+        block.set_active_size(2, 5);
         block.frame_slice(5);
     }
 
@@ -692,7 +696,7 @@ mod tests {
     fn test_slice_out_of_bounds_mut() {
         let mut data = [0.0; 12];
         let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
-        block.resize(2, 5);
+        block.set_active_size(2, 5);
         block.frame_slice(5);
     }
 

@@ -195,6 +195,14 @@ impl<S: Sample> AudioBlock<S> for SequentialView<'_, S> {
     }
 
     #[nonblocking]
+    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
+        assert!(channel < self.num_channels);
+        let start = channel as usize * self.num_frames_allocated;
+        let end = start + self.num_frames;
+        Some(&self.data[start..end])
+    }
+
+    #[nonblocking]
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -250,14 +258,6 @@ impl<S: Sample> AudioBlock<S> for SequentialView<'_, S> {
     #[nonblocking]
     fn layout(&self) -> crate::BlockLayout {
         crate::BlockLayout::Sequential
-    }
-
-    #[nonblocking]
-    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
-        assert!(channel < self.num_channels);
-        let start = channel as usize * self.num_frames_allocated;
-        let end = start + self.num_frames;
-        Some(&self.data[start..end])
     }
 
     #[nonblocking]

@@ -27,7 +27,7 @@ pub trait Ops<S: Sample> {
     fn enumerate_including_non_visible(&mut self, f: impl FnMut(u16, usize, &mut S));
     /// Sets all samples in the block to the specified value
     fn fill_with(&mut self, sample: S);
-    /// Sets all samples in the block to the default value
+    /// Sets all samples in the block to zero
     fn clear(&mut self);
 }
 
@@ -47,7 +47,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
     fn copy_from_block_resize(&mut self, block: &impl AudioBlock<S>) {
         assert!(block.num_channels() <= self.num_channels_allocated());
         assert!(block.num_frames() <= self.num_frames_allocated());
-        self.resize(block.num_channels(), block.num_frames());
+        self.set_active_size(block.num_channels(), block.num_frames());
 
         for ch in 0..self.num_channels() {
             for (sample_mut, sample) in self.channel_mut(ch).zip(block.channel(ch)) {
@@ -168,7 +168,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
 
     #[nonblocking]
     fn clear(&mut self) {
-        self.fill_with(S::default());
+        self.fill_with(S::zero());
     }
 }
 

@@ -152,6 +152,12 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for StackedViewMut<'_,
     }
 
     #[nonblocking]
+    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
+        assert!(channel < self.num_channels);
+        Some(&self.data[channel as usize].as_ref()[..self.num_frames])
+    }
+
+    #[nonblocking]
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -197,12 +203,6 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for StackedViewMut<'_,
     }
 
     #[nonblocking]
-    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
-        assert!(channel < self.num_channels);
-        Some(&self.data[channel as usize].as_ref()[..self.num_frames])
-    }
-
-    #[nonblocking]
     fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
         let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
         assert!(ch < self.num_channels_allocated);
@@ -212,10 +212,14 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for StackedViewMut<'_,
 
 impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<'_, S, V> {
     #[nonblocking]
-    fn resize(&mut self, num_channels: u16, num_frames: usize) {
+    fn set_active_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
-        assert!(num_frames <= self.num_frames_allocated);
         self.num_channels = num_channels;
+    }
+
+    #[nonblocking]
+    fn set_active_num_frames(&mut self, num_frames: usize) {
+        assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
 
@@ -250,6 +254,12 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<
             .iter_mut()
             .take(self.num_channels as usize)
             .map(move |channel_data| channel_data.as_mut().iter_mut().take(num_frames))
+    }
+
+    #[nonblocking]
+    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
+        assert!(channel < self.num_channels);
+        Some(&mut self.data[channel as usize].as_mut()[..self.num_frames])
     }
 
     #[nonblocking]
@@ -289,12 +299,6 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<
     #[nonblocking]
     fn view_mut(&mut self) -> impl AudioBlockMut<S> {
         StackedViewMut::from_slice_limited(self.data, self.num_channels, self.num_frames)
-    }
-
-    #[nonblocking]
-    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
-        assert!(channel < self.num_channels);
-        Some(&mut self.data[channel as usize].as_mut()[..self.num_frames])
     }
 
     #[nonblocking]
@@ -545,7 +549,7 @@ mod tests {
         let mut ch3 = vec![0.0; 10];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice(), ch3.as_mut_slice()];
         let mut block = StackedViewMut::from_slice(&mut data);
-        block.resize(2, 5);
+        block.set_active_size(2, 5);
 
         let num_frames = block.num_frames;
         let mut frames_iter = block.frames();

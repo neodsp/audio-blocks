@@ -65,7 +65,7 @@ impl<S: Sample> Sequential<S> {
             .checked_mul(num_frames)
             .expect("Multiplication overflow: num_channels * num_frames is too large");
         Self {
-            data: vec![S::default(); total_samples].into_boxed_slice(),
+            data: vec![S::zero(); total_samples].into_boxed_slice(),
             num_channels,
             num_frames,
             num_channels_allocated: num_channels,
@@ -153,6 +153,14 @@ impl<S: Sample> AudioBlock<S> for Sequential<S> {
     }
 
     #[nonblocking]
+    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
+        assert!(channel < self.num_channels);
+        let start = channel as usize * self.num_frames_allocated;
+        let end = start + self.num_frames;
+        Some(&self.data[start..end])
+    }
+
+    #[nonblocking]
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -211,14 +219,6 @@ impl<S: Sample> AudioBlock<S> for Sequential<S> {
     }
 
     #[nonblocking]
-    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
-        assert!(channel < self.num_channels);
-        let start = channel as usize * self.num_frames_allocated;
-        let end = start + self.num_frames;
-        Some(&self.data[start..end])
-    }
-
-    #[nonblocking]
     fn raw_data(&self, _: Option<u16>) -> &[S] {
         &self.data
     }
@@ -226,10 +226,14 @@ impl<S: Sample> AudioBlock<S> for Sequential<S> {
 
 impl<S: Sample> AudioBlockMut<S> for Sequential<S> {
     #[nonblocking]
-    fn resize(&mut self, num_channels: u16, num_frames: usize) {
+    fn set_active_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
-        assert!(num_frames <= self.num_frames_allocated);
         self.num_channels = num_channels;
+    }
+
+    #[nonblocking]
+    fn set_active_num_frames(&mut self, num_frames: usize) {
+        assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
 
@@ -260,6 +264,14 @@ impl<S: Sample> AudioBlockMut<S> for Sequential<S> {
             .chunks_mut(num_frames_allocated)
             .take(self.num_channels as usize)
             .map(move |channel_chunk| channel_chunk.iter_mut().take(num_frames))
+    }
+
+    #[nonblocking]
+    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
+        assert!(channel < self.num_channels);
+        let start = channel as usize * self.num_frames_allocated;
+        let end = start + self.num_frames;
+        Some(&mut self.data[start..end])
     }
 
     #[nonblocking]
@@ -313,14 +325,6 @@ impl<S: Sample> AudioBlockMut<S> for Sequential<S> {
             self.num_channels_allocated,
             self.num_frames_allocated,
         )
-    }
-
-    #[nonblocking]
-    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
-        assert!(channel < self.num_channels);
-        let start = channel as usize * self.num_frames_allocated;
-        let end = start + self.num_frames;
-        Some(&mut self.data[start..end])
     }
 
     #[nonblocking]
@@ -450,7 +454,7 @@ mod tests {
     #[test]
     fn test_frames() {
         let mut block = Sequential::<f32>::new(3, 6);
-        block.resize(2, 5);
+        block.set_active_size(2, 5);
 
         let num_frames = block.num_frames;
         let mut frames_iter = block.frames();
@@ -557,7 +561,7 @@ mod tests {
     #[test]
     fn test_slice() {
         let mut block = Sequential::<f32>::new(3, 6);
-        block.resize(2, 5);
+        block.set_active_size(2, 5);
         assert!(block.frame_slice(0).is_none());
 
         block.channel_slice_mut(0).unwrap().fill(1.0);
@@ -570,7 +574,7 @@ mod tests {
     #[should_panic]
     fn test_slice_out_of_bounds() {
         let mut block = Sequential::<f32>::new(3, 6);
-        block.resize(2, 5);
+        block.set_active_size(2, 5);
         block.channel_slice(2);
     }
 
@@ -578,7 +582,7 @@ mod tests {
     #[should_panic]
     fn test_slice_out_of_bounds_mut() {
         let mut block = Sequential::<f32>::new(3, 6);
-        block.resize(2, 5);
+        block.set_active_size(2, 5);
         block.channel_slice_mut(2);
     }
 
@@ -599,8 +603,8 @@ mod tests {
             assert_eq!(block.frame_mut(i).count(), 3);
         }
 
-        block.resize(3, 10);
-        block.resize(2, 5);
+        block.set_active_size(3, 10);
+        block.set_active_size(2, 5);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 5);
@@ -622,7 +626,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
         let mut block = Sequential::<f32>::new(2, 10);
-        block.resize(3, 10);
+        block.set_active_size(3, 10);
     }
 
     #[test]
@@ -630,7 +634,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
         let mut block = Sequential::<f32>::new(2, 10);
-        block.resize(2, 11);
+        block.set_active_size(2, 11);
     }
 
     #[test]
@@ -638,7 +642,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_channel() {
         let mut block = Sequential::<f32>::new(2, 10);
-        block.resize(1, 10);
+        block.set_active_size(1, 10);
         let _ = block.channel(1);
     }
 
@@ -647,7 +651,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_frame() {
         let mut block = Sequential::<f32>::new(2, 10);
-        block.resize(2, 5);
+        block.set_active_size(2, 5);
         let _ = block.frame(5);
     }
 
@@ -656,7 +660,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
         let mut block = Sequential::<f32>::new(2, 10);
-        block.resize(1, 10);
+        block.set_active_size(1, 10);
         let _ = block.channel_mut(1);
     }
 }

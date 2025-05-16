@@ -150,6 +150,12 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
     }
 
     #[nonblocking]
+    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
+        assert!(channel < self.num_channels);
+        Some(&self.data[channel as usize].as_ref()[..self.num_frames])
+    }
+
+    #[nonblocking]
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -188,12 +194,6 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
     #[nonblocking]
     fn layout(&self) -> crate::BlockLayout {
         crate::BlockLayout::Stacked
-    }
-
-    #[nonblocking]
-    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
-        assert!(channel < self.num_channels);
-        Some(&self.data[channel as usize].as_ref()[..self.num_frames])
     }
 
     #[nonblocking]

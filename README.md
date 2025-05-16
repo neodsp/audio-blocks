@@ -29,7 +29,7 @@ The core problem this crate solves is the diversity of audio data formats:
     * **Terminology:** Also known as "planar" or "channels first," but more specifically refers to channel-isolated buffers.
     * **Usage:** Highly prevalent in real-time DSP due to simplified memory access and potential for improved SIMD (Single Instruction, Multiple Data) or vectorization efficiency.
 
-By designing your processor functions to accept an `impl AudioBlock<S>`, your code can seamlessly handle audio data regardless of the underlying layout used by the audio API. `AudioBlock`s can hold any sample type `S` that implements `Copy`, `Default`, and has a `'static` lifetime, which includes all primitive number types.
+By designing your processor functions to accept an `impl AudioBlock<S>`, your code can seamlessly handle audio data regardless of the underlying layout used by the audio API. `AudioBlock`s can hold any sample type `S` that implements `Copy`, `Zero`, and has a `'static` lifetime, which includes all primitive number types.
 
 For specialized processing requiring a specific sample type, such as `f32`, you can define functions that expect `impl AudioBlockMut<f32>`.
 
@@ -65,17 +65,28 @@ Accessing audio data is facilitated through iterators like `channels()` and `fra
 ### `AudioBlock`
 
 ```rust
+/// Size and layout information
 fn num_channels(&self) -> u16;
 fn num_frames(&self) -> usize;
 fn num_channels_allocated(&self) -> u16;
 fn num_frames_allocated(&self) -> usize;
+fn layout(&self) -> BlockLayout;
+
+/// Individual sample access
 fn sample(&self, channel: u16, frame: usize) -> S;
+
+/// Channel-based access
 fn channel(&self, channel: u16) -> impl Iterator<Item = &S>;
 fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
+fn channel_slice(&self, channel: u16) -> Option<&[T]>;
+
+/// Frame-based access
 fn frame(&self, frame: usize) -> impl Iterator<Item = &S>;
 fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
+fn frame_slice(&self, frame: usize) -> Option<&[T]>;
+
+/// Views and raw data access
 fn view(&self) -> impl AudioBlock<S>;
-fn layout(&self) -> BlockLayout;
 fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
 ```
 
@@ -84,12 +95,25 @@ fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
 Includes all functions from `AudioBlock` plus:
 
 ```rust
-fn resize(&mut self, num_channels: u16, num_frames: usize);
+/// Resize within allocated bounds
+fn set_active_size(&mut self, num_channels: u16, num_frames: usize);
+fn set_active_num_channels(&mut self, num_channels: u16);
+fn set_active_num_frames(&mut self, num_frames: usize);
+
+/// Individual sample access
 fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S;
+
+/// Channel-based access
 fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
 fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
+fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [T]>;
+
+/// Frame-based access
 fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
 fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
+fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [T]>;
+
+/// Views and raw data access
 fn view_mut(&mut self) -> impl AudioBlockMut<S>;
 fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
 ```
