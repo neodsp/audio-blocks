@@ -1,30 +1,21 @@
-# This workflow runs checks for unsafe code. In crates that don't have any unsafe code, this can be
-# removed. Runs:
-# - miri - detects undefined behavior and memory leaks
-# - address sanitizer - detects memory errors
-# - leak sanitizer - detects memory leaks
-# - loom - Permutation testing for concurrent code https://crates.io/crates/loom
-# See check.yml for information about how the concurrency cancellation and workflow triggering works
-permissions:
-  contents: read
+name: 🧹 Safety Checks
+
 on:
   push:
     branches: [main]
   pull_request:
-  merge_group:
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
-name: safety
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   sanitizers:
+    name: 🩸 Leak and 🔍 Address Sanitizers
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - name: Install nightly
-        uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@nightly
       - run: |
           # to get the symbolizer for debug symbol resolution
           sudo apt install llvm
@@ -40,46 +31,29 @@ jobs:
           # now set opt-level to 1
           sed -i '/^\s*\[profile.dev\]/a opt-level = 1' Cargo.toml
           cat Cargo.toml
-        name: Enable debug symbols
-      - name: cargo test -Zsanitizer=address
-        # only --lib --tests b/c of https://github.com/rust-lang/rust/issues/53945
+      - name: 🔍 Address Sanitizer
         run: cargo test --lib --tests --target x86_64-unknown-linux-gnu
         env:
           ASAN_OPTIONS: "detect_odr_violation=0:detect_leaks=0"
           RUSTFLAGS: "-Z sanitizer=address"
-      - name: cargo test -Zsanitizer=leak
+      - name: 🩸 Leak Sanitizer
         if: always()
         run: cargo test --target x86_64-unknown-linux-gnu
         env:
           LSAN_OPTIONS: "suppressions=lsan-suppressions.txt"
           RUSTFLAGS: "-Z sanitizer=leak"
+
   miri:
+    name: 🔮 Miri UB Checker
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
       - run: |
           echo "NIGHTLY=nightly-$(curl -s https://rust-lang.github.io/rustup-components-history/x86_64-unknown-linux-gnu/miri)" >> "$GITHUB_ENV"
-      - name: Install ${{ env.NIGHTLY }}
-        uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.NIGHTLY }}
           components: miri
-      - name: cargo miri test
-        run: cargo miri test
+      - run: cargo miri test
         env:
           MIRIFLAGS: ""
-  # loom:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         submodules: true
-  #     - name: Install stable
-  #       uses: dtolnay/rust-toolchain@stable
-  #     - name: cargo test --test loom
-  #       run: cargo test --release --test loom
-  #       env:
-  #         LOOM_MAX_PREEMPTIONS: 2
-  #         RUSTFLAGS: "--cfg loom"
