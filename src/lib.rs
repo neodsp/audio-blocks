@@ -11,7 +11,7 @@ extern crate core as std;
 #[cfg(feature = "std")]
 extern crate std;
 
-use num::Zero;
+pub use num::Zero;
 pub use ops::Ops;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
@@ -123,7 +123,7 @@ impl<T> Sample for T where T: Copy + Zero + 'static {}
 ///     }
 /// }
 /// ```
-pub trait AudioBlock<T: Sample> {
+pub trait AudioBlock<S: Sample> {
     /// Returns the number of active audio channels.
     fn num_channels(&self) -> u16;
 
@@ -148,20 +148,20 @@ pub trait AudioBlock<T: Sample> {
     /// # Panics
     ///
     /// Panics if channel or frame indices are out of bounds.
-    fn sample(&self, channel: u16, frame: usize) -> T;
+    fn sample(&self, channel: u16, frame: usize) -> S;
 
     /// Returns an iterator over all samples in the specified channel.
     ///
     /// # Panics
     ///
     /// Panics if channel index is out of bounds.
-    fn channel(&self, channel: u16) -> impl Iterator<Item = &T>;
+    fn channel(&self, channel: u16) -> impl Iterator<Item = &S>;
 
     /// Returns an iterator that yields iterators for each channel.
-    fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &T> + '_> + '_;
+    fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 
     /// Returns a slice of the data in case of sequential or stacked layout.
-    fn channel_slice(&self, channel: u16) -> Option<&[T]> {
+    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
         let _ = channel;
         None
     }
@@ -171,13 +171,13 @@ pub trait AudioBlock<T: Sample> {
     /// # Panics
     ///
     /// Panics if frame index is out of bounds.
-    fn frame(&self, frame: usize) -> impl Iterator<Item = &T>;
+    fn frame(&self, frame: usize) -> impl Iterator<Item = &S>;
 
     /// Returns an iterator that yields iterators for each frame.
-    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &T> + '_> + '_;
+    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 
     /// Returns a slice of the data in case of interleaved memory layout.
-    fn frame_slice(&self, frame: usize) -> Option<&[T]> {
+    fn frame_slice(&self, frame: usize) -> Option<&[S]> {
         let _ = frame;
         None
     }
@@ -186,7 +186,7 @@ pub trait AudioBlock<T: Sample> {
     ///
     /// This operation is zero-cost (no allocation or copying) and real-time safe,
     /// as it returns a lightweight wrapper around the original data.
-    fn view(&self) -> impl AudioBlock<T>;
+    fn view(&self) -> impl AudioBlock<S>;
 
     /// Provides direct access to the underlying memory as a slice.
     ///
@@ -202,7 +202,7 @@ pub trait AudioBlock<T: Sample> {
     /// - For `Interleaved`: returns interleaved samples across all channels
     /// - For `Sequential`: returns planar data with all channels
     /// - For `Stacked`: returns data for the specified channel only
-    fn raw_data(&self, stacked_ch: Option<u16>) -> &[T];
+    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
 }
 
 /// Extends the [`AudioBlock`] trait with mutable access operations.
@@ -225,7 +225,7 @@ pub trait AudioBlock<T: Sample> {
 ///
 /// fn process_audio(audio: &mut impl AudioBlockMut<f32>) {
 ///     // Resize to 2 channels, 1024 frames
-///     audio.resize(2, 1024);
+///     audio.set_active_size(2, 1024);
 ///
 ///     // Modify individual samples
 ///     *audio.sample_mut(0, 0) = 0.5;
@@ -243,7 +243,7 @@ pub trait AudioBlock<T: Sample> {
 ///     }
 /// }
 /// ```
-pub trait AudioBlockMut<T: Sample>: AudioBlock<T> {
+pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// Sets the active size of the audio block to the specified number of channels and frames.
     ///
     /// # Panics
@@ -275,20 +275,20 @@ pub trait AudioBlockMut<T: Sample>: AudioBlock<T> {
     /// # Panics
     ///
     /// Panics if channel or frame indices are out of bounds.
-    fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut T;
+    fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S;
 
     /// Returns a mutable iterator over all samples in the specified channel.
     ///
     /// # Panics
     ///
     /// Panics if channel index is out of bounds.
-    fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut T>;
+    fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
 
     /// Returns a mutable iterator that yields mutable iterators for each channel.
-    fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut T> + '_> + '_;
+    fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 
     /// Returns a slice of the data in case of sequential or stacked layout.
-    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [T]> {
+    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
         let _ = channel;
         None
     }
@@ -298,13 +298,13 @@ pub trait AudioBlockMut<T: Sample>: AudioBlock<T> {
     /// # Panics
     ///
     /// Panics if frame index is out of bounds.
-    fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut T>;
+    fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
 
     /// Returns a mutable iterator that yields mutable iterators for each frame.
-    fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut T> + '_> + '_;
+    fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 
     /// Returns a slice of the data in case of interleaved memory layout.
-    fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [T]> {
+    fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [S]> {
         let _ = frame;
         None
     }
@@ -313,7 +313,7 @@ pub trait AudioBlockMut<T: Sample>: AudioBlock<T> {
     ///
     /// This operation is zero-cost (no allocation or copying) and real-time safe,
     /// as it returns a lightweight wrapper around the original data.
-    fn view_mut(&mut self) -> impl AudioBlockMut<T>;
+    fn view_mut(&mut self) -> impl AudioBlockMut<S>;
 
     /// Provides direct mutable access to the underlying memory as a slice.
     ///
@@ -329,5 +329,5 @@ pub trait AudioBlockMut<T: Sample>: AudioBlock<T> {
     /// - For `Interleaved`: returns interleaved samples across all channels
     /// - For `Sequential`: returns planar data with all channels
     /// - For `Stacked`: returns data for the specified channel only
-    fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [T];
+    fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
 }

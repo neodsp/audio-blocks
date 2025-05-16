@@ -33,7 +33,7 @@ By designing your processor functions to accept an `impl AudioBlock<S>`, your co
 
 For specialized processing requiring a specific sample type, such as `f32`, you can define functions that expect `impl AudioBlockMut<f32>`.
 
-```rust
+```rust,ignore
 fn process(block: &mut impl AudioBlockMut<f32>) {
     for channel in block.channels_mut() {
         for sample in channel {
@@ -45,10 +45,10 @@ fn process(block: &mut impl AudioBlockMut<f32>) {
 
 Alternatively, you can create generic processing blocks that work with various floating-point types (`f32`, `f64`, and optionally `half::f16`) by leveraging the `Float` trait from the `num` or `num-traits` crate:
 
-```rust
+```rust,ignore
 use num_traits::Float;
 
-fn process<F: Float>(block: &mut impl AudioBlockMut<F>) {
+fn process<F: Float + 'static>(block: &mut impl AudioBlockMut<F>) {
     let gain = F::from(0.5).unwrap();
     for channel in block.channels_mut() {
         for sample in channel {
@@ -64,7 +64,7 @@ Accessing audio data is facilitated through iterators like `channels()` and `fra
 
 ### `AudioBlock`
 
-```rust
+```rust,ignore
 /// Size and layout information
 fn num_channels(&self) -> u16;
 fn num_frames(&self) -> usize;
@@ -78,12 +78,12 @@ fn sample(&self, channel: u16, frame: usize) -> S;
 /// Channel-based access
 fn channel(&self, channel: u16) -> impl Iterator<Item = &S>;
 fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
-fn channel_slice(&self, channel: u16) -> Option<&[T]>;
+fn channel_slice(&self, channel: u16) -> Option<&[S]>;
 
 /// Frame-based access
 fn frame(&self, frame: usize) -> impl Iterator<Item = &S>;
 fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
-fn frame_slice(&self, frame: usize) -> Option<&[T]>;
+fn frame_slice(&self, frame: usize) -> Option<&[S]>;
 
 /// Views and raw data access
 fn view(&self) -> impl AudioBlock<S>;
@@ -94,7 +94,7 @@ fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
 
 Includes all functions from `AudioBlock` plus:
 
-```rust
+```rust,ignore
 /// Resize within allocated bounds
 fn set_active_size(&mut self, num_channels: u16, num_frames: usize);
 fn set_active_num_channels(&mut self, num_channels: u16);
@@ -122,7 +122,7 @@ fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
 
 Several operations are defined for audio blocks, enabling data copying between them and applying functions to each sample.
 
-```rust
+```rust,ignore
 fn copy_from_block(&mut self, block: &impl AudioBlock<S>);
 fn copy_from_block_resize(&mut self, block: &impl AudioBlock<S>);
 fn for_each(&mut self, f: impl FnMut(&mut S));
@@ -143,7 +143,7 @@ Available types:
 * `Sequential`
 * `Stacked`
 
-```rust
+```rust,ignore
 fn new(num_channels: u16, num_frames: usize) -> Self;
 fn from_block(block: &impl AudioBlock<S>) -> Self;
 ```
@@ -158,21 +158,21 @@ Available types:
 * `SequentialView` / `SequentialViewMut`
 * `StackedView` / `StackedViewMut`
 
-```rust
+```rust,ignore
 fn from_slice(data: &'a [S], num_channels: u16, num_frames: usize) -> Self;
 fn from_slice_limited(data: &'a [S], num_channels_visible: u16, num_frames_visible: usize, num_channels_allocated: u16, num_frames_allocated: usize) -> Self;
 ```
 
 Interleaved and sequential blocks can be created directly from raw pointers:
 
-```rust
+```rust,ignore
 unsafe fn from_ptr(data: *const S, num_channels: u16, num_frames: usize) -> Self;
 unsafe fn from_ptr_limited(data: *const S, num_channels_visible: u16, num_frames_visible: usize, num_channels_allocated: u16, num_frames_allocated: usize) -> Self;
 ```
 
 Stacked blocks can only be created from raw pointers using `StackedPtrAdapter`:
 
-```rust
+```rust,ignore
 let mut adapter = unsafe { StackedPtrAdapter::<_, 16>::from_ptr(data, num_channels, num_frames) };
 let block = adapter.stacked_view();
 ```
@@ -191,7 +191,7 @@ For views, the `from_slice_limited` and `from_ptr_limited` functions enable you 
 
 Here's an example of how to adapt your block size to incoming blocks with changing sizes when copying data is necessary:
 
-```rust
+```rust,ignore
 fn process(&mut self, other_block: &mut impl AudioBlock<f32>) {
     self.block.copy_from_block_resize(other_block);
 }
