@@ -203,7 +203,7 @@ impl<S: Sample> AudioBlock<S> for Stacked<S> {
     }
 
     #[nonblocking]
-    unsafe fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
+    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
         let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
         assert!(ch < self.num_channels_allocated);
         unsafe { self.data.get_unchecked(ch as usize) }
@@ -300,7 +300,7 @@ impl<S: Sample> AudioBlockMut<S> for Stacked<S> {
     }
 
     #[nonblocking]
-    unsafe fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S] {
+    fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S] {
         let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
         assert!(ch < self.num_channels_allocated);
         unsafe { self.data.get_unchecked_mut(ch as usize).as_mut() }
@@ -331,10 +331,8 @@ mod tests {
             }
         }
 
-        unsafe {
-            assert_eq!(block.raw_data(Some(0)), &[0.0, 1.0, 2.0, 3.0, 4.0]);
-            assert_eq!(block.raw_data(Some(1)), &[5.0, 6.0, 7.0, 8.0, 9.0]);
-        }
+        assert_eq!(block.raw_data(Some(0)), &[0.0, 1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(block.raw_data(Some(1)), &[5.0, 6.0, 7.0, 8.0, 9.0]);
     }
 
     #[test]
@@ -657,12 +655,10 @@ mod tests {
 
         assert_eq!(block.layout(), crate::BlockLayout::Stacked);
 
-        unsafe {
-            assert_eq!(block.raw_data(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-            assert_eq!(block.raw_data(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        assert_eq!(block.raw_data(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
+        assert_eq!(block.raw_data(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
 
-            assert_eq!(block.raw_data_mut(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-            assert_eq!(block.raw_data_mut(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
-        }
+        assert_eq!(block.raw_data_mut(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
+        assert_eq!(block.raw_data_mut(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
     }
 }

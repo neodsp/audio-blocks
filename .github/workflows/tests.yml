@@ -19,4 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: RTSAN_ENABLE=1 cargo test --locked --all-features --all-targets --workspace
+      - run: cargo test --locked --all-features --all-targets --workspace
+        env:
+          RTSAN_ENABLE: 1

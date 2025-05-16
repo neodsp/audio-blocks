@@ -82,17 +82,11 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
     #[nonblocking]
     fn for_each_including_non_visible(&mut self, mut f: impl FnMut(&mut S)) {
         match self.layout() {
-            BlockLayout::Sequential => unsafe {
-                self.raw_data_mut(None).iter_mut().for_each(&mut f);
-            },
-            BlockLayout::Interleaved => unsafe {
-                self.raw_data_mut(None).iter_mut().for_each(&mut f);
-            },
+            BlockLayout::Sequential => self.raw_data_mut(None).iter_mut().for_each(&mut f),
+            BlockLayout::Interleaved => self.raw_data_mut(None).iter_mut().for_each(&mut f),
             BlockLayout::Stacked => {
                 for ch in 0..self.num_channels() {
-                    unsafe {
-                        self.raw_data_mut(Some(ch)).iter_mut().for_each(&mut f);
-                    }
+                    self.raw_data_mut(Some(ch)).iter_mut().for_each(&mut f);
                 }
             }
         }
@@ -132,38 +126,32 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
         match self.layout() {
             BlockLayout::Sequential => {
                 let num_frames = self.num_frames_allocated();
-                unsafe {
-                    self.raw_data_mut(None)
-                        .iter_mut()
-                        .enumerate()
-                        .for_each(|(i, sample)| {
-                            let channel = i / num_frames;
-                            let frame = i % num_frames;
-                            f(channel as u16, frame, sample)
-                        });
-                }
+                self.raw_data_mut(None)
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(i, sample)| {
+                        let channel = i / num_frames;
+                        let frame = i % num_frames;
+                        f(channel as u16, frame, sample)
+                    });
             }
             BlockLayout::Interleaved => {
                 let num_frames = self.num_frames_allocated();
-                unsafe {
-                    self.raw_data_mut(None)
-                        .iter_mut()
-                        .enumerate()
-                        .for_each(|(i, sample)| {
-                            let channel = i % num_frames;
-                            let frame = i / num_frames;
-                            f(channel as u16, frame, sample)
-                        });
-                }
+                self.raw_data_mut(None)
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(i, sample)| {
+                        let channel = i % num_frames;
+                        let frame = i / num_frames;
+                        f(channel as u16, frame, sample)
+                    });
             }
             BlockLayout::Stacked => {
                 for ch in 0..self.num_channels() {
-                    unsafe {
-                        self.raw_data_mut(Some(ch))
-                            .iter_mut()
-                            .enumerate()
-                            .for_each(|(frame, sample)| f(ch, frame, sample));
-                    }
+                    self.raw_data_mut(Some(ch))
+                        .iter_mut()
+                        .enumerate()
+                        .for_each(|(frame, sample)| f(ch, frame, sample));
                 }
             }
         }
