@@ -206,4 +206,3 @@ The most performant way to access block data is often through the raw data point
 When using the `channels` or `frames` iterators, performance depends on the block layout. For `Sequential` and `Stacked` layouts, iterating over channels is generally faster. For `Interleaved` layouts with a high number of channels, iterating over frames might offer better performance.
 
 You can retrieve the layout of a block using the `layout` function.
-```
