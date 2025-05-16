@@ -197,7 +197,7 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
+    unsafe fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
         let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
         assert!(ch < self.num_channels_allocated);
         unsafe { self.data.get_unchecked(ch as usize).as_ref() }
@@ -507,7 +507,9 @@ mod tests {
 
         assert_eq!(block.layout(), crate::BlockLayout::Stacked);
 
-        assert_eq!(block.raw_data(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-        assert_eq!(block.raw_data(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        unsafe {
+            assert_eq!(block.raw_data(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
+            assert_eq!(block.raw_data(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        }
     }
 }

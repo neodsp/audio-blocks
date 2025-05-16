@@ -268,7 +268,7 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, _: Option<u16>) -> &[S] {
+    unsafe fn raw_data(&self, _: Option<u16>) -> &[S] {
         self.data
     }
 }
@@ -374,7 +374,7 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn raw_data_mut(&mut self, _: Option<u16>) -> &mut [S] {
+    unsafe fn raw_data_mut(&mut self, _: Option<u16>) -> &mut [S] {
         self.data
     }
 }
@@ -402,7 +402,7 @@ mod tests {
         }
 
         assert_eq!(
-            block.raw_data(None),
+            unsafe { block.raw_data(None) },
             &[0.0, 5.0, 1.0, 6.0, 2.0, 7.0, 3.0, 8.0, 4.0, 9.0]
         );
     }
@@ -708,12 +708,12 @@ mod tests {
         assert_eq!(block.layout(), crate::BlockLayout::Interleaved);
 
         assert_eq!(
-            block.raw_data(None),
+            unsafe { block.raw_data(None) },
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
 
         assert_eq!(
-            block.raw_data_mut(None),
+            unsafe { block.raw_data_mut(None) },
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }

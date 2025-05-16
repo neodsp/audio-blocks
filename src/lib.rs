@@ -202,7 +202,7 @@ pub trait AudioBlock<S: Sample> {
     /// - For `Interleaved`: returns interleaved samples across all channels
     /// - For `Sequential`: returns planar data with all channels
     /// - For `Stacked`: returns data for the specified channel only
-    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
+    unsafe fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
 }
 
 /// Extends the [`AudioBlock`] trait with mutable access operations.
@@ -329,5 +329,5 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// - For `Interleaved`: returns interleaved samples across all channels
     /// - For `Sequential`: returns planar data with all channels
     /// - For `Stacked`: returns data for the specified channel only
-    fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
+    unsafe fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
 }

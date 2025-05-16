@@ -261,7 +261,7 @@ impl<S: Sample> AudioBlock<S> for SequentialView<'_, S> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, _: Option<u16>) -> &[S] {
+    unsafe fn raw_data(&self, _: Option<u16>) -> &[S] {
         self.data
     }
 }
@@ -473,7 +473,7 @@ mod tests {
         assert_eq!(block.layout(), crate::BlockLayout::Sequential);
 
         assert_eq!(
-            block.raw_data(None),
+            unsafe { block.raw_data(None) },
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }
