@@ -244,6 +244,14 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
+    fn frame_slice(&self, frame: usize) -> Option<&[S]> {
+        assert!(frame < self.num_frames);
+        let start = frame * self.num_channels_allocated as usize;
+        let end = start + self.num_channels as usize;
+        Some(&self.data[start..end])
+    }
+
+    #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
         InterleavedView::from_slice_limited(
             self.data,
@@ -267,10 +275,14 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
 
 impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
     #[nonblocking]
-    fn resize(&mut self, num_channels: u16, num_frames: usize) {
+    fn set_active_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
-        assert!(num_frames <= self.num_frames_allocated);
         self.num_channels = num_channels;
+    }
+
+    #[nonblocking]
+    fn set_active_num_frames(&mut self, num_frames: usize) {
+        assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
 
@@ -343,6 +355,14 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
+    fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [S]> {
+        assert!(frame < self.num_frames);
+        let start = frame * self.num_channels_allocated as usize;
+        let end = start + self.num_channels as usize;
+        Some(&mut self.data[start..end])
+    }
+
+    #[nonblocking]
     fn view_mut(&mut self) -> impl AudioBlockMut<S> {
         InterleavedViewMut::from_slice_limited(
             self.data,
@@ -361,6 +381,8 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
 
 #[cfg(test)]
 mod tests {
+    use rtsan_standalone::no_sanitize_realtime;
+
     use super::*;
 
     #[test]
@@ -645,6 +667,41 @@ mod tests {
             assert_eq!(block.frame(i).count(), 2);
             assert_eq!(block.frame_mut(i).count(), 2);
         }
+    }
+
+    #[test]
+    fn test_slice() {
+        // let mut data = [1.0, 2.0, 3.0, 0.0, 1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let mut data = [0.0; 12];
+        let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
+        assert!(block.channel_slice(0).is_none());
+
+        block.frame_slice_mut(0).unwrap().fill(1.0);
+        block.frame_slice_mut(1).unwrap().fill(2.0);
+        block.frame_slice_mut(2).unwrap().fill(3.0);
+        assert_eq!(block.frame_slice(0).unwrap(), &[1.0; 2]);
+        assert_eq!(block.frame_slice(1).unwrap(), &[2.0; 2]);
+        assert_eq!(block.frame_slice(2).unwrap(), &[3.0; 2]);
+    }
+
+    #[test]
+    #[should_panic]
+    #[no_sanitize_realtime]
+    fn test_slice_out_of_bounds() {
+        let mut data = [0.0; 12];
+        let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
+        block.set_active_size(2, 5);
+        block.frame_slice(5);
+    }
+
+    #[test]
+    #[should_panic]
+    #[no_sanitize_realtime]
+    fn test_slice_out_of_bounds_mut() {
+        let mut data = [0.0; 12];
+        let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
+        block.set_active_size(2, 5);
+        block.frame_slice(5);
     }
 
     #[test]

@@ -195,6 +195,14 @@ impl<S: Sample> AudioBlock<S> for SequentialView<'_, S> {
     }
 
     #[nonblocking]
+    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
+        assert!(channel < self.num_channels);
+        let start = channel as usize * self.num_frames_allocated;
+        let end = start + self.num_frames;
+        Some(&self.data[start..end])
+    }
+
+    #[nonblocking]
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -260,6 +268,8 @@ impl<S: Sample> AudioBlock<S> for SequentialView<'_, S> {
 
 #[cfg(test)]
 mod tests {
+    use rtsan_standalone::no_sanitize_realtime;
+
     use super::*;
 
     #[test]
@@ -435,6 +445,27 @@ mod tests {
         for i in 0..block.num_frames() {
             assert_eq!(block.frame(i).count(), 2);
         }
+    }
+
+    #[test]
+    fn test_slice() {
+        let data = [1.0, 1.0, 1.0, 0.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let block = SequentialView::from_slice_limited(&data, 2, 3, 3, 4);
+
+        assert!(block.frame_slice(0).is_none());
+
+        assert_eq!(block.channel_slice(0).unwrap(), &[1.0; 3]);
+        assert_eq!(block.channel_slice(1).unwrap(), &[2.0; 3]);
+    }
+
+    #[test]
+    #[should_panic]
+    #[no_sanitize_realtime]
+    fn test_slice_out_of_bounds() {
+        let data = [1.0, 1.0, 1.0, 0.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let block = SequentialView::from_slice_limited(&data, 2, 3, 3, 4);
+
+        block.channel_slice(2);
     }
 
     #[test]

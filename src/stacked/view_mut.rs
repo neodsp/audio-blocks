@@ -152,6 +152,12 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for StackedViewMut<'_,
     }
 
     #[nonblocking]
+    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
+        assert!(channel < self.num_channels);
+        Some(&self.data[channel as usize].as_ref()[..self.num_frames])
+    }
+
+    #[nonblocking]
     fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -206,10 +212,14 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for StackedViewMut<'_,
 
 impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<'_, S, V> {
     #[nonblocking]
-    fn resize(&mut self, num_channels: u16, num_frames: usize) {
+    fn set_active_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
-        assert!(num_frames <= self.num_frames_allocated);
         self.num_channels = num_channels;
+    }
+
+    #[nonblocking]
+    fn set_active_num_frames(&mut self, num_frames: usize) {
+        assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
 
@@ -244,6 +254,12 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<
             .iter_mut()
             .take(self.num_channels as usize)
             .map(move |channel_data| channel_data.as_mut().iter_mut().take(num_frames))
+    }
+
+    #[nonblocking]
+    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
+        assert!(channel < self.num_channels);
+        Some(&mut self.data[channel as usize].as_mut()[..self.num_frames])
     }
 
     #[nonblocking]
@@ -403,6 +419,8 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
 #[cfg(test)]
 mod tests {
 
+    use rtsan_standalone::no_sanitize_realtime;
+
     use super::*;
 
     #[test]
@@ -425,8 +443,8 @@ mod tests {
             }
         }
 
-        assert_eq!(block.raw_data(Some(0)), &[0.0, 1.0, 2.0, 3.0, 4.0]);
-        assert_eq!(block.raw_data(Some(1)), &[5.0, 6.0, 7.0, 8.0, 9.0]);
+        assert_eq!(block.channel_slice(0).unwrap(), &[0.0, 1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(block.channel_slice(1).unwrap(), &[5.0, 6.0, 7.0, 8.0, 9.0]);
     }
 
     #[test]
@@ -533,7 +551,7 @@ mod tests {
         let mut ch3 = vec![0.0; 10];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice(), ch3.as_mut_slice()];
         let mut block = StackedViewMut::from_slice(&mut data);
-        block.resize(2, 5);
+        block.set_active_size(2, 5);
 
         let num_frames = block.num_frames;
         let mut frames_iter = block.frames();
@@ -680,6 +698,39 @@ mod tests {
                 vec![1.0, 3.0, 5.0, 7.0, 9.0]
             );
         }
+    }
+
+    #[test]
+    fn test_slice() {
+        let mut data = [[0.0; 4]; 3];
+        let mut block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
+
+        assert!(block.frame_slice(0).is_none());
+
+        block.channel_slice_mut(0).unwrap().fill(1.0);
+        block.channel_slice_mut(1).unwrap().fill(2.0);
+        assert_eq!(block.channel_slice(0).unwrap(), &[1.0; 3]);
+        assert_eq!(block.channel_slice(1).unwrap(), &[2.0; 3]);
+    }
+
+    #[test]
+    #[should_panic]
+    #[no_sanitize_realtime]
+    fn test_slice_out_of_bounds() {
+        let mut data = [[0.0; 4]; 3];
+        let block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
+
+        block.channel_slice(2);
+    }
+
+    #[test]
+    #[should_panic]
+    #[no_sanitize_realtime]
+    fn test_slice_out_of_bounds_mut() {
+        let mut data = [[0.0; 4]; 3];
+        let mut block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
+
+        block.channel_slice_mut(2);
     }
 
     #[test]
