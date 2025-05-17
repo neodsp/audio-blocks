@@ -161,6 +161,10 @@ pub trait AudioBlock<S: Sample> {
     fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 
     /// Returns a slice of the data in case of sequential or stacked layout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if channel index is out of bounds.
     fn channel_slice(&self, channel: u16) -> Option<&[S]> {
         let _ = channel;
         None
@@ -177,6 +181,10 @@ pub trait AudioBlock<S: Sample> {
     fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 
     /// Returns a slice of the data in case of interleaved memory layout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if frame index is out of bounds.
     fn frame_slice(&self, frame: usize) -> Option<&[S]> {
         let _ = frame;
         None
@@ -292,6 +300,10 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 
     /// Returns a slice of the data in case of sequential or stacked layout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if channel index is out of bounds.
     fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
         let _ = channel;
         None
@@ -308,6 +320,10 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 
     /// Returns a slice of the data in case of interleaved memory layout.
+    ///
+    /// # Panics
+    ///
+    /// Panics if frame index is out of bounds.
     fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [S]> {
         let _ = frame;
         None
