@@ -572,6 +572,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let mut block = Sequential::<f32>::new(3, 6);
         block.set_active_size(2, 5);
@@ -580,6 +581,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
         let mut block = Sequential::<f32>::new(3, 6);
         block.set_active_size(2, 5);

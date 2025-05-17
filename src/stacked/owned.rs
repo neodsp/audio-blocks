@@ -632,6 +632,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let mut block = Stacked::<f32>::new(3, 4);
         block.set_active_size(2, 3);
@@ -641,6 +642,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
         let mut block = Stacked::<f32>::new(3, 4);
         block.set_active_size(2, 3);

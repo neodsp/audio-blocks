@@ -381,6 +381,8 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
 
 #[cfg(test)]
 mod tests {
+    use rtsan_standalone::no_sanitize_realtime;
+
     use super::*;
 
     #[test]
@@ -684,6 +686,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let mut data = [0.0; 12];
         let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
@@ -693,6 +696,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
         let mut data = [0.0; 12];
         let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);

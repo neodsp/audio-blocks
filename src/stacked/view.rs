@@ -311,6 +311,8 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHAN
 
 #[cfg(test)]
 mod tests {
+    use rtsan_standalone::no_sanitize_realtime;
+
     use super::*;
 
     #[test]
@@ -493,6 +495,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let data = [[1.0; 4], [2.0; 4], [0.0; 4]];
         let block = StackedView::from_slice_limited(&data, 2, 3);

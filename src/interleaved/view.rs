@@ -269,6 +269,8 @@ impl<S: Sample> AudioBlock<S> for InterleavedView<'_, S> {
 
 #[cfg(test)]
 mod tests {
+    use rtsan_standalone::no_sanitize_realtime;
+
     use super::*;
 
     #[test]
@@ -459,6 +461,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let data = [1.0, 2.0, 3.0, 0.0, 1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0];
         let block = InterleavedView::<f32>::from_slice_limited(&data, 2, 3, 3, 4);

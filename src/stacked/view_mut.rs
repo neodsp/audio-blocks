@@ -419,6 +419,8 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
 #[cfg(test)]
 mod tests {
 
+    use rtsan_standalone::no_sanitize_realtime;
+
     use super::*;
 
     #[test]
@@ -713,6 +715,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let mut data = [[0.0; 4]; 3];
         let block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
@@ -722,6 +725,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
         let mut data = [[0.0; 4]; 3];
         let mut block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
