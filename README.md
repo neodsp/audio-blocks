@@ -87,7 +87,7 @@ fn frame_slice(&self, frame: usize) -> Option<&[S]>;
 
 /// Views and raw data access
 fn view(&self) -> impl AudioBlock<S>;
-unsafe fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
+fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
 ```
 
 ### `AudioBlockMut`
@@ -115,7 +115,7 @@ fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [T]>;
 
 /// Views and raw data access
 fn view_mut(&mut self) -> impl AudioBlockMut<S>;
-unsafe fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
+fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
 ```
 
 ## Operations
