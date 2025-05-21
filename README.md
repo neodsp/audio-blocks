@@ -199,10 +199,15 @@ fn process(&mut self, other_block: &mut impl AudioBlock<f32>) {
 
 > **Warning:** Accessing `raw_data` can be unsafe because it provides access to all contained samples, including those that are not intended to be visible.
 
-## Performance Optimizations
+## Performance Considerations
 
-The most performant way to access block data is often through the raw data pointers. However, this approach is potentially unsafe with limited blocks as it can expose non-visible samples, and you need to manually handle the data layout. For simple, sample-independent operations like applying gain, processing all samples (including non-visible ones, if their count isn't excessively high) can be faster. The `Ops` section provides `for_each` and `for_each_including_non_visible`, as well as `enumerate` and `enumerate_including_non_visible` for this purpose.
+When iterating using channels or frames, performance is influenced by the block's memory layout.
 
-When using the `channels` or `frames` iterators, performance depends on the block layout. For `Sequential` and `Stacked` layouts, iterating over channels is generally faster. For `Interleaved` layouts with a high number of channels, iterating over frames might offer better performance.
+* For Sequential and Stacked layouts, iterating over channels is generally faster.
+* For Interleaved layouts, especially with a high number of channels, iterating over frames might offer better performance.
 
-You can retrieve the layout of a block using the `layout` function.
+Accessing data via `channel_slice` and `frame_slice` isn't significantly faster than direct slice access but can be convenient for SIMD operations or functions requiring slice inputs.
+
+The most performant way to access data is through `raw_data`. However, this method carries risks for blocks that have allocated more memory than they expose, as it grants access to non-visible samples. You'll also need to manually manage the data layout. For simple, sample-independent operations (e.g., applying gain), processing all samples (including non-visible ones, provided their count isn't excessive) can be more efficient. The `Ops` trait offers `for_each`, `for_each_including_non_visible`, `enumerate`, and `enumerate_including_non_visible` for these scenarios.
+
+To determine a block's memory organization, use the `layout()` function.
