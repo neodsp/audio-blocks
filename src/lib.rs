@@ -15,27 +15,27 @@ pub use num::Zero;
 pub use ops::Ops;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use interleaved::Interleaved;
-pub use interleaved::InterleavedView;
-pub use interleaved::InterleavedViewMut;
+pub use interleaved::AudioBlockInterleaved;
+pub use interleaved::AudioBlockInterleavedView;
+pub use interleaved::AudioBlockInterleavedViewMut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use sequential::Sequential;
-pub use sequential::SequentialView;
-pub use sequential::SequentialViewMut;
+pub use sequential::AudioBlockSequential;
+pub use sequential::AudioBlockSequentialView;
+pub use sequential::AudioBlockSequentialViewMut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use stacked::Stacked;
-pub use stacked::StackedPtrAdapter;
-pub use stacked::StackedPtrAdapterMut;
-pub use stacked::StackedView;
-pub use stacked::StackedViewMut;
+pub use planar::AudioBlockPlanar;
+pub use planar::AudioBlockPlanarView;
+pub use planar::AudioBlockPlanarViewMut;
+pub use planar::PlanarPtrAdapter;
+pub use planar::PlanarPtrAdapterMut;
 
 pub mod interleaved;
 mod iter;
 pub mod ops;
+pub mod planar;
 pub mod sequential;
-pub mod stacked;
 
 /// Represents the memory layout of audio data returned by [`AudioBlock::layout`].
 ///
@@ -56,19 +56,19 @@ pub enum BlockLayout {
     /// This layout is common in consumer audio formats and some APIs.
     Interleaved,
 
+    /// Channels are separated into discrete chunks of memory.
+    ///
+    /// Format: `[[ch0, ch0, ch0, ...], [ch1, ch1, ch1, ...]]`
+    ///
+    /// Useful for operations that work on one channel at a time.
+    Planar,
+
     /// All samples from one channel appear consecutively before the next channel.
     ///
     /// Format: `[ch0, ch0, ch0, ..., ch1, ch1, ch1, ...]`
     ///
     /// Also known as "planar" format in some audio libraries.
     Sequential,
-
-    /// Channels are separated into discrete chunks of memory.
-    ///
-    /// Format: `[[ch0, ch0, ch0, ...], [ch1, ch1, ch1, ...]]`
-    ///
-    /// Useful for operations that work on one channel at a time.
-    Stacked,
 }
 
 /// Represents a sample type that can be stored and processed in audio blocks.
@@ -86,7 +86,7 @@ impl<T> Sample for T where T: Copy + Zero + 'static {}
 /// Core trait for audio data access operations across various memory layouts.
 ///
 /// [`AudioBlock`] provides a unified interface for interacting with audio data regardless of its
-/// underlying memory representation ([`BlockLayout::Interleaved`], [`BlockLayout::Sequential`], or [`BlockLayout::Stacked`]). It supports operations
+/// underlying memory representation ([`BlockLayout::Interleaved`], [`BlockLayout::Sequential`], or [`BlockLayout::Planar`]). It supports operations
 /// on both owned audio blocks and temporary views.
 ///
 /// # Usage
@@ -140,7 +140,7 @@ pub trait AudioBlock<S: Sample> {
     /// This may be greater than `num_frames()` if the buffer has reserved capacity.
     fn num_frames_allocated(&self) -> usize;
 
-    /// Returns the memory layout of this audio block (interleaved, sequential, or stacked).
+    /// Returns the memory layout of this audio block (interleaved, sequential, or planar).
     fn layout(&self) -> BlockLayout;
 
     /// Returns the sample value at the specified channel and frame position.
@@ -160,7 +160,7 @@ pub trait AudioBlock<S: Sample> {
     /// Returns an iterator that yields iterators for each channel.
     fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 
-    /// Returns a slice of the data in case of sequential or stacked layout.
+    /// Returns a slice of the data in case of sequential or planar layout.
     ///
     /// # Panics
     ///
@@ -196,25 +196,52 @@ pub trait AudioBlock<S: Sample> {
     /// as it returns a lightweight wrapper around the original data.
     fn view(&self) -> impl AudioBlock<S>;
 
-    /// Provides direct access to the underlying memory as a slice.
+    /// Provides direct access to the underlying memory as an interleaved slice.
     ///
-    /// # Safety
+    /// This function gives access to all allocated data, including any reserved capacity
+    /// beyond the active range, but it is safe in terms of memory safety.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(&[S])` if the block's layout is [`BlockLayout::Interleaved`], containing
+    /// interleaved samples across all allocated channels. Returns `None` if the layout is
+    /// not interleaved. Check `block.layout() == BlockLayout::Interleaved` before calling.
+    fn raw_data_interleaved(&self) -> Option<&[S]> {
+        None
+    }
+
+    /// Provides direct access to the underlying memory as a planar slice for a specific channel.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
     /// beyond the active range, but it is safe in terms of memory safety.
     ///
     /// # Parameters
     ///
-    /// * `stacked_ch` - For `Layout::Stacked`, specifies which channel to access (required).
-    ///   For other layouts, this parameter is ignored.
+    /// * `ch` - Specifies which channel to access.
     ///
     /// # Returns
     ///
-    /// A slice containing all allocated data. The data format follows the block's layout:
-    /// - For `Interleaved`: returns interleaved samples across all allocated channels
-    /// - For `Sequential`: returns planar data with all allocated channels
-    /// - For `Stacked`: returns data for the specified channel only
-    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
+    /// Returns `Some(&[S])` if the block's layout is [`BlockLayout::Planar`], containing
+    /// data for the specified channel only. Returns `None` if the layout is
+    /// not planar. Check `block.layout() == BlockLayout::Planar` before calling.
+    fn raw_data_planar(&self, ch: u16) -> Option<&[S]> {
+        let _ = ch;
+        None
+    }
+
+    /// Provides direct access to the underlying memory as a sequential slice.
+    ///
+    /// This function gives access to all allocated data, including any reserved capacity
+    /// beyond the active range, but it is safe in terms of memory safety.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(&[S])` if the block's layout is [`BlockLayout::Sequential`], containing
+    /// sequential data with all allocated channels. Returns `None` if the layout is
+    /// not sequential. Check `block.layout() == BlockLayout::Sequential` before calling.
+    fn raw_data_sequential(&self) -> Option<&[S]> {
+        None
+    }
 }
 
 /// Extends the [`AudioBlock`] trait with mutable access operations.
@@ -299,7 +326,7 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// Returns a mutable iterator that yields mutable iterators for each channel.
     fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 
-    /// Returns a slice of the data in case of sequential or stacked layout.
+    /// Returns a slice of the data in case of sequential or planar layout.
     ///
     /// # Panics
     ///
@@ -335,23 +362,50 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// as it returns a lightweight wrapper around the original data.
     fn view_mut(&mut self) -> impl AudioBlockMut<S>;
 
-    /// Provides direct mutable access to the underlying memory as a slice.
+    /// Provides direct mutable access to the underlying memory as an interleaved slice.
     ///
-    /// # Safety
+    /// This function gives mutable access to all allocated data, including any reserved capacity
+    /// beyond the active range, but it is safe in terms of memory safety.
     ///
-    /// This function gives access to all allocated data, including any reserved capacity
+    /// # Returns
+    ///
+    /// Returns `Some(&mut [S])` if the block's layout is [`BlockLayout::Interleaved`], containing
+    /// interleaved samples across all allocated channels. Returns `None` if the layout is
+    /// not interleaved. Check `block.layout() == BlockLayout::Interleaved` before calling.
+    fn raw_data_interleaved_mut(&mut self) -> Option<&mut [S]> {
+        None
+    }
+
+    /// Provides direct mutable access to the underlying memory as a planar slice for a specific channel.
+    ///
+    /// This function gives mutable access to all allocated data, including any reserved capacity
     /// beyond the active range, but it is safe in terms of memory safety.
     ///
     /// # Parameters
     ///
-    /// * `stacked_ch` - For `BlockLayout::Stacked`, specifies which channel to access (required).
-    ///   For other layouts, this parameter is ignored.
+    /// * `ch` - Specifies which channel to access.
     ///
     /// # Returns
     ///
-    /// A mutable slice containing all allocated data. The data format follows the block's layout:
-    /// - For `Interleaved`: returns interleaved samples across all allocated channels
-    /// - For `Sequential`: returns planar data with all allocated channels
-    /// - For `Stacked`: returns data for the specified channel only
-    fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
+    /// Returns `Some(&mut [S])` if the block's layout is [`BlockLayout::Planar`], containing
+    /// data for the specified channel only. Returns `None` if the layout is
+    /// not planar. Check `block.layout() == BlockLayout::Planar` before calling.
+    fn raw_data_planar_mut(&mut self, ch: u16) -> Option<&mut [S]> {
+        let _ = ch;
+        None
+    }
+
+    /// Provides direct mutable access to the underlying memory as a sequential slice.
+    ///
+    /// This function gives mutable access to all allocated data, including any reserved capacity
+    /// beyond the active range, but it is safe in terms of memory safety.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(&mut [S])` if the block's layout is [`BlockLayout::Sequential`], containing
+    /// sequential data with all allocated channels. Returns `None` if the layout is
+    /// not sequential. Check `block.layout() == BlockLayout::Sequential` before calling.
+    fn raw_data_sequential_mut(&mut self) -> Option<&mut [S]> {
+        None
+    }
 }

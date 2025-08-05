@@ -9,9 +9,9 @@ use std::{boxed::Box, vec, vec::Vec};
 
 use crate::{AudioBlock, AudioBlockMut, Sample};
 
-use super::{view::StackedView, view_mut::StackedViewMut};
+use super::{view::AudioBlockPlanarView, view_mut::AudioBlockPlanarViewMut};
 
-/// A stacked / seperate-channel audio block that owns its data.
+/// A planar / seperate-channel audio block that owns its data.
 ///
 /// * **Layout:** `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
 /// * **Interpretation:** Each channel has its own separate buffer or array.
@@ -23,16 +23,16 @@ use super::{view::StackedView, view_mut::StackedViewMut};
 /// ```
 /// use audio_blocks::*;
 ///
-/// let block = Stacked::new(2, 3);
-/// let mut block = Stacked::from_block(&block);
+/// let block = AudioBlockPlanar::new(2, 3);
+/// let mut block = AudioBlockPlanar::from_block(&block);
 ///
 /// block.channel_mut(0).for_each(|v| *v = 0.0);
 /// block.channel_mut(1).for_each(|v| *v = 1.0);
 ///
-/// assert_eq!(block.raw_data(Some(0)), &[0.0, 0.0, 0.0]);
-/// assert_eq!(block.raw_data(Some(1)), &[1.0, 1.0, 1.0]);
+/// assert_eq!(block.raw_data_planar(0).unwrap(), &[0.0, 0.0, 0.0]);
+/// assert_eq!(block.raw_data_planar(1).unwrap(), &[1.0, 1.0, 1.0]);
 /// ```
-pub struct Stacked<S: Sample> {
+pub struct AudioBlockPlanar<S: Sample> {
     data: Box<[Box<[S]>]>,
     num_channels: u16,
     num_frames: usize,
@@ -40,10 +40,10 @@ pub struct Stacked<S: Sample> {
     num_frames_allocated: usize,
 }
 
-impl<S: Sample> Stacked<S> {
-    /// Creates a new [`Stacked`] audio block with the specified dimensions.
+impl<S: Sample> AudioBlockPlanar<S> {
+    /// Creates a new audio block with the specified dimensions.
     ///
-    /// Allocates memory for a new stacked audio block with exactly the specified
+    /// Allocates memory for a new planar audio block with exactly the specified
     /// number of channels and frames. The block is initialized with the default value
     /// for the sample type.
     ///
@@ -69,9 +69,9 @@ impl<S: Sample> Stacked<S> {
         }
     }
 
-    /// Creates a new [`Stacked`] audio block by copying data from another [`AudioBlock`].
+    /// Creates a new audio block by copying data from another [`AudioBlock`].
     ///
-    /// Converts any [`AudioBlock`] implementation to a stacked format by iterating
+    /// Converts any [`AudioBlock`] implementation to a planar format by iterating
     /// through each channel of the source block and copying its samples. The new block
     /// will have the same dimensions as the source block.
     ///
@@ -95,7 +95,7 @@ impl<S: Sample> Stacked<S> {
     }
 }
 
-impl<S: Sample> AudioBlock<S> for Stacked<S> {
+impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -114,6 +114,11 @@ impl<S: Sample> AudioBlock<S> for Stacked<S> {
     #[nonblocking]
     fn num_frames_allocated(&self) -> usize {
         self.num_frames_allocated
+    }
+
+    #[nonblocking]
+    fn layout(&self) -> crate::BlockLayout {
+        crate::BlockLayout::Planar
     }
 
     #[nonblocking]
@@ -194,23 +199,17 @@ impl<S: Sample> AudioBlock<S> for Stacked<S> {
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        StackedView::from_slice_limited(&self.data, self.num_channels, self.num_frames)
+        AudioBlockPlanarView::from_slice_limited(&self.data, self.num_channels, self.num_frames)
     }
 
     #[nonblocking]
-    fn layout(&self) -> crate::BlockLayout {
-        crate::BlockLayout::Stacked
-    }
-
-    #[nonblocking]
-    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
-        let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
+    fn raw_data_planar(&self, ch: u16) -> Option<&[S]> {
         assert!(ch < self.num_channels_allocated);
-        unsafe { self.data.get_unchecked(ch as usize) }
+        Some(unsafe { self.data.get_unchecked(ch as usize) })
     }
 }
 
-impl<S: Sample> AudioBlockMut<S> for Stacked<S> {
+impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     #[nonblocking]
     fn set_active_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
@@ -296,14 +295,17 @@ impl<S: Sample> AudioBlockMut<S> for Stacked<S> {
 
     #[nonblocking]
     fn view_mut(&mut self) -> impl AudioBlockMut<S> {
-        StackedViewMut::from_slice_limited(&mut self.data, self.num_channels, self.num_frames)
+        AudioBlockPlanarViewMut::from_slice_limited(
+            &mut self.data,
+            self.num_channels,
+            self.num_frames,
+        )
     }
 
     #[nonblocking]
-    fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S] {
-        let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
+    fn raw_data_planar_mut(&mut self, ch: u16) -> Option<&mut [S]> {
         assert!(ch < self.num_channels_allocated);
-        unsafe { self.data.get_unchecked_mut(ch as usize).as_mut() }
+        Some(unsafe { self.data.get_unchecked_mut(ch as usize) })
     }
 }
 
@@ -312,11 +314,11 @@ mod tests {
     use rtsan_standalone::no_sanitize_realtime;
 
     use super::*;
-    use crate::interleaved::InterleavedView;
+    use crate::interleaved::AudioBlockInterleavedView;
 
     #[test]
     fn test_samples() {
-        let mut block = Stacked::<f32>::new(2, 5);
+        let mut block = AudioBlockPlanar::<f32>::new(2, 5);
 
         let num_frames = block.num_frames();
         for ch in 0..block.num_channels() {
@@ -331,13 +333,19 @@ mod tests {
             }
         }
 
-        assert_eq!(block.raw_data(Some(0)), &[0.0, 1.0, 2.0, 3.0, 4.0]);
-        assert_eq!(block.raw_data(Some(1)), &[5.0, 6.0, 7.0, 8.0, 9.0]);
+        assert_eq!(
+            block.raw_data_planar(0).unwrap(),
+            &[0.0, 1.0, 2.0, 3.0, 4.0]
+        );
+        assert_eq!(
+            block.raw_data_planar(1).unwrap(),
+            &[5.0, 6.0, 7.0, 8.0, 9.0]
+        );
     }
 
     #[test]
     fn test_channel() {
-        let mut block = Stacked::<f32>::new(2, 5);
+        let mut block = AudioBlockPlanar::<f32>::new(2, 5);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -361,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_channels() {
-        let mut block = Stacked::<f32>::new(2, 5);
+        let mut block = AudioBlockPlanar::<f32>::new(2, 5);
 
         let mut channels_iter = block.channels();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -396,7 +404,7 @@ mod tests {
 
     #[test]
     fn test_frame() {
-        let mut block = Stacked::<f32>::new(2, 5);
+        let mut block = AudioBlockPlanar::<f32>::new(2, 5);
 
         for i in 0..block.num_frames() {
             let frame = block.frame(i).copied().collect::<Vec<_>>();
@@ -425,7 +433,7 @@ mod tests {
 
     #[test]
     fn test_frames() {
-        let mut block = Stacked::<f32>::new(3, 6);
+        let mut block = AudioBlockPlanar::<f32>::new(3, 6);
         block.set_active_size(2, 5);
 
         let num_frames = block.num_frames;
@@ -465,7 +473,7 @@ mod tests {
 
     #[test]
     fn test_from_block() {
-        let block = Stacked::<f32>::from_block(&InterleavedView::from_slice(
+        let block = AudioBlockPlanar::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
             5,
@@ -491,7 +499,7 @@ mod tests {
 
     #[test]
     fn test_view() {
-        let block = Stacked::<f32>::from_block(&InterleavedView::from_slice(
+        let block = AudioBlockPlanar::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
             5,
@@ -509,7 +517,7 @@ mod tests {
 
     #[test]
     fn test_view_mut() {
-        let mut block = Stacked::<f32>::new(2, 5);
+        let mut block = AudioBlockPlanar::<f32>::new(2, 5);
         {
             let mut view = block.view_mut();
             view.channel_mut(0)
@@ -532,7 +540,7 @@ mod tests {
 
     #[test]
     fn test_resize() {
-        let mut block = Stacked::<f32>::new(3, 10);
+        let mut block = AudioBlockPlanar::<f32>::new(3, 10);
         assert_eq!(block.num_channels(), 3);
         assert_eq!(block.num_frames(), 10);
         assert_eq!(block.num_channels_allocated(), 3);
@@ -569,7 +577,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
-        let mut block = Stacked::<f32>::new(2, 10);
+        let mut block = AudioBlockPlanar::<f32>::new(2, 10);
         block.set_active_size(3, 10);
     }
 
@@ -577,7 +585,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
-        let mut block = Stacked::<f32>::new(2, 10);
+        let mut block = AudioBlockPlanar::<f32>::new(2, 10);
         block.set_active_size(2, 11);
     }
 
@@ -585,7 +593,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_channel() {
-        let mut block = Stacked::<f32>::new(2, 10);
+        let mut block = AudioBlockPlanar::<f32>::new(2, 10);
         block.set_active_size(1, 10);
         let _ = block.channel(1);
     }
@@ -594,7 +602,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_frame() {
-        let mut block = Stacked::<f32>::new(2, 10);
+        let mut block = AudioBlockPlanar::<f32>::new(2, 10);
         block.set_active_size(2, 5);
         let _ = block.frame(5);
     }
@@ -603,7 +611,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
-        let mut block = Stacked::<f32>::new(2, 10);
+        let mut block = AudioBlockPlanar::<f32>::new(2, 10);
         block.set_active_size(1, 10);
         let _ = block.channel_mut(1);
     }
@@ -612,14 +620,14 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_frame_mut() {
-        let mut block = Stacked::<f32>::new(2, 10);
+        let mut block = AudioBlockPlanar::<f32>::new(2, 10);
         block.set_active_size(2, 5);
         let _ = block.frame_mut(5);
     }
 
     #[test]
     fn test_slice() {
-        let mut block = Stacked::<f32>::new(3, 4);
+        let mut block = AudioBlockPlanar::<f32>::new(3, 4);
         block.set_active_size(2, 3);
 
         assert!(block.frame_slice(0).is_none());
@@ -634,7 +642,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
-        let mut block = Stacked::<f32>::new(3, 4);
+        let mut block = AudioBlockPlanar::<f32>::new(3, 4);
         block.set_active_size(2, 3);
 
         block.channel_slice(2);
@@ -644,7 +652,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
-        let mut block = Stacked::<f32>::new(3, 4);
+        let mut block = AudioBlockPlanar::<f32>::new(3, 4);
         block.set_active_size(2, 3);
 
         block.channel_slice_mut(2);
@@ -653,14 +661,32 @@ mod tests {
     #[test]
     fn test_raw_data() {
         let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let mut block = Stacked::from_block(&StackedViewMut::from_slice(&mut vec));
+        let mut block =
+            AudioBlockPlanar::from_block(&AudioBlockPlanarViewMut::from_slice(&mut vec));
 
-        assert_eq!(block.layout(), crate::BlockLayout::Stacked);
+        assert_eq!(block.layout(), crate::BlockLayout::Planar);
 
-        assert_eq!(block.raw_data(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-        assert_eq!(block.raw_data(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        assert_eq!(block.raw_data_interleaved(), None);
+        assert_eq!(block.raw_data_interleaved_mut(), None);
+        assert_eq!(block.raw_data_sequential(), None);
+        assert_eq!(block.raw_data_sequential_mut(), None);
 
-        assert_eq!(block.raw_data_mut(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-        assert_eq!(block.raw_data_mut(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        assert_eq!(
+            block.raw_data_planar(0).unwrap(),
+            &[0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            block.raw_data_planar(1).unwrap(),
+            &[1.0, 3.0, 5.0, 7.0, 9.0]
+        );
+
+        assert_eq!(
+            block.raw_data_planar_mut(0).unwrap(),
+            &[0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            block.raw_data_planar_mut(1).unwrap(),
+            &[1.0, 3.0, 5.0, 7.0, 9.0]
+        );
     }
 }

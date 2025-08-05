@@ -4,9 +4,9 @@ use std::marker::PhantomData;
 
 use crate::{AudioBlock, AudioBlockMut, Sample};
 
-use super::StackedView;
+use super::AudioBlockPlanarView;
 
-/// A mutable view of stacked / separate-channel audio data.
+/// A mutable view of planar / separate-channel audio data.
 ///
 /// * **Layout:** `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
 /// * **Interpretation:** Each channel has its own separate buffer or array.
@@ -20,12 +20,12 @@ use super::StackedView;
 ///
 /// let mut data = vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]];
 ///
-/// let block = StackedViewMut::from_slice(&mut data);
+/// let block = AudioBlockPlanarViewMut::from_slice(&mut data);
 ///
 /// block.channel(0).for_each(|&v| assert_eq!(v, 0.0));
 /// block.channel(1).for_each(|&v| assert_eq!(v, 1.0));
 /// ```
-pub struct StackedViewMut<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> {
+pub struct AudioBlockPlanarViewMut<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> {
     data: &'a mut [V],
     num_channels: u16,
     num_frames: usize,
@@ -34,11 +34,11 @@ pub struct StackedViewMut<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> {
     _phantom: PhantomData<S>,
 }
 
-impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> StackedViewMut<'a, S, V> {
-    /// Creates a new [`StackedViewMut`] from a mutable slice of stacked audio data.
+impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockPlanarViewMut<'a, S, V> {
+    /// Creates a new audio block from a mutable slice of planar audio data.
     ///
     /// # Parameters
-    /// * `data` - The mutable slice containing stacked audio samples (one slice per channel)
+    /// * `data` - The mutable slice containing planar audio samples (one slice per channel)
     ///
     /// # Panics
     /// Panics if the channel slices have different lengths.
@@ -52,13 +52,13 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> StackedViewMut<'a, S, V> {
         Self::from_slice_limited(data, data.len() as u16, num_frames_available)
     }
 
-    /// Creates a new [`StackedViewMut`] from a mutable slice with limited visibility.
+    /// Creates a new audio block from a mutable slice with limited visibility.
     ///
     /// This function allows creating a view that exposes only a subset of the allocated channels
     /// and frames, which is useful for working with a logical section of a larger buffer.
     ///
     /// # Parameters
-    /// * `data` - The mutable slice containing stacked audio samples (one slice per channel)
+    /// * `data` - The mutable slice containing planar audio samples (one slice per channel)
     /// * `num_channels_visible` - Number of audio channels to expose in the view
     /// * `num_frames_visible` - Number of audio frames to expose in the view
     ///
@@ -94,7 +94,7 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> StackedViewMut<'a, S, V> {
     }
 }
 
-impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for StackedViewMut<'_, S, V> {
+impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarViewMut<'_, S, V> {
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -113,6 +113,11 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for StackedViewMut<'_,
     #[nonblocking]
     fn num_frames_allocated(&self) -> usize {
         self.num_frames_allocated
+    }
+
+    #[nonblocking]
+    fn layout(&self) -> crate::BlockLayout {
+        crate::BlockLayout::Planar
     }
 
     #[nonblocking]
@@ -194,23 +199,17 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for StackedViewMut<'_,
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        StackedView::from_slice_limited(self.data, self.num_channels, self.num_frames)
+        AudioBlockPlanarView::from_slice_limited(self.data, self.num_channels, self.num_frames)
     }
 
     #[nonblocking]
-    fn layout(&self) -> crate::BlockLayout {
-        crate::BlockLayout::Stacked
-    }
-
-    #[nonblocking]
-    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
-        let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
+    fn raw_data_planar(&self, ch: u16) -> Option<&[S]> {
         assert!(ch < self.num_channels_allocated);
-        unsafe { self.data.get_unchecked(ch as usize).as_ref() }
+        Some(unsafe { self.data.get_unchecked(ch as usize).as_ref() })
     }
 }
 
-impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<'_, S, V> {
+impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for AudioBlockPlanarViewMut<'_, S, V> {
     #[nonblocking]
     fn set_active_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
@@ -298,18 +297,17 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<
 
     #[nonblocking]
     fn view_mut(&mut self) -> impl AudioBlockMut<S> {
-        StackedViewMut::from_slice_limited(self.data, self.num_channels, self.num_frames)
+        AudioBlockPlanarViewMut::from_slice_limited(self.data, self.num_channels, self.num_frames)
     }
 
     #[nonblocking]
-    fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S] {
-        let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
+    fn raw_data_planar_mut(&mut self, ch: u16) -> Option<&mut [S]> {
         assert!(ch < self.num_channels_allocated);
-        unsafe { self.data.get_unchecked_mut(ch as usize).as_mut() }
+        Some(unsafe { self.data.get_unchecked_mut(ch as usize).as_mut() })
     }
 }
 
-/// Adapter for creating mutable stacked audio block views from raw pointers.
+/// Adapter for creating mutable planar audio block views from raw pointers.
 ///
 /// This adapter provides a safe interface to work with mutable audio data stored in external buffers,
 /// which is common when interfacing with audio APIs or hardware.
@@ -330,10 +328,10 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<
 /// let num_frames = 5;
 ///
 /// // Create an adapter from raw pointers to audio channel data
-/// let mut adapter = unsafe { StackedPtrAdapterMut::<f32, 16>::from_ptr(data, num_channels, num_frames) };
+/// let mut adapter = unsafe { PlanarPtrAdapterMut::<f32, 16>::from_ptr(data, num_channels, num_frames) };
 ///
 /// // Get a safe mutable view of the audio data
-/// let mut block = adapter.stacked_view_mut();
+/// let mut block = adapter.planar_view_mut();
 ///
 /// // Verify the data access works and can be modified
 /// assert_eq!(block.sample(0, 2), 2.0);
@@ -348,13 +346,13 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for StackedViewMut<
 /// - The memory they point to remains valid for the lifetime of the adapter
 /// - The data is not accessed through other pointers during the adapter's lifetime
 /// - The channel count doesn't exceed the adapter's `MAX_CHANNELS` capacity
-pub struct StackedPtrAdapterMut<'a, S: Sample, const MAX_CHANNELS: usize> {
+pub struct PlanarPtrAdapterMut<'a, S: Sample, const MAX_CHANNELS: usize> {
     data: [MaybeUninit<&'a mut [S]>; MAX_CHANNELS],
     num_channels: u16,
 }
 
-impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_CHANNELS> {
-    /// Creates new StackedPtrAdapterNew from raw pointers.
+impl<'a, S: Sample, const MAX_CHANNELS: usize> PlanarPtrAdapterMut<'a, S, MAX_CHANNELS> {
+    /// Creates new pointer adapter to create an audio block from raw pointers.
     ///
     /// # Safety
     ///
@@ -401,7 +399,7 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
         }
     }
 
-    /// Creates a safe [`StackedViewMut`] for accessing the audio data.
+    /// Creates a safe [`AudioBlockPlanarViewMut`] for accessing the audio data.
     ///
     /// This provides a convenient way to interact with the audio data through
     /// the full [`AudioBlockMut`] interface, enabling operations like iterating
@@ -409,10 +407,10 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapterMut<'a, S, MAX_C
     ///
     /// # Returns
     ///
-    /// A [`StackedViewMut`] that provides safe, mutable access to the audio data.
+    /// An [`AudioBlockPlanarViewMut`] that provides safe, mutable access to the audio data.
     #[nonblocking]
-    pub fn stacked_view_mut(&mut self) -> StackedViewMut<'a, S, &mut [S]> {
-        StackedViewMut::from_slice(self.data_slice_mut())
+    pub fn planar_view_mut(&mut self) -> AudioBlockPlanarViewMut<'a, S, &mut [S]> {
+        AudioBlockPlanarViewMut::from_slice(self.data_slice_mut())
     }
 }
 
@@ -428,7 +426,7 @@ mod tests {
         let mut ch1 = vec![0.0; 5];
         let mut ch2 = vec![0.0; 5];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice()];
-        let mut block = StackedViewMut::from_slice(&mut data);
+        let mut block = AudioBlockPlanarViewMut::from_slice(&mut data);
 
         let num_frames = block.num_frames();
         for ch in 0..block.num_channels() {
@@ -452,7 +450,7 @@ mod tests {
         let mut ch1 = vec![0.0; 5];
         let mut ch2 = vec![0.0; 5];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice()];
-        let mut block = StackedViewMut::from_slice(&mut data);
+        let mut block = AudioBlockPlanarViewMut::from_slice(&mut data);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -479,7 +477,7 @@ mod tests {
         let mut ch1 = vec![0.0; 5];
         let mut ch2 = vec![0.0; 5];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice()];
-        let mut block = StackedViewMut::from_slice(&mut data);
+        let mut block = AudioBlockPlanarViewMut::from_slice(&mut data);
 
         let mut channels_iter = block.channels();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -517,7 +515,7 @@ mod tests {
         let mut ch1 = vec![0.0; 5];
         let mut ch2 = vec![0.0; 5];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice()];
-        let mut block = StackedViewMut::from_slice(&mut data);
+        let mut block = AudioBlockPlanarViewMut::from_slice(&mut data);
 
         for i in 0..block.num_frames() {
             let frame = block.frame(i).copied().collect::<Vec<_>>();
@@ -550,7 +548,7 @@ mod tests {
         let mut ch2 = vec![0.0; 10];
         let mut ch3 = vec![0.0; 10];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice(), ch3.as_mut_slice()];
-        let mut block = StackedViewMut::from_slice(&mut data);
+        let mut block = AudioBlockPlanarViewMut::from_slice(&mut data);
         block.set_active_size(2, 5);
 
         let num_frames = block.num_frames;
@@ -591,7 +589,7 @@ mod tests {
     #[test]
     fn test_from_vec() {
         let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = StackedViewMut::from_slice(&mut vec);
+        let block = AudioBlockPlanarViewMut::from_slice(&mut vec);
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 5);
         assert_eq!(
@@ -612,7 +610,7 @@ mod tests {
     #[test]
     fn test_view() {
         let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = StackedViewMut::from_slice(&mut vec);
+        let block = AudioBlockPlanarViewMut::from_slice(&mut vec);
         let view = block.view();
         assert_eq!(
             view.channel(0).copied().collect::<Vec<_>>(),
@@ -627,7 +625,7 @@ mod tests {
     #[test]
     fn test_view_mut() {
         let mut data = vec![vec![0.0; 5]; 2];
-        let mut block = StackedViewMut::from_slice(&mut data);
+        let mut block = AudioBlockPlanarViewMut::from_slice(&mut data);
 
         {
             let mut view = block.view_mut();
@@ -653,7 +651,7 @@ mod tests {
     fn test_limited() {
         let mut data = vec![vec![0.0; 4]; 3];
 
-        let mut block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
+        let mut block = AudioBlockPlanarViewMut::from_slice_limited(&mut data, 2, 3);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -683,18 +681,17 @@ mod tests {
                 .collect();
             let ptr = ptr_vec.as_mut_ptr();
 
-            let mut adaptor =
-                StackedPtrAdapterMut::<_, 16>::from_ptr(ptr, num_channels, num_frames);
+            let mut adaptor = PlanarPtrAdapterMut::<_, 16>::from_ptr(ptr, num_channels, num_frames);
 
-            let stacked = adaptor.stacked_view_mut();
+            let planar = adaptor.planar_view_mut();
 
             assert_eq!(
-                stacked.channel(0).copied().collect::<Vec<_>>(),
+                planar.channel(0).copied().collect::<Vec<_>>(),
                 vec![0.0, 2.0, 4.0, 6.0, 8.0]
             );
 
             assert_eq!(
-                stacked.channel(1).copied().collect::<Vec<_>>(),
+                planar.channel(1).copied().collect::<Vec<_>>(),
                 vec![1.0, 3.0, 5.0, 7.0, 9.0]
             );
         }
@@ -703,7 +700,7 @@ mod tests {
     #[test]
     fn test_slice() {
         let mut data = [[0.0; 4]; 3];
-        let mut block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
+        let mut block = AudioBlockPlanarViewMut::from_slice_limited(&mut data, 2, 3);
 
         assert!(block.frame_slice(0).is_none());
 
@@ -718,7 +715,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let mut data = [[0.0; 4]; 3];
-        let block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
+        let block = AudioBlockPlanarViewMut::from_slice_limited(&mut data, 2, 3);
 
         block.channel_slice(2);
     }
@@ -728,7 +725,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
         let mut data = [[0.0; 4]; 3];
-        let mut block = StackedViewMut::from_slice_limited(&mut data, 2, 3);
+        let mut block = AudioBlockPlanarViewMut::from_slice_limited(&mut data, 2, 3);
 
         block.channel_slice_mut(2);
     }
@@ -736,14 +733,31 @@ mod tests {
     #[test]
     fn test_raw_data() {
         let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let mut block = StackedViewMut::from_slice(&mut vec);
+        let mut block = AudioBlockPlanarViewMut::from_slice(&mut vec);
 
-        assert_eq!(block.layout(), crate::BlockLayout::Stacked);
+        assert_eq!(block.layout(), crate::BlockLayout::Planar);
 
-        assert_eq!(block.raw_data(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-        assert_eq!(block.raw_data(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        assert_eq!(block.raw_data_interleaved(), None);
+        assert_eq!(block.raw_data_interleaved_mut(), None);
+        assert_eq!(block.raw_data_sequential(), None);
+        assert_eq!(block.raw_data_sequential_mut(), None);
 
-        assert_eq!(block.raw_data_mut(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-        assert_eq!(block.raw_data_mut(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        assert_eq!(
+            block.raw_data_planar(0).unwrap(),
+            &[0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            block.raw_data_planar(1).unwrap(),
+            &[1.0, 3.0, 5.0, 7.0, 9.0]
+        );
+
+        assert_eq!(
+            block.raw_data_planar_mut(0).unwrap(),
+            &[0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            block.raw_data_planar_mut(1).unwrap(),
+            &[1.0, 3.0, 5.0, 7.0, 9.0]
+        );
     }
 }

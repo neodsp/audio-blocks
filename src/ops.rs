@@ -65,7 +65,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
             }
         } else {
             match self.layout() {
-                BlockLayout::Sequential | BlockLayout::Stacked => {
+                BlockLayout::Sequential | BlockLayout::Planar => {
                     for channel in self.channels_mut() {
                         channel.for_each(&mut f);
                     }
@@ -82,11 +82,22 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
     #[nonblocking]
     fn for_each_including_non_visible(&mut self, mut f: impl FnMut(&mut S)) {
         match self.layout() {
-            BlockLayout::Sequential => self.raw_data_mut(None).iter_mut().for_each(&mut f),
-            BlockLayout::Interleaved => self.raw_data_mut(None).iter_mut().for_each(&mut f),
-            BlockLayout::Stacked => {
+            BlockLayout::Interleaved => self
+                .raw_data_interleaved_mut()
+                .expect("Layout is interleaved")
+                .iter_mut()
+                .for_each(&mut f),
+            BlockLayout::Sequential => self
+                .raw_data_sequential_mut()
+                .expect("Layout is sequential")
+                .iter_mut()
+                .for_each(&mut f),
+            BlockLayout::Planar => {
                 for ch in 0..self.num_channels() {
-                    self.raw_data_mut(Some(ch)).iter_mut().for_each(&mut f);
+                    self.raw_data_planar_mut(ch)
+                        .expect("Layout is planar")
+                        .iter_mut()
+                        .for_each(&mut f);
                 }
             }
         }
@@ -103,18 +114,18 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
             }
         } else {
             match self.layout() {
-                BlockLayout::Sequential | BlockLayout::Stacked => {
-                    for ch in 0..self.num_channels() {
-                        self.channel_mut(ch)
-                            .enumerate()
-                            .for_each(|(frame, sample)| f(ch, frame, sample));
-                    }
-                }
                 BlockLayout::Interleaved => {
                     for frame in 0..self.num_frames() {
                         self.frame_mut(frame)
                             .enumerate()
                             .for_each(|(ch, sample)| f(ch as u16, frame, sample));
+                    }
+                }
+                BlockLayout::Planar | BlockLayout::Sequential => {
+                    for ch in 0..self.num_channels() {
+                        self.channel_mut(ch)
+                            .enumerate()
+                            .for_each(|(frame, sample)| f(ch, frame, sample));
                     }
                 }
             }
@@ -124,20 +135,10 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
     #[nonblocking]
     fn enumerate_including_non_visible(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
         match self.layout() {
-            BlockLayout::Sequential => {
-                let num_frames = self.num_frames_allocated();
-                self.raw_data_mut(None)
-                    .iter_mut()
-                    .enumerate()
-                    .for_each(|(i, sample)| {
-                        let channel = i / num_frames;
-                        let frame = i % num_frames;
-                        f(channel as u16, frame, sample)
-                    });
-            }
             BlockLayout::Interleaved => {
                 let num_frames = self.num_frames_allocated();
-                self.raw_data_mut(None)
+                self.raw_data_interleaved_mut()
+                    .expect("Layout is interleaved")
                     .iter_mut()
                     .enumerate()
                     .for_each(|(i, sample)| {
@@ -146,13 +147,26 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
                         f(channel as u16, frame, sample)
                     });
             }
-            BlockLayout::Stacked => {
+            BlockLayout::Planar => {
                 for ch in 0..self.num_channels() {
-                    self.raw_data_mut(Some(ch))
+                    self.raw_data_planar_mut(ch)
+                        .expect("Layout is sequential")
                         .iter_mut()
                         .enumerate()
                         .for_each(|(frame, sample)| f(ch, frame, sample));
                 }
+            }
+            BlockLayout::Sequential => {
+                let num_frames = self.num_frames_allocated();
+                self.raw_data_sequential_mut()
+                    .expect("Layout is sequential")
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(i, sample)| {
+                        let channel = i / num_frames;
+                        let frame = i % num_frames;
+                        f(channel as u16, frame, sample)
+                    });
             }
         }
     }
@@ -173,9 +187,9 @@ mod tests {
     use rtsan_standalone::no_sanitize_realtime;
 
     use crate::{
-        interleaved::InterleavedViewMut,
-        sequential::{SequentialView, SequentialViewMut},
-        stacked::StackedViewMut,
+        interleaved::AudioBlockInterleavedViewMut,
+        planar::AudioBlockPlanarViewMut,
+        sequential::{AudioBlockSequentialView, AudioBlockSequentialViewMut},
     };
 
     use super::*;
@@ -183,8 +197,9 @@ mod tests {
     #[test]
     fn test_copy_from() {
         let mut data = [0.0; 15];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 3, 5);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 3, 5);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block_resize(&view);
 
         assert_eq!(block.num_channels(), 2);
@@ -205,8 +220,9 @@ mod tests {
     #[test]
     fn test_copy_from_exact() {
         let mut data = [0.0; 8];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 2, 4);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2, 4);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block(&view);
 
         assert_eq!(block.num_channels(), 2);
@@ -229,8 +245,9 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_copy_data_wrong_channels() {
         let mut data = [0.0; 5];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 1, 5);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 1, 5);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block_resize(&view);
     }
 
@@ -239,8 +256,9 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_copy_data_wrong_frames() {
         let mut data = [0.0; 9];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 3, 3);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 3, 3);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block(&view);
     }
 
@@ -249,8 +267,9 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_copy_data_exact_wrong_channels() {
         let mut data = [0.0; 12];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 3, 4);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 3, 4);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block(&view);
     }
 
@@ -259,15 +278,16 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_copy_data_exact_wrong_frames() {
         let mut data = [0.0; 10];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 2, 5);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2, 5);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block(&view);
     }
 
     #[test]
     fn test_for_each() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = SequentialViewMut::from_slice(&mut data, 2, 4);
+        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 2, 4);
 
         let mut i = 0;
         let mut c_exp = 0;
@@ -284,7 +304,7 @@ mod tests {
         });
 
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2, 4);
 
         let mut i = 0;
         let mut f_exp = 0;
@@ -301,7 +321,7 @@ mod tests {
         });
 
         let mut data = [[0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0]];
-        let mut block = StackedViewMut::from_slice(&mut data);
+        let mut block = AudioBlockPlanarViewMut::from_slice(&mut data);
 
         let mut i = 0;
         let mut c_exp = 0;
@@ -321,7 +341,7 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = SequentialViewMut::from_slice(&mut data, 2, 4);
+        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 2, 4);
 
         block.fill_with(1.0);
 

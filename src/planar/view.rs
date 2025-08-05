@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use crate::{AudioBlock, Sample};
 
-/// A read-only view of stacked / separate-channel audio data.
+/// A read-only view of planar / separate-channel audio data.
 ///
 /// * **Layout:** `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
 /// * **Interpretation:** Each channel has its own separate buffer or array.
@@ -18,12 +18,12 @@ use crate::{AudioBlock, Sample};
 ///
 /// let data = vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]];
 ///
-/// let block = StackedView::from_slice(&data);
+/// let block = AudioBlockPlanarView::from_slice(&data);
 ///
 /// block.channel(0).for_each(|&v| assert_eq!(v, 0.0));
 /// block.channel(1).for_each(|&v| assert_eq!(v, 1.0));
 /// ```
-pub struct StackedView<'a, S: Sample, V: AsRef<[S]>> {
+pub struct AudioBlockPlanarView<'a, S: Sample, V: AsRef<[S]>> {
     data: &'a [V],
     num_channels: u16,
     num_frames: usize,
@@ -32,11 +32,11 @@ pub struct StackedView<'a, S: Sample, V: AsRef<[S]>> {
     _phantom: PhantomData<S>,
 }
 
-impl<'a, S: Sample, V: AsRef<[S]>> StackedView<'a, S, V> {
-    /// Creates a new [`StackedView`] from a slice of stacked audio data.
+impl<'a, S: Sample, V: AsRef<[S]>> AudioBlockPlanarView<'a, S, V> {
+    /// Creates a new audio block from a slice of planar audio data.
     ///
     /// # Parameters
-    /// * `data` - The slice containing stacked audio samples (one slice per channel)
+    /// * `data` - The slice containing planar audio samples (one slice per channel)
     ///
     /// # Panics
     /// Panics if the channel slices have different lengths.
@@ -50,13 +50,13 @@ impl<'a, S: Sample, V: AsRef<[S]>> StackedView<'a, S, V> {
         Self::from_slice_limited(data, data.len() as u16, num_frames_available)
     }
 
-    /// Creates a new [`StackedView`] from a slice with limited visibility.
+    /// Creates a new audio block from a slice with limited visibility.
     ///
     /// This function allows creating a view that exposes only a subset of the allocated channels
     /// and frames, which is useful for working with a logical section of a larger buffer.
     ///
     /// # Parameters
-    /// * `data` - The slice containing stacked audio samples (one slice per channel)
+    /// * `data` - The slice containing planar audio samples (one slice per channel)
     /// * `num_channels_visible` - Number of audio channels to expose in the view
     /// * `num_frames_visible` - Number of audio frames to expose in the view
     ///
@@ -92,15 +92,15 @@ impl<'a, S: Sample, V: AsRef<[S]>> StackedView<'a, S, V> {
     }
 }
 
-impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
-    #[nonblocking]
-    fn num_frames(&self) -> usize {
-        self.num_frames
-    }
-
+impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> {
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
+    }
+
+    #[nonblocking]
+    fn num_frames(&self) -> usize {
+        self.num_frames
     }
 
     #[nonblocking]
@@ -111,6 +111,11 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
     #[nonblocking]
     fn num_frames_allocated(&self) -> usize {
         self.num_frames_allocated
+    }
+
+    #[nonblocking]
+    fn layout(&self) -> crate::BlockLayout {
+        crate::BlockLayout::Planar
     }
 
     #[nonblocking]
@@ -188,23 +193,21 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        StackedView::<S, V>::from_slice_limited(self.data, self.num_channels, self.num_frames)
+        AudioBlockPlanarView::<S, V>::from_slice_limited(
+            self.data,
+            self.num_channels,
+            self.num_frames,
+        )
     }
 
     #[nonblocking]
-    fn layout(&self) -> crate::BlockLayout {
-        crate::BlockLayout::Stacked
-    }
-
-    #[nonblocking]
-    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S] {
-        let ch = stacked_ch.expect("For stacked layout channel needs to be provided!");
+    fn raw_data_planar(&self, ch: u16) -> Option<&[S]> {
         assert!(ch < self.num_channels_allocated);
-        unsafe { self.data.get_unchecked(ch as usize).as_ref() }
+        Some(unsafe { self.data.get_unchecked(ch as usize).as_ref() })
     }
 }
 
-/// Adapter for creating stacked audio block views from raw pointers.
+/// Adapter for creating planar audio block views from raw pointers.
 ///
 /// This adapter provides a safe interface to work with audio data stored in external buffers,
 /// which is common when interfacing with audio APIs or hardware.
@@ -225,10 +228,10 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
 /// let num_frames = 5;
 ///
 /// // Create an adapter from raw pointers to audio channel data
-/// let adapter = unsafe { StackedPtrAdapter::<f32, 16>::from_ptr(data, num_channels, num_frames) };
+/// let adapter = unsafe { PlanarPtrAdapter::<f32, 16>::from_ptr(data, num_channels, num_frames) };
 ///
 /// // Get a safe view of the audio data
-/// let block = adapter.stacked_view();
+/// let block = adapter.planar_view();
 ///
 /// // Verify the data access works
 /// assert_eq!(block.sample(0, 2), 2.0);
@@ -241,13 +244,13 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for StackedView<'_, S, V> {
 /// - The pointers are valid and properly aligned
 /// - The memory they point to remains valid for the lifetime of the adapter
 /// - The channel count doesn't exceed the adapter's `MAX_CHANNELS` capacity
-pub struct StackedPtrAdapter<'a, S: Sample, const MAX_CHANNELS: usize> {
+pub struct PlanarPtrAdapter<'a, S: Sample, const MAX_CHANNELS: usize> {
     data: [MaybeUninit<&'a [S]>; MAX_CHANNELS],
     num_channels: u16,
 }
 
-impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHANNELS> {
-    /// Creates new StackedPtrAdapter from raw pointers.
+impl<'a, S: Sample, const MAX_CHANNELS: usize> PlanarPtrAdapter<'a, S, MAX_CHANNELS> {
+    /// Creates new pointer adapter to create an audio block from raw pointers.
     ///
     /// # Safety
     ///
@@ -256,7 +259,6 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHAN
     /// - Each pointer in the array must point to a valid array of samples with `num_frames` length
     /// - The pointed memory must remain valid for the lifetime of the returned adapter
     /// - The data must not be modified through other pointers for the lifetime of the returned adapter
-    #[nonblocking]
     #[nonblocking]
     pub unsafe fn from_ptr(ptr: *const *const S, num_channels: u16, num_frames: usize) -> Self {
         assert!(
@@ -294,7 +296,7 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHAN
         }
     }
 
-    /// Creates a safe [`StackedView`] for accessing the audio data.
+    /// Creates a safe [`AudioBlockPlanarView`] for accessing the audio data.
     ///
     /// This provides a convenient way to interact with the audio data through
     /// the full [`AudioBlock`] interface, enabling operations like iterating
@@ -302,10 +304,10 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> StackedPtrAdapter<'a, S, MAX_CHAN
     ///
     /// # Returns
     ///
-    /// A [`StackedView`] that provides safe, immutable access to the audio data.
+    /// A [`AudioBlockPlanarView`] that provides safe, immutable access to the audio data.
     #[nonblocking]
-    pub fn stacked_view(&self) -> StackedView<'a, S, &[S]> {
-        StackedView::from_slice(self.data_slice())
+    pub fn planar_view(&self) -> AudioBlockPlanarView<'a, S, &[S]> {
+        AudioBlockPlanarView::from_slice(self.data_slice())
     }
 }
 
@@ -320,7 +322,7 @@ mod tests {
         let ch1 = &[0.0, 1.0, 2.0, 3.0, 4.0];
         let ch2 = &[5.0, 6.0, 7.0, 8.0, 9.0];
         let data = [ch1, ch2];
-        let block = StackedView::from_slice(&data);
+        let block = AudioBlockPlanarView::from_slice(&data);
 
         for ch in 0..block.num_channels() {
             for f in 0..block.num_frames() {
@@ -337,7 +339,7 @@ mod tests {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
         let data = vec![ch1, ch2];
-        let block = StackedView::from_slice(&data);
+        let block = AudioBlockPlanarView::from_slice(&data);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 2.0, 4.0, 6.0, 8.0]);
@@ -350,7 +352,7 @@ mod tests {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
         let data = vec![ch1, ch2];
-        let block = StackedView::from_slice(&data);
+        let block = AudioBlockPlanarView::from_slice(&data);
 
         let mut channels_iter = block.channels();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -366,7 +368,7 @@ mod tests {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
         let data = vec![ch1.as_slice(), ch2.as_slice()];
-        let block = StackedView::from_slice(&data);
+        let block = AudioBlockPlanarView::from_slice(&data);
 
         let channel = block.frame(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0]);
@@ -385,7 +387,7 @@ mod tests {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
         let data = vec![ch1.as_slice(), ch2.as_slice()];
-        let block = StackedView::from_slice(&data);
+        let block = AudioBlockPlanarView::from_slice(&data);
 
         let mut frames_iter = block.frames();
         let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -404,7 +406,7 @@ mod tests {
     #[test]
     fn test_from_vec() {
         let vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = StackedView::from_slice(&vec);
+        let block = AudioBlockPlanarView::from_slice(&vec);
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 5);
         assert_eq!(
@@ -425,7 +427,7 @@ mod tests {
     #[test]
     fn test_view() {
         let vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = StackedView::from_slice(&vec);
+        let block = AudioBlockPlanarView::from_slice(&vec);
         let view = block.view();
         assert_eq!(
             view.channel(0).copied().collect::<Vec<_>>(),
@@ -441,7 +443,7 @@ mod tests {
     fn test_limited() {
         let data = vec![vec![0.0; 4]; 3];
 
-        let block = StackedView::from_slice_limited(&data, 2, 3);
+        let block = AudioBlockPlanarView::from_slice_limited(&data, 2, 3);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -467,16 +469,16 @@ mod tests {
                 vec.iter_mut().map(|inner_vec| inner_vec.as_ptr()).collect();
             let ptr = ptr_vec.as_ptr();
 
-            let adapter = StackedPtrAdapter::<_, 16>::from_ptr(ptr, num_channels, num_frames);
-            let stacked = adapter.stacked_view();
+            let adapter = PlanarPtrAdapter::<_, 16>::from_ptr(ptr, num_channels, num_frames);
+            let planar = adapter.planar_view();
 
             assert_eq!(
-                stacked.channel(0).copied().collect::<Vec<_>>(),
+                planar.channel(0).copied().collect::<Vec<_>>(),
                 vec![0.0, 2.0, 4.0, 6.0, 8.0]
             );
 
             assert_eq!(
-                stacked.channel(1).copied().collect::<Vec<_>>(),
+                planar.channel(1).copied().collect::<Vec<_>>(),
                 vec![1.0, 3.0, 5.0, 7.0, 9.0]
             );
         }
@@ -485,7 +487,7 @@ mod tests {
     #[test]
     fn test_slice() {
         let data = [[1.0; 4], [2.0; 4], [0.0; 4]];
-        let block = StackedView::from_slice_limited(&data, 2, 3);
+        let block = AudioBlockPlanarView::from_slice_limited(&data, 2, 3);
 
         assert!(block.frame_slice(0).is_none());
 
@@ -498,7 +500,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let data = [[1.0; 4], [2.0; 4], [0.0; 4]];
-        let block = StackedView::from_slice_limited(&data, 2, 3);
+        let block = AudioBlockPlanarView::from_slice_limited(&data, 2, 3);
 
         block.channel_slice(2);
     }
@@ -506,11 +508,20 @@ mod tests {
     #[test]
     fn test_raw_data() {
         let vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = StackedView::from_slice(&vec);
+        let block = AudioBlockPlanarView::from_slice(&vec);
 
-        assert_eq!(block.layout(), crate::BlockLayout::Stacked);
+        assert_eq!(block.layout(), crate::BlockLayout::Planar);
 
-        assert_eq!(block.raw_data(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-        assert_eq!(block.raw_data(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        assert_eq!(block.raw_data_interleaved(), None);
+        assert_eq!(block.raw_data_sequential(), None);
+
+        assert_eq!(
+            block.raw_data_planar(0).unwrap(),
+            &[0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            block.raw_data_planar(1).unwrap(),
+            &[1.0, 3.0, 5.0, 7.0, 9.0]
+        );
     }
 }

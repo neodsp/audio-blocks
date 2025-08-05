@@ -4,6 +4,6 @@ mod view;
 mod view_mut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use owned::Sequential;
-pub use view::SequentialView;
-pub use view_mut::SequentialViewMut;
+pub use owned::AudioBlockSequential;
+pub use view::AudioBlockSequentialView;
+pub use view_mut::AudioBlockSequentialViewMut;
