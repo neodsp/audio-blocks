@@ -172,6 +172,11 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
+    fn layout(&self) -> crate::BlockLayout {
+        crate::BlockLayout::Interleaved
+    }
+
+    #[nonblocking]
     fn sample(&self, channel: u16, frame: usize) -> S {
         assert!(channel < self.num_channels);
         assert!(frame < self.num_frames);
@@ -260,11 +265,6 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedViewMut<'_, S> {
             self.num_channels_allocated,
             self.num_frames_allocated,
         )
-    }
-
-    #[nonblocking]
-    fn layout(&self) -> crate::BlockLayout {
-        crate::BlockLayout::Interleaved
     }
 
     #[nonblocking]

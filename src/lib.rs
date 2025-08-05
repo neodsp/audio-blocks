@@ -210,20 +210,6 @@ pub trait AudioBlock<S: Sample> {
         None
     }
 
-    /// Provides direct access to the underlying memory as a sequential slice.
-    ///
-    /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range, but it is safe in terms of memory safety.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Some(&[S])` if the block's layout is [`BlockLayout::Sequential`], containing
-    /// sequential data with all allocated channels. Returns `None` if the layout is
-    /// not sequential. Check `block.layout() == BlockLayout::Sequential` before calling.
-    fn raw_data_sequential(&self) -> Option<&[S]> {
-        None
-    }
-
     /// Provides direct access to the underlying memory as a planar slice for a specific channel.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
@@ -240,6 +226,20 @@ pub trait AudioBlock<S: Sample> {
     /// not planar. Check `block.layout() == BlockLayout::Planar` before calling.
     fn raw_data_planar(&self, ch: u16) -> Option<&[S]> {
         let _ = ch;
+        None
+    }
+
+    /// Provides direct access to the underlying memory as a sequential slice.
+    ///
+    /// This function gives access to all allocated data, including any reserved capacity
+    /// beyond the active range, but it is safe in terms of memory safety.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(&[S])` if the block's layout is [`BlockLayout::Sequential`], containing
+    /// sequential data with all allocated channels. Returns `None` if the layout is
+    /// not sequential. Check `block.layout() == BlockLayout::Sequential` before calling.
+    fn raw_data_sequential(&self) -> Option<&[S]> {
         None
     }
 }
@@ -376,20 +376,6 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
         None
     }
 
-    /// Provides direct mutable access to the underlying memory as a sequential slice.
-    ///
-    /// This function gives mutable access to all allocated data, including any reserved capacity
-    /// beyond the active range, but it is safe in terms of memory safety.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Some(&mut [S])` if the block's layout is [`BlockLayout::Sequential`], containing
-    /// sequential data with all allocated channels. Returns `None` if the layout is
-    /// not sequential. Check `block.layout() == BlockLayout::Sequential` before calling.
-    fn raw_data_sequential_mut(&mut self) -> Option<&mut [S]> {
-        None
-    }
-
     /// Provides direct mutable access to the underlying memory as a planar slice for a specific channel.
     ///
     /// This function gives mutable access to all allocated data, including any reserved capacity
@@ -406,6 +392,20 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// not planar. Check `block.layout() == BlockLayout::Planar` before calling.
     fn raw_data_planar_mut(&mut self, ch: u16) -> Option<&mut [S]> {
         let _ = ch;
+        None
+    }
+
+    /// Provides direct mutable access to the underlying memory as a sequential slice.
+    ///
+    /// This function gives mutable access to all allocated data, including any reserved capacity
+    /// beyond the active range, but it is safe in terms of memory safety.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(&mut [S])` if the block's layout is [`BlockLayout::Sequential`], containing
+    /// sequential data with all allocated channels. Returns `None` if the layout is
+    /// not sequential. Check `block.layout() == BlockLayout::Sequential` before calling.
+    fn raw_data_sequential_mut(&mut self) -> Option<&mut [S]> {
         None
     }
 }

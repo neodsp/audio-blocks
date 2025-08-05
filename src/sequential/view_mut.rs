@@ -152,13 +152,13 @@ impl<'a, S: Sample> AudioBlockSequentialViewMut<'a, S> {
 
 impl<S: Sample> AudioBlock<S> for AudioBlockSequentialViewMut<'_, S> {
     #[nonblocking]
-    fn num_frames(&self) -> usize {
-        self.num_frames
+    fn num_channels(&self) -> u16 {
+        self.num_channels
     }
 
     #[nonblocking]
-    fn num_channels(&self) -> u16 {
-        self.num_channels
+    fn num_frames(&self) -> usize {
+        self.num_frames
     }
 
     #[nonblocking]
@@ -169,6 +169,11 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialViewMut<'_, S> {
     #[nonblocking]
     fn num_frames_allocated(&self) -> usize {
         self.num_frames_allocated
+    }
+
+    #[nonblocking]
+    fn layout(&self) -> crate::BlockLayout {
+        crate::BlockLayout::Sequential
     }
 
     #[nonblocking]
@@ -261,11 +266,6 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialViewMut<'_, S> {
             self.num_channels_allocated,
             self.num_frames_allocated,
         )
-    }
-
-    #[nonblocking]
-    fn layout(&self) -> crate::BlockLayout {
-        crate::BlockLayout::Sequential
     }
 
     #[nonblocking]

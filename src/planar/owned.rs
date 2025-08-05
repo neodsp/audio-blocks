@@ -117,6 +117,11 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
+    fn layout(&self) -> crate::BlockLayout {
+        crate::BlockLayout::Planar
+    }
+
+    #[nonblocking]
     fn sample(&self, channel: u16, frame: usize) -> S {
         assert!(channel < self.num_channels);
         assert!(frame < self.num_frames);
@@ -195,11 +200,6 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
         AudioBlockPlanarView::from_slice_limited(&self.data, self.num_channels, self.num_frames)
-    }
-
-    #[nonblocking]
-    fn layout(&self) -> crate::BlockLayout {
-        crate::BlockLayout::Planar
     }
 
     #[nonblocking]

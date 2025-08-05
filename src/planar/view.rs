@@ -94,13 +94,13 @@ impl<'a, S: Sample, V: AsRef<[S]>> AudioBlockPlanarView<'a, S, V> {
 
 impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> {
     #[nonblocking]
-    fn num_frames(&self) -> usize {
-        self.num_frames
+    fn num_channels(&self) -> u16 {
+        self.num_channels
     }
 
     #[nonblocking]
-    fn num_channels(&self) -> u16 {
-        self.num_channels
+    fn num_frames(&self) -> usize {
+        self.num_frames
     }
 
     #[nonblocking]
@@ -111,6 +111,11 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> 
     #[nonblocking]
     fn num_frames_allocated(&self) -> usize {
         self.num_frames_allocated
+    }
+
+    #[nonblocking]
+    fn layout(&self) -> crate::BlockLayout {
+        crate::BlockLayout::Planar
     }
 
     #[nonblocking]
@@ -193,11 +198,6 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> 
             self.num_channels,
             self.num_frames,
         )
-    }
-
-    #[nonblocking]
-    fn layout(&self) -> crate::BlockLayout {
-        crate::BlockLayout::Planar
     }
 
     #[nonblocking]

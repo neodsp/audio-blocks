@@ -164,6 +164,11 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
     }
 
     #[nonblocking]
+    fn layout(&self) -> crate::BlockLayout {
+        crate::BlockLayout::Sequential
+    }
+
+    #[nonblocking]
     fn sample(&self, channel: u16, frame: usize) -> S {
         assert!(channel < self.num_channels);
         assert!(frame < self.num_frames);
@@ -253,11 +258,6 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
             self.num_channels_allocated,
             self.num_frames_allocated,
         )
-    }
-
-    #[nonblocking]
-    fn layout(&self) -> crate::BlockLayout {
-        crate::BlockLayout::Sequential
     }
 
     #[nonblocking]

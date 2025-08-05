@@ -85,9 +85,11 @@ fn frame(&self, frame: usize) -> impl Iterator<Item = &S>;
 fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 fn frame_slice(&self, frame: usize) -> Option<&[S]>;
 
-/// Views and raw data access
+/// View and raw data access
 fn view(&self) -> impl AudioBlock<S>;
-fn raw_data(&self, planar_ch: Option<u16>) -> &[S];
+fn raw_data_interleaved(&self) -> Option<&[S]>;
+fn raw_data_planar(&self, ch: u16) -> Option<&[S]>;
+fn raw_data_sequential(&self) -> Option<&[S]>;
 ```
 
 ### `AudioBlockMut`
@@ -113,9 +115,11 @@ fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
 fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [T]>;
 
-/// Views and raw data access
+/// View and raw data access
 fn view_mut(&mut self) -> impl AudioBlockMut<S>;
-fn raw_data_mut(&mut self, planar_ch: Option<u16>) -> &mut [S];
+fn raw_data_interleaved_mut(&mut self) -> Option<&mut [S]>;
+fn raw_data_planar_mut(&mut self, ch: u16) -> Option<&mut [S]>;
+fn raw_data_sequential_mut(&mut self) -> Option<&mut [S]>;
 ```
 
 ## Operations
@@ -197,7 +201,7 @@ fn process(&mut self, other_block: &mut impl AudioBlock<f32>) {
 }
 ```
 
-> **Warning:** Accessing `raw_data` can be unsafe because it provides access to all contained samples, including those that are not intended to be visible.
+> **Warning:** Accessing raw_data can be dangerous because it provides access to all contained samples, including those that are not intended to be visible.
 
 ## Performance Considerations
 
