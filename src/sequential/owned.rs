@@ -32,7 +32,7 @@ use crate::{
 /// block.channel_mut(0).for_each(|v| *v = 0.0);
 /// block.channel_mut(1).for_each(|v| *v = 1.0);
 ///
-/// assert_eq!(block.raw_data(None), &[0.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
+/// assert_eq!(block.raw_data_sequential().unwrap(), &[0.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
 /// ```
 pub struct AudioBlockSequential<S: Sample> {
     data: Box<[S]>,
@@ -218,8 +218,8 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequential<S> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, _: Option<u16>) -> &[S] {
-        &self.data
+    fn raw_data_sequential(&self) -> Option<&[S]> {
+        Some(&self.data)
     }
 }
 
@@ -327,8 +327,8 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockSequential<S> {
     }
 
     #[nonblocking]
-    fn raw_data_mut(&mut self, _: Option<u16>) -> &mut [S] {
-        &mut self.data
+    fn raw_data_sequential_mut(&mut self) -> Option<&mut [S]> {
+        Some(&mut self.data)
     }
 }
 
@@ -357,7 +357,7 @@ mod tests {
         }
 
         assert_eq!(
-            block.raw_data(None),
+            block.raw_data_sequential().unwrap(),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }
@@ -665,5 +665,29 @@ mod tests {
         let mut block = AudioBlockSequential::<f32>::new(2, 10);
         block.set_active_size(1, 10);
         let _ = block.channel_mut(1);
+    }
+
+    #[test]
+    fn test_raw_data() {
+        let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let block = AudioBlockSequentialView::<f32>::from_slice(&data, 2, 5);
+        let mut block = AudioBlockSequential::from_block(&block);
+
+        assert_eq!(block.layout(), crate::BlockLayout::Sequential);
+
+        assert_eq!(block.raw_data_interleaved(), None);
+        assert_eq!(block.raw_data_interleaved_mut(), None);
+        assert_eq!(block.raw_data_planar(0), None);
+        assert_eq!(block.raw_data_planar_mut(0), None);
+
+        assert_eq!(
+            block.raw_data_sequential().unwrap(),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+
+        assert_eq!(
+            block.raw_data_sequential_mut().unwrap(),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
     }
 }

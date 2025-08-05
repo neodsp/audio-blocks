@@ -32,7 +32,7 @@ use crate::{
 /// block.channel_mut(0).for_each(|v| *v = 0.0);
 /// block.channel_mut(1).for_each(|v| *v = 1.0);
 ///
-/// assert_eq!(block.raw_data(None), &[0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
+/// assert_eq!(block.raw_data_interleaved().unwrap(), &[0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
 /// ```
 pub struct AudioBlockInterleaved<S: Sample> {
     data: Box<[S]>,
@@ -225,8 +225,8 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleaved<S> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, _: Option<u16>) -> &[S] {
-        &self.data
+    fn raw_data_interleaved(&self) -> Option<&[S]> {
+        Some(&self.data)
     }
 }
 
@@ -329,8 +329,8 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockInterleaved<S> {
     }
 
     #[nonblocking]
-    fn raw_data_mut(&mut self, _: Option<u16>) -> &mut [S] {
-        &mut self.data
+    fn raw_data_interleaved_mut(&mut self) -> Option<&mut [S]> {
+        Some(&mut self.data)
     }
 }
 
@@ -359,7 +359,7 @@ mod tests {
         }
 
         assert_eq!(
-            block.raw_data(None),
+            block.raw_data_interleaved().unwrap(),
             &[0.0, 5.0, 1.0, 6.0, 2.0, 7.0, 3.0, 8.0, 4.0, 9.0]
         );
     }
@@ -707,13 +707,18 @@ mod tests {
 
         assert_eq!(block.layout(), crate::BlockLayout::Interleaved);
 
+        assert_eq!(block.raw_data_sequential(), None);
+        assert_eq!(block.raw_data_sequential_mut(), None);
+        assert_eq!(block.raw_data_planar(0), None);
+        assert_eq!(block.raw_data_planar_mut(0), None);
+
         assert_eq!(
-            block.raw_data(None),
+            block.raw_data_interleaved().unwrap(),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
 
         assert_eq!(
-            block.raw_data_mut(None),
+            block.raw_data_interleaved_mut().unwrap(),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }

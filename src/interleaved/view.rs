@@ -18,7 +18,7 @@ use crate::{AudioBlock, Sample, iter::StridedSampleIter};
 ///
 /// let data = vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0];
 ///
-/// let block = InterleavedView::from_slice(&data, 2, 3);
+/// let block = AudioBlockInterleavedView::from_slice(&data, 2, 3);
 ///
 /// block.channel(0).for_each(|&v| assert_eq!(v, 0.0));
 /// block.channel(1).for_each(|&v| assert_eq!(v, 1.0));
@@ -262,8 +262,8 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedView<'_, S> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, _: Option<u16>) -> &[S] {
-        self.data
+    fn raw_data_interleaved(&self) -> Option<&[S]> {
+        Some(self.data)
     }
 }
 
@@ -476,8 +476,11 @@ mod tests {
 
         assert_eq!(block.layout(), crate::BlockLayout::Interleaved);
 
+        assert_eq!(block.raw_data_sequential(), None);
+        assert_eq!(block.raw_data_planar(0), None);
+
         assert_eq!(
-            block.raw_data(None),
+            block.raw_data_interleaved().unwrap(),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }

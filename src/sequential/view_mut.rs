@@ -269,8 +269,8 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn raw_data(&self, _: Option<u16>) -> &[S] {
-        self.data
+    fn raw_data_sequential(&self) -> Option<&[S]> {
+        Some(self.data)
     }
 }
 
@@ -378,8 +378,8 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockSequentialViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn raw_data_mut(&mut self, _: Option<u16>) -> &mut [S] {
-        self.data
+    fn raw_data_sequential_mut(&mut self) -> Option<&mut [S]> {
+        Some(self.data)
     }
 }
 
@@ -408,7 +408,7 @@ mod tests {
         }
 
         assert_eq!(
-            block.raw_data(None),
+            block.raw_data_sequential().unwrap(),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }
@@ -716,13 +716,18 @@ mod tests {
 
         assert_eq!(block.layout(), crate::BlockLayout::Sequential);
 
+        assert_eq!(block.raw_data_interleaved(), None);
+        assert_eq!(block.raw_data_interleaved_mut(), None);
+        assert_eq!(block.raw_data_planar(0), None);
+        assert_eq!(block.raw_data_planar_mut(0), None);
+
         assert_eq!(
-            block.raw_data(None),
+            block.raw_data_sequential().unwrap(),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
 
         assert_eq!(
-            block.raw_data_mut(None),
+            block.raw_data_sequential_mut().unwrap(),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }

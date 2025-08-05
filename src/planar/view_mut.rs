@@ -203,10 +203,9 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarVi
     }
 
     #[nonblocking]
-    fn raw_data(&self, planar_ch: Option<u16>) -> &[S] {
-        let ch = planar_ch.expect("For planar layout channel needs to be provided!");
+    fn raw_data_planar(&self, ch: u16) -> Option<&[S]> {
         assert!(ch < self.num_channels_allocated);
-        unsafe { self.data.get_unchecked(ch as usize).as_ref() }
+        Some(unsafe { self.data.get_unchecked(ch as usize).as_ref() })
     }
 }
 
@@ -302,10 +301,9 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for AudioBlockPlana
     }
 
     #[nonblocking]
-    fn raw_data_mut(&mut self, planar_ch: Option<u16>) -> &mut [S] {
-        let ch = planar_ch.expect("For planar layout channel needs to be provided!");
+    fn raw_data_planar_mut(&mut self, ch: u16) -> Option<&mut [S]> {
         assert!(ch < self.num_channels_allocated);
-        unsafe { self.data.get_unchecked_mut(ch as usize).as_mut() }
+        Some(unsafe { self.data.get_unchecked_mut(ch as usize).as_mut() })
     }
 }
 
@@ -739,10 +737,27 @@ mod tests {
 
         assert_eq!(block.layout(), crate::BlockLayout::Planar);
 
-        assert_eq!(block.raw_data(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-        assert_eq!(block.raw_data(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        assert_eq!(block.raw_data_interleaved(), None);
+        assert_eq!(block.raw_data_interleaved_mut(), None);
+        assert_eq!(block.raw_data_sequential(), None);
+        assert_eq!(block.raw_data_sequential_mut(), None);
 
-        assert_eq!(block.raw_data_mut(Some(0)), &[0.0, 2.0, 4.0, 6.0, 8.0]);
-        assert_eq!(block.raw_data_mut(Some(1)), &[1.0, 3.0, 5.0, 7.0, 9.0]);
+        assert_eq!(
+            block.raw_data_planar(0).unwrap(),
+            &[0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            block.raw_data_planar(1).unwrap(),
+            &[1.0, 3.0, 5.0, 7.0, 9.0]
+        );
+
+        assert_eq!(
+            block.raw_data_planar_mut(0).unwrap(),
+            &[0.0, 2.0, 4.0, 6.0, 8.0]
+        );
+        assert_eq!(
+            block.raw_data_planar_mut(1).unwrap(),
+            &[1.0, 3.0, 5.0, 7.0, 9.0]
+        );
     }
 }
