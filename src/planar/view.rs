@@ -18,12 +18,12 @@ use crate::{AudioBlock, Sample};
 ///
 /// let data = vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]];
 ///
-/// let block = PlanarView::from_slice(&data);
+/// let block = AudioBlockPlanarView::from_slice(&data);
 ///
 /// block.channel(0).for_each(|&v| assert_eq!(v, 0.0));
 /// block.channel(1).for_each(|&v| assert_eq!(v, 1.0));
 /// ```
-pub struct PlanarView<'a, S: Sample, V: AsRef<[S]>> {
+pub struct AudioBlockPlanarView<'a, S: Sample, V: AsRef<[S]>> {
     data: &'a [V],
     num_channels: u16,
     num_frames: usize,
@@ -32,8 +32,8 @@ pub struct PlanarView<'a, S: Sample, V: AsRef<[S]>> {
     _phantom: PhantomData<S>,
 }
 
-impl<'a, S: Sample, V: AsRef<[S]>> PlanarView<'a, S, V> {
-    /// Creates a new [`PlanarView`] from a slice of planar audio data.
+impl<'a, S: Sample, V: AsRef<[S]>> AudioBlockPlanarView<'a, S, V> {
+    /// Creates a new audio block from a slice of planar audio data.
     ///
     /// # Parameters
     /// * `data` - The slice containing planar audio samples (one slice per channel)
@@ -50,7 +50,7 @@ impl<'a, S: Sample, V: AsRef<[S]>> PlanarView<'a, S, V> {
         Self::from_slice_limited(data, data.len() as u16, num_frames_available)
     }
 
-    /// Creates a new [`PlanarView`] from a slice with limited visibility.
+    /// Creates a new audio block from a slice with limited visibility.
     ///
     /// This function allows creating a view that exposes only a subset of the allocated channels
     /// and frames, which is useful for working with a logical section of a larger buffer.
@@ -92,7 +92,7 @@ impl<'a, S: Sample, V: AsRef<[S]>> PlanarView<'a, S, V> {
     }
 }
 
-impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for PlanarView<'_, S, V> {
+impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> {
     #[nonblocking]
     fn num_frames(&self) -> usize {
         self.num_frames
@@ -188,7 +188,11 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for PlanarView<'_, S, V> {
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        PlanarView::<S, V>::from_slice_limited(self.data, self.num_channels, self.num_frames)
+        AudioBlockPlanarView::<S, V>::from_slice_limited(
+            self.data,
+            self.num_channels,
+            self.num_frames,
+        )
     }
 
     #[nonblocking]
@@ -247,7 +251,7 @@ pub struct PlanarPtrAdapter<'a, S: Sample, const MAX_CHANNELS: usize> {
 }
 
 impl<'a, S: Sample, const MAX_CHANNELS: usize> PlanarPtrAdapter<'a, S, MAX_CHANNELS> {
-    /// Creates new PlanarPtrAdapter from raw pointers.
+    /// Creates new pointer adapter to create an audio block from raw pointers.
     ///
     /// # Safety
     ///
@@ -256,7 +260,6 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> PlanarPtrAdapter<'a, S, MAX_CHANN
     /// - Each pointer in the array must point to a valid array of samples with `num_frames` length
     /// - The pointed memory must remain valid for the lifetime of the returned adapter
     /// - The data must not be modified through other pointers for the lifetime of the returned adapter
-    #[nonblocking]
     #[nonblocking]
     pub unsafe fn from_ptr(ptr: *const *const S, num_channels: u16, num_frames: usize) -> Self {
         assert!(
@@ -294,7 +297,7 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> PlanarPtrAdapter<'a, S, MAX_CHANN
         }
     }
 
-    /// Creates a safe [`PlanarView`] for accessing the audio data.
+    /// Creates a safe [`AudioBlockPlanarView`] for accessing the audio data.
     ///
     /// This provides a convenient way to interact with the audio data through
     /// the full [`AudioBlock`] interface, enabling operations like iterating
@@ -302,10 +305,10 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> PlanarPtrAdapter<'a, S, MAX_CHANN
     ///
     /// # Returns
     ///
-    /// A [`PlanarView`] that provides safe, immutable access to the audio data.
+    /// A [`AudioBlockPlanarView`] that provides safe, immutable access to the audio data.
     #[nonblocking]
-    pub fn planar_view(&self) -> PlanarView<'a, S, &[S]> {
-        PlanarView::from_slice(self.data_slice())
+    pub fn planar_view(&self) -> AudioBlockPlanarView<'a, S, &[S]> {
+        AudioBlockPlanarView::from_slice(self.data_slice())
     }
 }
 
@@ -320,7 +323,7 @@ mod tests {
         let ch1 = &[0.0, 1.0, 2.0, 3.0, 4.0];
         let ch2 = &[5.0, 6.0, 7.0, 8.0, 9.0];
         let data = [ch1, ch2];
-        let block = PlanarView::from_slice(&data);
+        let block = AudioBlockPlanarView::from_slice(&data);
 
         for ch in 0..block.num_channels() {
             for f in 0..block.num_frames() {
@@ -337,7 +340,7 @@ mod tests {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
         let data = vec![ch1, ch2];
-        let block = PlanarView::from_slice(&data);
+        let block = AudioBlockPlanarView::from_slice(&data);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 2.0, 4.0, 6.0, 8.0]);
@@ -350,7 +353,7 @@ mod tests {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
         let data = vec![ch1, ch2];
-        let block = PlanarView::from_slice(&data);
+        let block = AudioBlockPlanarView::from_slice(&data);
 
         let mut channels_iter = block.channels();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -366,7 +369,7 @@ mod tests {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
         let data = vec![ch1.as_slice(), ch2.as_slice()];
-        let block = PlanarView::from_slice(&data);
+        let block = AudioBlockPlanarView::from_slice(&data);
 
         let channel = block.frame(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0]);
@@ -385,7 +388,7 @@ mod tests {
         let ch1 = vec![0.0, 2.0, 4.0, 6.0, 8.0];
         let ch2 = vec![1.0, 3.0, 5.0, 7.0, 9.0];
         let data = vec![ch1.as_slice(), ch2.as_slice()];
-        let block = PlanarView::from_slice(&data);
+        let block = AudioBlockPlanarView::from_slice(&data);
 
         let mut frames_iter = block.frames();
         let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -404,7 +407,7 @@ mod tests {
     #[test]
     fn test_from_vec() {
         let vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = PlanarView::from_slice(&vec);
+        let block = AudioBlockPlanarView::from_slice(&vec);
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 5);
         assert_eq!(
@@ -425,7 +428,7 @@ mod tests {
     #[test]
     fn test_view() {
         let vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = PlanarView::from_slice(&vec);
+        let block = AudioBlockPlanarView::from_slice(&vec);
         let view = block.view();
         assert_eq!(
             view.channel(0).copied().collect::<Vec<_>>(),
@@ -441,7 +444,7 @@ mod tests {
     fn test_limited() {
         let data = vec![vec![0.0; 4]; 3];
 
-        let block = PlanarView::from_slice_limited(&data, 2, 3);
+        let block = AudioBlockPlanarView::from_slice_limited(&data, 2, 3);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -485,7 +488,7 @@ mod tests {
     #[test]
     fn test_slice() {
         let data = [[1.0; 4], [2.0; 4], [0.0; 4]];
-        let block = PlanarView::from_slice_limited(&data, 2, 3);
+        let block = AudioBlockPlanarView::from_slice_limited(&data, 2, 3);
 
         assert!(block.frame_slice(0).is_none());
 
@@ -498,7 +501,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let data = [[1.0; 4], [2.0; 4], [0.0; 4]];
-        let block = PlanarView::from_slice_limited(&data, 2, 3);
+        let block = AudioBlockPlanarView::from_slice_limited(&data, 2, 3);
 
         block.channel_slice(2);
     }
@@ -506,7 +509,7 @@ mod tests {
     #[test]
     fn test_raw_data() {
         let vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-        let block = PlanarView::from_slice(&vec);
+        let block = AudioBlockPlanarView::from_slice(&vec);
 
         assert_eq!(block.layout(), crate::BlockLayout::Planar);
 

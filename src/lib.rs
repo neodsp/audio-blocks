@@ -15,21 +15,21 @@ pub use num::Zero;
 pub use ops::Ops;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use interleaved::Interleaved;
-pub use interleaved::InterleavedView;
-pub use interleaved::InterleavedViewMut;
+pub use interleaved::AudioBlockInterleaved;
+pub use interleaved::AudioBlockInterleavedView;
+pub use interleaved::AudioBlockInterleavedViewMut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use sequential::Sequential;
-pub use sequential::SequentialView;
-pub use sequential::SequentialViewMut;
+pub use sequential::AudioBlockSequential;
+pub use sequential::AudioBlockSequentialView;
+pub use sequential::AudioBlockSequentialViewMut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use planar::Planar;
+pub use planar::AudioBlockPlanar;
+pub use planar::AudioBlockPlanarView;
+pub use planar::AudioBlockPlanarViewMut;
 pub use planar::PlanarPtrAdapter;
 pub use planar::PlanarPtrAdapterMut;
-pub use planar::PlanarView;
-pub use planar::PlanarViewMut;
 
 pub mod interleaved;
 mod iter;

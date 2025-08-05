@@ -2,7 +2,7 @@ use rtsan_standalone::nonblocking;
 
 use core::{marker::PhantomData, ptr::NonNull};
 
-use super::view::InterleavedView;
+use super::view::AudioBlockInterleavedView;
 use crate::{
     AudioBlock, AudioBlockMut, Sample,
     iter::{StridedSampleIter, StridedSampleIterMut},
@@ -22,12 +22,12 @@ use crate::{
 ///
 /// let mut data = vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0];
 ///
-/// let block = InterleavedViewMut::from_slice(&mut data, 2, 3);
+/// let block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2, 3);
 ///
 /// block.channel(0).for_each(|&v| assert_eq!(v, 0.0));
 /// block.channel(1).for_each(|&v| assert_eq!(v, 1.0));
 /// ```
-pub struct InterleavedViewMut<'a, S: Sample> {
+pub struct AudioBlockInterleavedViewMut<'a, S: Sample> {
     data: &'a mut [S],
     num_channels: u16,
     num_frames: usize,
@@ -35,8 +35,8 @@ pub struct InterleavedViewMut<'a, S: Sample> {
     num_frames_allocated: usize,
 }
 
-impl<'a, S: Sample> InterleavedViewMut<'a, S> {
-    /// Creates a new [`InterleavedViewMut`] from a mutable slice of interleaved audio data.
+impl<'a, S: Sample> AudioBlockInterleavedViewMut<'a, S> {
+    /// Creates a new audio block from a mutable slice of interleaved audio data.
     ///
     /// # Parameters
     /// * `data` - The slice containing mutable interleaved audio samples
@@ -57,7 +57,7 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
         }
     }
 
-    /// Creates a new [`InterleavedViewMut`] from a mutable slice with limited visibility.
+    /// Creates a new audio block from a mutable slice with limited visibility.
     ///
     /// This function allows creating a view that exposes only a subset of the allocated channels
     /// and frames, which is useful for working with a logical section of a larger buffer.
@@ -96,7 +96,7 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
         }
     }
 
-    /// Creates a new [`InterleavedViewMut`] from raw parts with.
+    /// Creates a new audio block from raw parts.
     ///
     /// # Safety
     ///
@@ -117,7 +117,7 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
         }
     }
 
-    /// Creates a new [`InterleavedViewMut`] from raw parts with a limited amount of channels and/or frames.
+    /// Creates a new audio block from raw parts with a limited amount of channels and/or frames.
     ///
     /// # Safety
     ///
@@ -150,7 +150,7 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
     }
 }
 
-impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
+impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedViewMut<'_, S> {
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -253,7 +253,7 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
 
     #[nonblocking]
     fn view(&self) -> impl AudioBlock<S> {
-        InterleavedView::from_slice_limited(
+        AudioBlockInterleavedView::from_slice_limited(
             self.data,
             self.num_channels,
             self.num_frames,
@@ -273,7 +273,7 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
     }
 }
 
-impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
+impl<S: Sample> AudioBlockMut<S> for AudioBlockInterleavedViewMut<'_, S> {
     #[nonblocking]
     fn set_active_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
@@ -364,7 +364,7 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
 
     #[nonblocking]
     fn view_mut(&mut self) -> impl AudioBlockMut<S> {
-        InterleavedViewMut::from_slice_limited(
+        AudioBlockInterleavedViewMut::from_slice_limited(
             self.data,
             self.num_channels,
             self.num_frames,
@@ -388,7 +388,7 @@ mod tests {
     #[test]
     fn test_samples() {
         let mut data = vec![0.0; 10];
-        let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block = AudioBlockInterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         let num_frames = block.num_frames();
         for ch in 0..block.num_channels() {
@@ -412,7 +412,7 @@ mod tests {
     #[test]
     fn test_channel() {
         let mut data = vec![0.0; 10];
-        let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block = AudioBlockInterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         let channel = block.channel(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -437,7 +437,7 @@ mod tests {
     #[test]
     fn test_channels() {
         let mut data = vec![0.0; 10];
-        let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block = AudioBlockInterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         let mut channels_iter = block.channels();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -473,7 +473,7 @@ mod tests {
     #[test]
     fn test_frame() {
         let mut data = vec![0.0; 10];
-        let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block = AudioBlockInterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         for i in 0..block.num_frames() {
             let frame = block.frame(i).copied().collect::<Vec<_>>();
@@ -503,7 +503,7 @@ mod tests {
     #[test]
     fn test_frames() {
         let mut data = vec![0.0; 10];
-        let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block = AudioBlockInterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         let num_frames = block.num_frames;
         let mut frames_iter = block.frames();
@@ -543,7 +543,7 @@ mod tests {
     #[test]
     fn test_from_slice() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let block = AudioBlockInterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated, 2);
         assert_eq!(block.num_frames(), 5);
@@ -566,7 +566,7 @@ mod tests {
     #[test]
     fn test_view() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let block = AudioBlockInterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
         let view = block.view();
         assert_eq!(
             view.channel(0).copied().collect::<Vec<_>>(),
@@ -581,7 +581,7 @@ mod tests {
     #[test]
     fn test_view_mut() {
         let mut data = vec![0.0; 10];
-        let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block = AudioBlockInterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         {
             let mut view = block.view_mut();
@@ -607,7 +607,7 @@ mod tests {
     fn test_limited() {
         let mut data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
 
-        let mut block = InterleavedViewMut::from_slice_limited(&mut data, 2, 3, 3, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice_limited(&mut data, 2, 3, 3, 4);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -627,7 +627,8 @@ mod tests {
     #[test]
     fn test_from_raw() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = unsafe { InterleavedViewMut::<f32>::from_raw(data.as_mut_ptr(), 2, 5) };
+        let block =
+            unsafe { AudioBlockInterleavedViewMut::<f32>::from_raw(data.as_mut_ptr(), 2, 5) };
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated, 2);
         assert_eq!(block.num_frames(), 5);
@@ -651,8 +652,9 @@ mod tests {
     fn test_from_raw_limited() {
         let mut data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
 
-        let mut block =
-            unsafe { InterleavedViewMut::from_raw_limited(data.as_mut_ptr(), 2, 3, 3, 4) };
+        let mut block = unsafe {
+            AudioBlockInterleavedViewMut::from_raw_limited(data.as_mut_ptr(), 2, 3, 3, 4)
+        };
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -673,7 +675,8 @@ mod tests {
     fn test_slice() {
         // let mut data = [1.0, 2.0, 3.0, 0.0, 1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0];
         let mut data = [0.0; 12];
-        let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
+        let mut block =
+            AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
         assert!(block.channel_slice(0).is_none());
 
         block.frame_slice_mut(0).unwrap().fill(1.0);
@@ -689,7 +692,8 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let mut data = [0.0; 12];
-        let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
+        let mut block =
+            AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
         block.set_active_size(2, 5);
         block.frame_slice(5);
     }
@@ -699,7 +703,8 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
         let mut data = [0.0; 12];
-        let mut block = InterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
+        let mut block =
+            AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
         block.set_active_size(2, 5);
         block.frame_slice(5);
     }
@@ -707,7 +712,7 @@ mod tests {
     #[test]
     fn test_raw_data() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block = AudioBlockInterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
 
         assert_eq!(block.layout(), crate::BlockLayout::Interleaved);
 

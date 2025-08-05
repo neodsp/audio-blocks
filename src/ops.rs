@@ -173,9 +173,9 @@ mod tests {
     use rtsan_standalone::no_sanitize_realtime;
 
     use crate::{
-        interleaved::InterleavedViewMut,
-        planar::PlanarViewMut,
-        sequential::{SequentialView, SequentialViewMut},
+        interleaved::AudioBlockInterleavedViewMut,
+        planar::AudioBlockPlanarViewMut,
+        sequential::{AudioBlockSequentialView, AudioBlockSequentialViewMut},
     };
 
     use super::*;
@@ -183,8 +183,9 @@ mod tests {
     #[test]
     fn test_copy_from() {
         let mut data = [0.0; 15];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 3, 5);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 3, 5);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block_resize(&view);
 
         assert_eq!(block.num_channels(), 2);
@@ -205,8 +206,9 @@ mod tests {
     #[test]
     fn test_copy_from_exact() {
         let mut data = [0.0; 8];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 2, 4);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2, 4);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block(&view);
 
         assert_eq!(block.num_channels(), 2);
@@ -229,8 +231,9 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_copy_data_wrong_channels() {
         let mut data = [0.0; 5];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 1, 5);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 1, 5);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block_resize(&view);
     }
 
@@ -239,8 +242,9 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_copy_data_wrong_frames() {
         let mut data = [0.0; 9];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 3, 3);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 3, 3);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block(&view);
     }
 
@@ -249,8 +253,9 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_copy_data_exact_wrong_channels() {
         let mut data = [0.0; 12];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 3, 4);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 3, 4);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block(&view);
     }
 
@@ -259,15 +264,16 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_copy_data_exact_wrong_frames() {
         let mut data = [0.0; 10];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 2, 5);
-        let view = SequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2, 5);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
         block.copy_from_block(&view);
     }
 
     #[test]
     fn test_for_each() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = SequentialViewMut::from_slice(&mut data, 2, 4);
+        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 2, 4);
 
         let mut i = 0;
         let mut c_exp = 0;
@@ -284,7 +290,7 @@ mod tests {
         });
 
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = InterleavedViewMut::from_slice(&mut data, 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2, 4);
 
         let mut i = 0;
         let mut f_exp = 0;
@@ -301,7 +307,7 @@ mod tests {
         });
 
         let mut data = [[0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0]];
-        let mut block = PlanarViewMut::from_slice(&mut data);
+        let mut block = AudioBlockPlanarViewMut::from_slice(&mut data);
 
         let mut i = 0;
         let mut c_exp = 0;
@@ -321,7 +327,7 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = SequentialViewMut::from_slice(&mut data, 2, 4);
+        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 2, 4);
 
         block.fill_with(1.0);
 

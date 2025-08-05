@@ -4,7 +4,7 @@
 
 This crate offers traits for handling audio data in a generic way, addressing common challenges such as varying channel layouts, conversions between them, and processing different numbers of samples.
 
-It provides `Interleaved`, `Sequential`, and `Planar` block types, allowing you to choose the underlying data storage: owned data, views, and mutable views. Owned blocks allocate data on the heap, while views offer access to data from slices, raw pointers, or other blocks.
+It provides interleaved, sequential, and planar block types, allowing you to choose the underlying data storage: owned data, views, and mutable views. Owned blocks allocate data on the heap, while views offer access to data from slices, raw pointers, or other blocks.
 
 All block types implement the `AudioBlock` and `AudioBlockMut` traits, with mutable blocks providing in-place modification operations.
 
@@ -139,9 +139,9 @@ fn clear(&mut self);
 
 Available types:
 
-* `Interleaved`
-* `Sequential`
-* `Planar`
+* `AudioBlockInterleaved`
+* `AudioBlockSequential`
+* `AudioBlockPlanar`
 
 ```rust,ignore
 fn new(num_channels: u16, num_frames: usize) -> Self;
@@ -154,9 +154,9 @@ fn from_block(block: &impl AudioBlock<S>) -> Self;
 
 Available types:
 
-* `InterleavedView` / `InterleavedViewMut`
-* `SequentialView` / `SequentialViewMut`
-* `PlanarView` / `PlanarViewMut`
+* `AudioBlockInterleavedView` / `AudioBlockInterleavedViewMut`
+* `AudioBlockSequentialView` / `AudioBlockSequentialViewMut`
+* `AudioBlockPlanarView` / `AudioBlockPlanarViewMut`
 
 ```rust,ignore
 fn from_slice(data: &'a [S], num_channels: u16, num_frames: usize) -> Self;
@@ -170,7 +170,7 @@ unsafe fn from_ptr(data: *const S, num_channels: u16, num_frames: usize) -> Self
 unsafe fn from_ptr_limited(data: *const S, num_channels_visible: u16, num_frames_visible: usize, num_channels_allocated: u16, num_frames_allocated: usize) -> Self;
 ```
 
-Planar blocks can only be created from raw pointers using `PlanarPtrAdapter`:
+Planar blocks can only be created from raw pointers using `PlanarPtrAdapter` / `PlanarPtrAdapterMut`:
 
 ```rust,ignore
 let mut adapter = unsafe { PlanarPtrAdapter::<_, 16>::from_ptr(data, num_channels, num_frames) };
@@ -203,8 +203,8 @@ fn process(&mut self, other_block: &mut impl AudioBlock<f32>) {
 
 When iterating using channels or frames, performance is influenced by the block's memory layout.
 
-* For Sequential and Planar layouts, iterating over channels is generally faster.
-* For Interleaved layouts, especially with a high number of channels, iterating over frames might offer better performance.
+* For sequential and planar layouts, iterating over channels is generally faster.
+* For interleaved layouts, especially with a high number of channels, iterating over frames might offer better performance.
 
 Accessing data via `channel_slice` and `frame_slice` isn't significantly faster than direct slice access but can be convenient for SIMD operations or functions requiring slice inputs.
 
