@@ -56,19 +56,19 @@ pub enum BlockLayout {
     /// This layout is common in consumer audio formats and some APIs.
     Interleaved,
 
-    /// All samples from one channel appear consecutively before the next channel.
-    ///
-    /// Format: `[ch0, ch0, ch0, ..., ch1, ch1, ch1, ...]`
-    ///
-    /// Also known as "planar" format in some audio libraries.
-    Sequential,
-
     /// Channels are separated into discrete chunks of memory.
     ///
     /// Format: `[[ch0, ch0, ch0, ...], [ch1, ch1, ch1, ...]]`
     ///
     /// Useful for operations that work on one channel at a time.
     Planar,
+
+    /// All samples from one channel appear consecutively before the next channel.
+    ///
+    /// Format: `[ch0, ch0, ch0, ..., ch1, ch1, ch1, ...]`
+    ///
+    /// Also known as "planar" format in some audio libraries.
+    Sequential,
 }
 
 /// Represents a sample type that can be stored and processed in audio blocks.
