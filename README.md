@@ -4,7 +4,7 @@
 
 This crate offers traits for handling audio data in a generic way, addressing common challenges such as varying channel layouts, conversions between them, and processing different numbers of samples.
 
-It provides `Interleaved`, `Sequential`, and `Stacked` block types, allowing you to choose the underlying data storage: owned data, views, and mutable views. Owned blocks allocate data on the heap, while views offer access to data from slices, raw pointers, or other blocks.
+It provides `Interleaved`, `Sequential`, and `Planar` block types, allowing you to choose the underlying data storage: owned data, views, and mutable views. Owned blocks allocate data on the heap, while views offer access to data from slices, raw pointers, or other blocks.
 
 All block types implement the `AudioBlock` and `AudioBlockMut` traits, with mutable blocks providing in-place modification operations.
 
@@ -24,7 +24,7 @@ The core problem this crate solves is the diversity of audio data formats:
     * **Terminology:** Described as "planar" or "channels first," emphasizing that all data for one channel precedes the data for the next.
     * **Usage:** Common in Digital Signal Processing (DSP) pipelines where per-channel processing is more straightforward and efficient.
 
-* **Stacked:** `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
+* **Planar:** `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
     * **Interpretation:** Each channel has its own distinct buffer or array.
     * **Terminology:** Also known as "planar" or "channels first," but more specifically refers to channel-isolated buffers.
     * **Usage:** Highly prevalent in real-time DSP due to simplified memory access and potential for improved SIMD (Single Instruction, Multiple Data) or vectorization efficiency.
@@ -58,7 +58,7 @@ fn process<F: Float + 'static>(block: &mut impl AudioBlockMut<F>) {
 }
 ```
 
-Accessing audio data is facilitated through iterators like `channels()` and `frames()`. You can also access specific channels or frames using `channel(u16)` and `frame(usize)`, or individual samples with `sample(u16, usize)`. Iterating over frames can be more efficient for interleaved data, while iterating over channels is generally faster for sequential or stacked layouts.
+Accessing audio data is facilitated through iterators like `channels()` and `frames()`. You can also access specific channels or frames using `channel(u16)` and `frame(usize)`, or individual samples with `sample(u16, usize)`. Iterating over frames can be more efficient for interleaved data, while iterating over channels is generally faster for sequential or planar layouts.
 
 ## All Trait Functions
 
@@ -87,7 +87,7 @@ fn frame_slice(&self, frame: usize) -> Option<&[S]>;
 
 /// Views and raw data access
 fn view(&self) -> impl AudioBlock<S>;
-fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
+fn raw_data(&self, planar_ch: Option<u16>) -> &[S];
 ```
 
 ### `AudioBlockMut`
@@ -115,7 +115,7 @@ fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [T]>;
 
 /// Views and raw data access
 fn view_mut(&mut self) -> impl AudioBlockMut<S>;
-fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
+fn raw_data_mut(&mut self, planar_ch: Option<u16>) -> &mut [S];
 ```
 
 ## Operations
@@ -141,7 +141,7 @@ Available types:
 
 * `Interleaved`
 * `Sequential`
-* `Stacked`
+* `Planar`
 
 ```rust,ignore
 fn new(num_channels: u16, num_frames: usize) -> Self;
@@ -156,7 +156,7 @@ Available types:
 
 * `InterleavedView` / `InterleavedViewMut`
 * `SequentialView` / `SequentialViewMut`
-* `StackedView` / `StackedViewMut`
+* `PlanarView` / `PlanarViewMut`
 
 ```rust,ignore
 fn from_slice(data: &'a [S], num_channels: u16, num_frames: usize) -> Self;
@@ -170,11 +170,11 @@ unsafe fn from_ptr(data: *const S, num_channels: u16, num_frames: usize) -> Self
 unsafe fn from_ptr_limited(data: *const S, num_channels_visible: u16, num_frames_visible: usize, num_channels_allocated: u16, num_frames_allocated: usize) -> Self;
 ```
 
-Stacked blocks can only be created from raw pointers using `StackedPtrAdapter`:
+Planar blocks can only be created from raw pointers using `PlanarPtrAdapter`:
 
 ```rust,ignore
-let mut adapter = unsafe { StackedPtrAdapter::<_, 16>::from_ptr(data, num_channels, num_frames) };
-let block = adapter.stacked_view();
+let mut adapter = unsafe { PlanarPtrAdapter::<_, 16>::from_ptr(data, num_channels, num_frames) };
+let block = adapter.planar_view();
 ```
 
 ## Handling Varying Number of Frames
@@ -203,7 +203,7 @@ fn process(&mut self, other_block: &mut impl AudioBlock<f32>) {
 
 When iterating using channels or frames, performance is influenced by the block's memory layout.
 
-* For Sequential and Stacked layouts, iterating over channels is generally faster.
+* For Sequential and Planar layouts, iterating over channels is generally faster.
 * For Interleaved layouts, especially with a high number of channels, iterating over frames might offer better performance.
 
 Accessing data via `channel_slice` and `frame_slice` isn't significantly faster than direct slice access but can be convenient for SIMD operations or functions requiring slice inputs.

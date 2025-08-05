@@ -65,7 +65,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
             }
         } else {
             match self.layout() {
-                BlockLayout::Sequential | BlockLayout::Stacked => {
+                BlockLayout::Sequential | BlockLayout::Planar => {
                     for channel in self.channels_mut() {
                         channel.for_each(&mut f);
                     }
@@ -84,7 +84,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
         match self.layout() {
             BlockLayout::Sequential => self.raw_data_mut(None).iter_mut().for_each(&mut f),
             BlockLayout::Interleaved => self.raw_data_mut(None).iter_mut().for_each(&mut f),
-            BlockLayout::Stacked => {
+            BlockLayout::Planar => {
                 for ch in 0..self.num_channels() {
                     self.raw_data_mut(Some(ch)).iter_mut().for_each(&mut f);
                 }
@@ -103,7 +103,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
             }
         } else {
             match self.layout() {
-                BlockLayout::Sequential | BlockLayout::Stacked => {
+                BlockLayout::Sequential | BlockLayout::Planar => {
                     for ch in 0..self.num_channels() {
                         self.channel_mut(ch)
                             .enumerate()
@@ -146,7 +146,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
                         f(channel as u16, frame, sample)
                     });
             }
-            BlockLayout::Stacked => {
+            BlockLayout::Planar => {
                 for ch in 0..self.num_channels() {
                     self.raw_data_mut(Some(ch))
                         .iter_mut()
@@ -174,8 +174,8 @@ mod tests {
 
     use crate::{
         interleaved::InterleavedViewMut,
+        planar::PlanarViewMut,
         sequential::{SequentialView, SequentialViewMut},
-        stacked::StackedViewMut,
     };
 
     use super::*;
@@ -301,7 +301,7 @@ mod tests {
         });
 
         let mut data = [[0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0]];
-        let mut block = StackedViewMut::from_slice(&mut data);
+        let mut block = PlanarViewMut::from_slice(&mut data);
 
         let mut i = 0;
         let mut c_exp = 0;

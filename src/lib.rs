@@ -25,17 +25,17 @@ pub use sequential::SequentialView;
 pub use sequential::SequentialViewMut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use stacked::Stacked;
-pub use stacked::StackedPtrAdapter;
-pub use stacked::StackedPtrAdapterMut;
-pub use stacked::StackedView;
-pub use stacked::StackedViewMut;
+pub use planar::Planar;
+pub use planar::PlanarPtrAdapter;
+pub use planar::PlanarPtrAdapterMut;
+pub use planar::PlanarView;
+pub use planar::PlanarViewMut;
 
 pub mod interleaved;
 mod iter;
 pub mod ops;
+pub mod planar;
 pub mod sequential;
-pub mod stacked;
 
 /// Represents the memory layout of audio data returned by [`AudioBlock::layout`].
 ///
@@ -68,7 +68,7 @@ pub enum BlockLayout {
     /// Format: `[[ch0, ch0, ch0, ...], [ch1, ch1, ch1, ...]]`
     ///
     /// Useful for operations that work on one channel at a time.
-    Stacked,
+    Planar,
 }
 
 /// Represents a sample type that can be stored and processed in audio blocks.
@@ -86,7 +86,7 @@ impl<T> Sample for T where T: Copy + Zero + 'static {}
 /// Core trait for audio data access operations across various memory layouts.
 ///
 /// [`AudioBlock`] provides a unified interface for interacting with audio data regardless of its
-/// underlying memory representation ([`BlockLayout::Interleaved`], [`BlockLayout::Sequential`], or [`BlockLayout::Stacked`]). It supports operations
+/// underlying memory representation ([`BlockLayout::Interleaved`], [`BlockLayout::Sequential`], or [`BlockLayout::Planar`]). It supports operations
 /// on both owned audio blocks and temporary views.
 ///
 /// # Usage
@@ -140,7 +140,7 @@ pub trait AudioBlock<S: Sample> {
     /// This may be greater than `num_frames()` if the buffer has reserved capacity.
     fn num_frames_allocated(&self) -> usize;
 
-    /// Returns the memory layout of this audio block (interleaved, sequential, or stacked).
+    /// Returns the memory layout of this audio block (interleaved, sequential, or planar).
     fn layout(&self) -> BlockLayout;
 
     /// Returns the sample value at the specified channel and frame position.
@@ -160,7 +160,7 @@ pub trait AudioBlock<S: Sample> {
     /// Returns an iterator that yields iterators for each channel.
     fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 
-    /// Returns a slice of the data in case of sequential or stacked layout.
+    /// Returns a slice of the data in case of sequential or planar layout.
     ///
     /// # Panics
     ///
@@ -205,7 +205,7 @@ pub trait AudioBlock<S: Sample> {
     ///
     /// # Parameters
     ///
-    /// * `stacked_ch` - For `Layout::Stacked`, specifies which channel to access (required).
+    /// * `planar_ch` - For `Layout::Planar`, specifies which channel to access (required).
     ///   For other layouts, this parameter is ignored.
     ///
     /// # Returns
@@ -213,8 +213,8 @@ pub trait AudioBlock<S: Sample> {
     /// A slice containing all allocated data. The data format follows the block's layout:
     /// - For `Interleaved`: returns interleaved samples across all allocated channels
     /// - For `Sequential`: returns planar data with all allocated channels
-    /// - For `Stacked`: returns data for the specified channel only
-    fn raw_data(&self, stacked_ch: Option<u16>) -> &[S];
+    /// - For `Planar`: returns data for the specified channel only
+    fn raw_data(&self, planar_ch: Option<u16>) -> &[S];
 }
 
 /// Extends the [`AudioBlock`] trait with mutable access operations.
@@ -299,7 +299,7 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// Returns a mutable iterator that yields mutable iterators for each channel.
     fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 
-    /// Returns a slice of the data in case of sequential or stacked layout.
+    /// Returns a slice of the data in case of sequential or planar layout.
     ///
     /// # Panics
     ///
@@ -344,7 +344,7 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     ///
     /// # Parameters
     ///
-    /// * `stacked_ch` - For `BlockLayout::Stacked`, specifies which channel to access (required).
+    /// * `planar_ch` - For `BlockLayout::Planar`, specifies which channel to access (required).
     ///   For other layouts, this parameter is ignored.
     ///
     /// # Returns
@@ -352,6 +352,6 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// A mutable slice containing all allocated data. The data format follows the block's layout:
     /// - For `Interleaved`: returns interleaved samples across all allocated channels
     /// - For `Sequential`: returns planar data with all allocated channels
-    /// - For `Stacked`: returns data for the specified channel only
-    fn raw_data_mut(&mut self, stacked_ch: Option<u16>) -> &mut [S];
+    /// - For `Planar`: returns data for the specified channel only
+    fn raw_data_mut(&mut self, planar_ch: Option<u16>) -> &mut [S];
 }
