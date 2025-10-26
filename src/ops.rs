@@ -60,13 +60,13 @@ impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
     fn for_each(&mut self, mut f: impl FnMut(&mut S)) {
         // below 8 channels it is faster to always go per channel
         if self.num_channels() < 8 {
-            for channel in self.channel_iters_mut() {
+            for channel in self.channels_iter_mut() {
                 channel.for_each(&mut f);
             }
         } else {
             match self.layout() {
                 BlockLayout::Sequential | BlockLayout::Planar => {
-                    for channel in self.channel_iters_mut() {
+                    for channel in self.channels_iter_mut() {
                         channel.for_each(&mut f);
                     }
                 }
@@ -107,7 +107,7 @@ impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
     fn enumerate(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
         // below 8 channels it is faster to always go per channel
         if self.num_channels() < 8 {
-            for (ch, channel) in self.channel_iters_mut().enumerate() {
+            for (ch, channel) in self.channels_iter_mut().enumerate() {
                 for (fr, sample) in channel.enumerate() {
                     f(ch as u16, fr, sample)
                 }
@@ -115,14 +115,14 @@ impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
         } else {
             match self.layout() {
                 BlockLayout::Interleaved => {
-                    for (fr, frame) in self.frame_iters_mut().enumerate() {
+                    for (fr, frame) in self.frames_iter_mut().enumerate() {
                         for (ch, sample) in frame.enumerate() {
                             f(ch as u16, fr, sample)
                         }
                     }
                 }
                 BlockLayout::Planar | BlockLayout::Sequential => {
-                    for (ch, channel) in self.channel_iters_mut().enumerate() {
+                    for (ch, channel) in self.channels_iter_mut().enumerate() {
                         for (fr, sample) in channel.enumerate() {
                             f(ch as u16, fr, sample)
                         }

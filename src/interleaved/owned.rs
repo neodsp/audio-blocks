@@ -346,7 +346,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockInterleaved<S> {
     }
 
     #[nonblocking]
-    fn channel_iters_mut(
+    fn channels_iter_mut(
         &mut self,
     ) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
         let num_channels = self.num_channels as usize;
@@ -384,7 +384,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockInterleaved<S> {
     }
 
     #[nonblocking]
-    fn frame_iters_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+    fn frames_iter_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
         let num_channels = self.num_channels as usize;
         let num_channels_allocated = self.num_channels_allocated as usize;
         self.data
@@ -556,7 +556,7 @@ mod tests {
         assert!(channels_iter.next().is_none());
         drop(channels_iter);
 
-        let mut channels_iter = block.channel_iters_mut();
+        let mut channels_iter = block.channels_iter_mut();
         channels_iter
             .next()
             .unwrap()
@@ -620,7 +620,7 @@ mod tests {
         assert!(frames_iter.next().is_none());
         drop(frames_iter);
 
-        let mut frames_iter = block.frame_iters_mut();
+        let mut frames_iter = block.frames_iter_mut();
         for i in 0..num_frames {
             let add = i as f32 * 10.0;
             frames_iter

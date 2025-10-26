@@ -1,6 +1,5 @@
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)] // enable std library when feature std is provided
-#![cfg_attr(not(test), no_std)] // activate std library only for tests
+#![cfg_attr(all(not(test), not(feature = "std")), no_std)] // enable std library when feature std is provided
 
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 extern crate alloc;
@@ -174,18 +173,33 @@ pub trait AudioBlock<S: Sample> {
 
     /// Creates a non-owning view of this audio block.
     ///
-    /// This operation is zero-cost (no allocation or copying) and real-time safe,
-    /// as it returns a lightweight wrapper around the original data.
+    /// This operation is real-time safe, as it returns a lightweight
+    /// wrapper around the original data.
     fn as_view(&self) -> impl AudioBlock<S>;
 
+    /// Attempts to downcast this generic audio block to a concrete interleaved view.
+    /// This enables access to frame slices and the underlying raw data.
+    ///
+    /// Returns `Some` if the underlying data is stored in interleaved format,
+    /// otherwise returns `None`.
     fn as_interleaved_view(&self) -> Option<AudioBlockInterleavedView<'_, S>> {
         None
     }
 
+    /// Attempts to downcast this generic audio block to a concrete planar view.
+    /// This enables access to frame slices and the underlying raw data.
+    ///
+    /// Returns `Some` if the underlying data is stored in planar format,
+    /// otherwise returns `None`.
     fn as_planar_view(&self) -> Option<AudioBlockPlanarView<'_, S, Self::PlanarView>> {
         None
     }
 
+    /// Attempts to downcast this generic audio block to a concrete sequential view.
+    /// This enables access to frame slices and the underlying raw data.
+    ///
+    /// Returns `Some` if the underlying data is stored in sequential format,
+    /// otherwise returns `None`.
     fn as_sequential_view(&self) -> Option<AudioBlockSequentialView<'_, S>> {
         None
     }
@@ -222,7 +236,7 @@ pub trait AudioBlock<S: Sample> {
 ///     }
 ///
 ///     // Process all channels
-///     for mut channel in audio.channel_iters_mut() {
+///     for mut channel in audio.channels_iter_mut() {
 ///         for sample in channel {
 ///             // Apply processing to each sample
 ///         }
@@ -273,7 +287,7 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     fn channel_iter_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
 
     /// Returns a mutable iterator that yields mutable iterators for each channel.
-    fn channel_iters_mut(&mut self)
+    fn channels_iter_mut(&mut self)
     -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 
     /// Returns a mutable iterator over all samples in the specified frame (across all channels).
@@ -284,24 +298,39 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     fn frame_iter_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
 
     /// Returns a mutable iterator that yields mutable iterators for each frame.
-    fn frame_iters_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
+    fn frames_iter_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 
     /// Creates a non-owning mutable view of this audio block.
     ///
-    /// This operation is zero-cost (no allocation or copying) and real-time safe,
-    /// as it returns a lightweight wrapper around the original data.
+    /// This operation is real-time safe, as it returns a lightweight
+    /// wrapper around the original data.
     fn as_view_mut(&mut self) -> impl AudioBlockMut<S>;
 
+    /// Attempts to downcast this generic audio block to a concrete interleaved view.
+    /// This enables access to frame slices and the underlying raw data.
+    ///
+    /// Returns `Some` if the underlying data is stored in interleaved format,
+    /// otherwise returns `None`.
     fn as_interleaved_view_mut(&mut self) -> Option<AudioBlockInterleavedViewMut<'_, S>> {
         None
     }
 
+    /// Attempts to downcast this generic audio block to a concrete planar view.
+    /// This enables access to frame slices and the underlying raw data.
+    ///
+    /// Returns `Some` if the underlying data is stored in planar format,
+    /// otherwise returns `None`.
     fn as_planar_view_mut(
         &mut self,
     ) -> Option<AudioBlockPlanarViewMut<'_, S, Self::PlanarViewMut>> {
         None
     }
 
+    /// Attempts to downcast this generic audio block to a concrete sequential view.
+    /// This enables access to frame slices and the underlying raw data.
+    ///
+    /// Returns `Some` if the underlying data is stored in sequential format,
+    /// otherwise returns `None`.
     fn as_sequential_view_mut(&mut self) -> Option<AudioBlockSequentialViewMut<'_, S>> {
         None
     }

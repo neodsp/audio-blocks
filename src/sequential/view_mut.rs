@@ -385,7 +385,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockSequentialViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn channel_iters_mut(
+    fn channels_iter_mut(
         &mut self,
     ) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
         let num_frames = self.num_frames;
@@ -407,7 +407,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockSequentialViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn frame_iters_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+    fn frames_iter_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let stride = self.num_frames_allocated;
@@ -613,7 +613,7 @@ mod tests {
         assert!(channels_iter.next().is_none());
         drop(channels_iter);
 
-        let mut channels_iter = block.channel_iters_mut();
+        let mut channels_iter = block.channels_iter_mut();
         channels_iter
             .next()
             .unwrap()
@@ -682,7 +682,7 @@ mod tests {
         assert!(frames_iter.next().is_none());
         drop(frames_iter);
 
-        let mut frames_iter = block.frame_iters_mut();
+        let mut frames_iter = block.frames_iter_mut();
         for i in 0..num_frames {
             let add = i as f32 * 10.0;
             frames_iter
@@ -821,34 +821,8 @@ mod tests {
         assert_eq!(block.num_channels_allocated, 2);
         assert_eq!(block.num_frames(), 5);
         assert_eq!(block.num_frames_allocated, 5);
-        assert_eq!(
-            block.channel_iter(0).copied().collect::<Vec<_>>(),
-            vec![0.0, 1.0, 2.0, 3.0, 4.0]
-        );
-        assert_eq!(
-            block.channel_iter(1).copied().collect::<Vec<_>>(),
-            vec![5.0, 6.0, 7.0, 8.0, 9.0]
-        );
-        assert_eq!(
-            block.frame_iter(0).copied().collect::<Vec<_>>(),
-            vec![0.0, 5.0]
-        );
-        assert_eq!(
-            block.frame_iter(1).copied().collect::<Vec<_>>(),
-            vec![1.0, 6.0]
-        );
-        assert_eq!(
-            block.frame_iter(2).copied().collect::<Vec<_>>(),
-            vec![2.0, 7.0]
-        );
-        assert_eq!(
-            block.frame_iter(3).copied().collect::<Vec<_>>(),
-            vec![3.0, 8.0]
-        );
-        assert_eq!(
-            block.frame_iter(4).copied().collect::<Vec<_>>(),
-            vec![4.0, 9.0]
-        );
+        assert_eq!(block.channel(0), &[0.0, 1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(block.channel(1), &[5.0, 6.0, 7.0, 8.0, 9.0]);
     }
 
     #[test]

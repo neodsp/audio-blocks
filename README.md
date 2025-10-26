@@ -1,40 +1,30 @@
 # audio-blocks
 
-![image](docs/audio-blocks-logo.png)
+Real-time safe abstractions over audio data with support for all common layouts.
 
-This crate offers traits for handling audio data in a generic way, addressing common challenges such as varying channel layouts, conversions between them, and processing different numbers of samples.
+## Quick Start
 
-It provides interleaved, sequential, and planar block types, allowing you to choose the underlying data storage: owned data, views, and mutable views. Owned blocks allocate data on the heap, while views offer access to data from slices, raw pointers, or other blocks.
+Install:
+```sh
+cargo add audio-block
+```
 
-All block types implement the `AudioBlock` and `AudioBlockMut` traits, with mutable blocks providing in-place modification operations.
+Basic planar usage (most common for DSP):
+```rust,ignore
+use audio_blocks::*;
 
-Even if you only need to work with a single memory layout, this crate is still valuable, providing the additional benefit of simplified direct memory access through a consistent interface.
+// Create a planar block - each channel gets its own buffer
+let mut block = AudioBlockPlanar::new(2, 512);
 
-This crate supports `no_std` environments by disabling default features. Note that owned blocks require either the `alloc` or the `std` feature due to heap allocation.
+// Process per channel
+for channel in block.channels_mut() {
+    for sample in channel {
+        *sample *= 0.5;
+    }
+}
+```
 
-With the exception of creating new owned blocks, all functionalities within this library are real-time safe.
-
-The core problem this crate solves is the diversity of audio data formats:
-
-* **Interleaved:** `[ch0, ch1, ch0, ch1, ch0, ch1]`
-    * **Interpretation:** Consecutive channel samples form a frame. This layout stores frames sequentially.
-    * **Terminology:** Often referred to as "packed" or "frames first" because each time step is grouped as a single processing unit (a frame).
-    * **Usage:** Frequently used in APIs or hardware interfaces where synchronized playback across channels is essential.
-
-* **Sequential:** `[ch0, ch0, ch0, ch1, ch1, ch1]`
-    * **Interpretation:** All samples for channel 0 are stored first, followed by all samples for channel 1, and so on.
-    * **Terminology:** Described as "planar" or "channels first," emphasizing that all data for one channel precedes the data for the next.
-    * **Usage:** Common in Digital Signal Processing (DSP) pipelines where per-channel processing is more straightforward and efficient.
-
-* **Planar:** `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
-    * **Interpretation:** Each channel has its own distinct buffer or array.
-    * **Terminology:** Also known as "planar" or "channels first," but more specifically refers to channel-isolated buffers.
-    * **Usage:** Highly prevalent in real-time DSP due to simplified memory access and potential for improved SIMD (Single Instruction, Multiple Data) or vectorization efficiency.
-
-By designing your processor functions to accept an `impl AudioBlock<S>`, your code can seamlessly handle audio data regardless of the underlying layout used by the audio API. `AudioBlock`s can hold any sample type `S` that implements `Copy`, `Zero`, and has a `'static` lifetime, which includes all primitive number types.
-
-For specialized processing requiring a specific sample type, such as `f32`, you can define functions that expect `impl AudioBlockMut<f32>`.
-
+Generic function that accepts any layout:
 ```rust,ignore
 fn process(block: &mut impl AudioBlockMut<f32>) {
     for channel in block.channels_mut() {
@@ -45,14 +35,35 @@ fn process(block: &mut impl AudioBlockMut<f32>) {
 }
 ```
 
-Alternatively, you can create generic processing blocks that work with various floating-point types (`f32`, `f64`, and optionally `half::f16`) by leveraging the `Float` trait from the `num` or `num-traits` crate:
+## Block Types
+
+Three layouts supported:
+
+**Planar** - `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
+Each channel has its own buffer. Standard for real-time DSP.
+
+**Sequential** - `[ch0, ch0, ch0, ch1, ch1, ch1]`
+All samples for channel 0, then all samples for channel 1.
+
+**Interleaved** - `[ch0, ch1, ch0, ch1, ch0, ch1]`
+Channels alternate sample-by-sample. Common in audio APIs.
+
+## Core Traits
+
+Write functions that accept any layout:
 
 ```rust,ignore
-use num_traits::Float;
+fn process(block: &mut impl AudioBlockMut<f32>) {
+    // Works with planar, sequential, or interleaved
+}
+```
 
-fn process<F: Float + 'static>(block: &mut impl AudioBlockMut<F>) {
+Generic across float types:
+
+```rust,ignore
+fn process<F: num::Float + 'static>(block: &mut impl AudioBlockMut<F>) {
     let gain = F::from(0.5).unwrap();
-    for channel in block.channels_mut() {
+    for channel in block.channels_iter_mut() {
         for sample in channel {
             *sample *= gain;
         }
@@ -60,195 +71,200 @@ fn process<F: Float + 'static>(block: &mut impl AudioBlockMut<F>) {
 }
 ```
 
-Accessing audio data is facilitated through iterators like `channels()` and `frames()`. You can also access specific channels or frames using `channel(u16)` and `frame(usize)`, or individual samples with `sample(u16, usize)`. Iterating over frames can be more efficient for interleaved data, while iterating over channels is generally faster for sequential or planar layouts.
+## Creating Blocks
 
-## All Trait Functions
+### Owned Blocks
+
+```rust,ignore
+let mut block = AudioBlockPlanar::new(2, 512);
+let mut block = AudioBlockSequential::new(2, 512);
+let mut block = AudioBlockInterleaved::new(2, 512);
+```
+
+Allocation only happens here. Never create owned blocks in real-time contexts.
+
+### Views (zero-allocation)
+
+```rust,ignore
+let block = AudioBlockPlanarView::from_slice(&data, 2, 512);
+let block = AudioBlockSequentialView::from_slice(&data, 2, 512);
+let block = AudioBlockInterleavedView::from_slice(&data, 2, 512);
+```
+
+From raw pointers:
+```rust,ignore
+let block = unsafe { AudioBlockInterleavedView::from_ptr(ptr, 2, 512) };
+```
+
+Planar requires adapter:
+```rust,ignore
+let mut adapter = unsafe { PlanarPtrAdapter::<_, 16>::from_ptr(data, 2, 512) };
+let block = adapter.planar_view();
+```
+
+## Common Operations
+
+```rust,ignore
+use audio_blocks::AudioBlockOps;
+
+block.copy_from_block(&other_block);
+block.fill_with(0.0);
+block.clear();
+block.for_each(|sample| *sample *= 0.5);
+```
+
+## Working with Slices
+
+Convert generic blocks to concrete types for slice access:
+
+```rust,ignore
+fn process(block: &mut impl AudioBlockMut<f32>) {
+    if block.layout() == BlockLayout::Planar {
+        let mut view = block.as_planar_view_mut().unwrap();
+        let ch0: &mut [f32] = view.channel_mut(0);
+        let ch1: &mut [f32] = view.channel_mut(1);
+    }
+}
+```
+
+Direct slice access on concrete types:
+```rust,ignore
+let mut block = AudioBlockPlanar::new(2, 512);
+let channel: &[f32] = block.channel(0);
+```
+
+## Trait API Reference
 
 ### `AudioBlock`
 
+Size and layout:
 ```rust,ignore
-/// Size and layout information
 fn num_channels(&self) -> u16;
 fn num_frames(&self) -> usize;
-fn num_channels_allocated(&self) -> u16;
-fn num_frames_allocated(&self) -> usize;
 fn layout(&self) -> BlockLayout;
+```
 
-/// Individual sample access
+Sample access:
+```rust,ignore
 fn sample(&self, channel: u16, frame: usize) -> S;
+```
 
-/// Channel-based access
-fn channel(&self, channel: u16) -> impl Iterator<Item = &S>;
-fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
-fn try_channel_slice(&self, channel: u16) -> Option<&[S]>;
+Iteration:
+```rust,ignore
+fn channel_iter(&self, channel: u16) -> impl Iterator<Item = &S>;
+fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_>;
+fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S>;
+fn frames_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_>;
+```
 
-/// Frame-based access
-fn frame(&self, frame: usize) -> impl Iterator<Item = &S>;
-fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
-fn try_frame_slice(&self, frame: usize) -> Option<&[S]>;
+Generic view (zero-allocation):
+```rust,ignore
+fn as_view(&self) -> impl AudioBlock<S>;
+```
 
-/// View and raw data access
-fn view(&self) -> impl AudioBlock<S>;
-fn try_raw_data_interleaved(&self) -> Option<&[S]>;
-fn try_raw_channel_planar(&self, ch: u16) -> Option<&[S]>;
-fn try_raw_data_sequential(&self) -> Option<&[S]>;
+Downcast to concrete type:
+```rust,ignore
+fn as_interleaved_view(&self) -> Option<AudioBlockInterleavedView<'_, S>>;
+fn as_planar_view(&self) -> Option<AudioBlockPlanarView<'_, S, Self::PlanarView>>;
+fn as_sequential_view(&self) -> Option<AudioBlockSequentialView<'_, S>>;
 ```
 
 ### `AudioBlockMut`
 
-Includes all functions from `AudioBlock` plus:
+Everything from `AudioBlock` plus:
 
+Resizing:
 ```rust,ignore
-/// Resize within allocated bounds
 fn set_active_size(&mut self, num_channels: u16, num_frames: usize);
 fn set_active_num_channels(&mut self, num_channels: u16);
 fn set_active_num_frames(&mut self, num_frames: usize);
-
-/// Individual sample access
-fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S;
-
-/// Channel-based access
-fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
-fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
-fn try_channel_slice_mut(&mut self, channel: u16) -> Option<&mut [T]>;
-
-/// Frame-based access
-fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
-fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
-fn try_frame_slice_mut(&mut self, frame: usize) -> Option<&mut [T]>;
-
-/// View and raw data access
-fn view_mut(&mut self) -> impl AudioBlockMut<S>;
-fn try_raw_data_interleaved_mut(&mut self) -> Option<&mut [S]>;
-fn try_raw_channel_planar_mut(&mut self, ch: u16) -> Option<&mut [S]>;
-fn try_raw_data_sequential_mut(&mut self) -> Option<&mut [S]>;
 ```
 
-## Operations
+Mutable access:
+```rust,ignore
+fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S;
+fn channel_iter_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
+fn channels_iter_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
+fn frame_iter_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
+fn frames_iter_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
+```
 
-Several operations are defined for audio blocks, enabling data copying between them and applying functions to each sample.
-
+Operations:
 ```rust,ignore
 fn copy_from_block(&mut self, block: &impl AudioBlock<S>);
 fn copy_from_block_resize(&mut self, block: &impl AudioBlock<S>);
 fn for_each(&mut self, f: impl FnMut(&mut S));
-fn for_each_including_non_visible(&mut self, f: impl FnMut(&mut S));
 fn enumerate(&mut self, f: impl FnMut(u16, usize, &mut S));
-fn enumerate_including_non_visible(&mut self, f: impl FnMut(u16, usize, &mut S));
 fn fill_with(&mut self, sample: S);
 fn clear(&mut self);
 ```
 
-## Creating Audio Blocks
+## Advanced: Variable Buffer Sizes
 
-### Owned
-
-Available types:
-
-* `AudioBlockInterleaved`
-* `AudioBlockSequential`
-* `AudioBlockPlanar`
+Blocks separate allocated capacity from visible size. Resize visible portion without reallocation:
 
 ```rust,ignore
-fn new(num_channels: u16, num_frames: usize) -> Self;
-fn from_block(block: &impl AudioBlock<S>) -> Self;
+let mut block = AudioBlockPlanar::new(2, 512);  // Allocate 512 frames
+block.set_active_num_frames(256);  // Use only 256
 ```
 
-> **Warning:** Avoid creating owned blocks in real-time contexts! `new` and `from_block` are the only functions in this crate that perform memory allocation.
-
-### Views
-
-Available types:
-
-* `AudioBlockInterleavedView` / `AudioBlockInterleavedViewMut`
-* `AudioBlockSequentialView` / `AudioBlockSequentialViewMut`
-* `AudioBlockPlanarView` / `AudioBlockPlanarViewMut`
-
+Create views with limited visibility:
 ```rust,ignore
-fn from_slice(data: &'a [S], num_channels: u16, num_frames: usize) -> Self;
-fn from_slice_limited(data: &'a [S], num_channels_visible: u16, num_frames_visible: usize, num_channels_allocated: u16, num_frames_allocated: usize) -> Self;
+let view = AudioBlockInterleavedView::from_slice_limited(
+    data,
+    2,    // visible channels
+    256,  // visible frames
+    2,    // allocated channels
+    512   // allocated frames
+);
 ```
 
-Interleaved and sequential blocks can be created directly from raw pointers:
-
+Auto-resize when copying:
 ```rust,ignore
-unsafe fn from_ptr(data: *const S, num_channels: u16, num_frames: usize) -> Self;
-unsafe fn from_ptr_limited(data: *const S, num_channels_visible: u16, num_frames_visible: usize, num_channels_allocated: u16, num_frames_allocated: usize) -> Self;
-```
-
-Planar blocks can only be created from raw pointers using `PlanarPtrAdapter` / `PlanarPtrAdapterMut`. Note that you need to specify the maximum number of channels you want to support (here 16):
-
-```rust,ignore
-let mut adapter = unsafe { PlanarPtrAdapter::<_, 16>::from_ptr(data, num_channels, num_frames) };
-let block = adapter.planar_view();
-```
-
-## Working with a Single Layout
-
-If you know your audio processing will only work with one specific memory layout, you can use the concrete block types directly instead of the generic `AudioBlock` trait. This provides additional convenience functions that give you direct access to the underlying data without the `Option` wrapper.
-
-For example, when working directly with `AudioBlockSequential`:
-
-```rust,ignore
-fn channel_slice(&self) -> &[S];
-fn channel_slice_mut(&self) -> &mut [S];
-fn raw_data(&self) -> &[S];
-fn raw_data_mut(&mut self) -> &mut [S];
-```
-
-`AudioBlockInterleaved` offers:
-
-```rust,ignore
-fn frame_slice(&self) -> &[S];
-fn frame_slice_mut(&self) -> &mut [S];
-fn raw_data(&self) -> &[S];
-fn raw_data_mut(&mut self) -> &mut [S];
-```
-
-And `AudioBlockPlanar` offers:
-
-```rust,ignore
-fn raw_data(&self, ch: u16) -> &[Box<[S]>];
-fn raw_data_mut(&mut self, ch: u16) -> &mut [Box<[S]>];
-```
-
-These functions give you guaranteed access to the underlying memory without needing to unwrap an `Option`, making your code simpler when you're certain about the layout you're working with.
-
-The same applies to `channel_slice`, `frame_slice`, and their mutable variants - when using the concrete types, these functions return slices directly rather than `Option<&[S]>`.
-
-This approach is particularly useful when building DSP components that are designed around a specific memory layout for performance reasons, while still benefiting from the structured API this crate provides.
-
-## Handling Varying Number of Frames
-
-> **Note:** This is primarily useful when you need to copy data to another block. In typical audio API usage, you can usually create a new view with the size of the incoming data in each callback, eliminating the need for resizing.
-
-Audio buffers from audio APIs can have a varying number of samples per processing call, often with only the maximum number of frames specified. To address this, all block types distinguish between the number of **allocated** frames and channels (the underlying storage capacity) and the number of **visible** frames and channels (the portion of data currently being used).
-
-The `resize` function allows you to adjust the number of visible frames and channels, provided they do not exceed the allocated capacity. Resizing is always real-time safe.
-
-The `copy_from_block_resize` function automatically adapts the size of the destination block to match the visible size of the source block.
-
-For views, the `from_slice_limited` and `from_ptr_limited` functions enable you to directly specify the visible portion of the underlying memory.
-
-Here's an example of how to adapt your block size to incoming blocks with changing sizes when copying data is necessary:
-
-```rust,ignore
-fn process(&mut self, other_block: &mut impl AudioBlock<f32>) {
-    self.block.copy_from_block_resize(other_block);
+fn process(&mut self, input: &impl AudioBlock<f32>) {
+    self.block.copy_from_block_resize(input);  // Adapts to input size
 }
 ```
 
-> **Warning:** Accessing raw_data can be dangerous because it provides access to all contained samples, including those that are not intended to be visible.
+Query allocation:
+```rust,ignore
+block.num_channels_allocated();
+block.num_frames_allocated();
+```
 
-## Performance Considerations
+## Advanced: Access Non-Visible Samples
 
-When iterating using channels or frames, performance is influenced by the block's memory layout.
+For operations that can safely process all allocated memory:
 
-* For sequential and planar layouts, iterating over channels is generally faster.
-* For interleaved layouts, especially with a high number of channels, iterating over frames might offer better performance.
+```rust,ignore
+block.for_each_including_non_visible(|sample| *sample *= 0.5);
+block.enumerate_including_non_visible(|ch, frame, sample| {
+    // Process including allocated but non-visible samples
+});
+```
 
-Accessing data via `channel_slice` and `frame_slice` isn't significantly faster than direct slice access but can be convenient for SIMD operations or functions requiring slice inputs.
+Direct memory access:
+```rust,ignore
+let data: &[f32] = block.raw_data();  // Includes non-visible samples
+```
 
-The most performant way to access data is through `raw_data`. However, this method carries risks for blocks that have allocated more memory than they expose, as it grants access to non-visible samples. You'll also need to manually manage the data layout. For simple, sample-independent operations (e.g., applying gain), processing all samples (including non-visible ones, provided their count isn't excessive) can be more efficient. The `Ops` trait offers `for_each`, `for_each_including_non_visible`, `enumerate`, and `enumerate_including_non_visible` for these scenarios.
+## Performance
 
-To determine a block's memory organization, use the `layout()` function.
+Iterator performance varies by layout:
+- Sequential/Planar: Channel iteration faster
+- Interleaved (many channels): Frame iteration faster
+
+`raw_data()` access is fastest but exposes non-visible samples. For simple operations like gain, processing all samples (including non-visible) can be more efficient.
+
+Check layout before optimization:
+```rust,ignore
+match block.layout() {
+    BlockLayout::Planar => { /* channel-wise processing */ }
+    BlockLayout::Interleaved => { /* frame-wise processing */ }
+    BlockLayout::Sequential => { /* channel-wise processing */ }
+}
+```
+
+## `no_std` Support
+
+Disable default features. Owned blocks require `alloc` or `std` feature.
