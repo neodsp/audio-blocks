@@ -290,7 +290,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn channel_iters(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let stride = self.num_channels_allocated as usize;
@@ -593,7 +593,7 @@ mod tests {
         let mut data = vec![0.0; 10];
         let mut block = AudioBlockInterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
 
-        let mut channels_iter = block.channel_iters();
+        let mut channels_iter = block.channels_iter();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -615,7 +615,7 @@ mod tests {
         assert!(channels_iter.next().is_none());
         drop(channels_iter);
 
-        let mut channels_iter = block.channel_iters();
+        let mut channels_iter = block.channels_iter();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();

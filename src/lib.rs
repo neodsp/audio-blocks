@@ -115,7 +115,7 @@ impl<T> Sample for T where T: Copy + Zero + 'static {}
 ///     }
 ///
 ///     // Process all channels
-///     for channel in audio.channel_iters() {
+///     for channel in audio.channels_iter() {
 ///         for sample in channel {
 ///             // work with each sample
 ///         }
@@ -159,7 +159,7 @@ pub trait AudioBlock<S: Sample> {
     fn channel_iter(&self, channel: u16) -> impl Iterator<Item = &S>;
 
     /// Returns an iterator that yields an iterator for each channel.
-    fn channel_iters(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
+    fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 
     /// Returns an iterator over all samples in the specified frame (across all channels).
     ///
