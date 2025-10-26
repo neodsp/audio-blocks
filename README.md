@@ -128,6 +128,7 @@ fn process(block: &mut impl AudioBlockMut<f32>) {
 ```
 
 Direct slice access on concrete types:
+
 ```rust,ignore
 let mut block = AudioBlockPlanar::new(2, 512);
 let channel: &[f32] = block.channel(0);
