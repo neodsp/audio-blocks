@@ -26,11 +26,11 @@ use super::{view::AudioBlockPlanarView, view_mut::AudioBlockPlanarViewMut};
 /// let block = AudioBlockPlanar::new(2, 3);
 /// let mut block = AudioBlockPlanar::from_block(&block);
 ///
-/// block.channel_mut(0).for_each(|v| *v = 0.0);
-/// block.channel_mut(1).for_each(|v| *v = 1.0);
+/// block.channel_mut(0).fill(0.0);
+/// block.channel_mut(1).fill(1.0);
 ///
-/// assert_eq!(block.raw_data()[0].as_ref(), &[0.0, 0.0, 0.0]);
-/// assert_eq!(block.raw_data()[1].as_ref(), &[1.0, 1.0, 1.0]);
+/// assert_eq!(block.channel(0), &[0.0, 0.0, 0.0]);
+/// assert_eq!(block.channel(1), &[1.0, 1.0, 1.0]);
 /// ```
 pub struct AudioBlockPlanar<S: Sample> {
     data: Box<[Box<[S]>]>,
@@ -84,7 +84,10 @@ impl<S: Sample> AudioBlockPlanar<S> {
     /// * `block` - The source audio block to copy data from
     #[blocking]
     pub fn from_block(block: &impl AudioBlock<S>) -> Self {
-        let data: Vec<Box<[S]>> = block.channels().map(|c| c.copied().collect()).collect();
+        let data: Vec<Box<[S]>> = block
+            .channel_iters()
+            .map(|c| c.copied().collect())
+            .collect();
         Self {
             data: data.into_boxed_slice(),
             num_channels: block.num_channels(),
@@ -100,7 +103,7 @@ impl<S: Sample> AudioBlockPlanar<S> {
     ///
     /// Panics if channel index is out of bounds.
     #[nonblocking]
-    fn channel_slice(&self, channel: u16) -> &[S] {
+    pub fn channel(&self, channel: u16) -> &[S] {
         assert!(channel < self.num_channels);
         &self.data[channel as usize].as_ref()[..self.num_frames]
     }
@@ -111,9 +114,31 @@ impl<S: Sample> AudioBlockPlanar<S> {
     ///
     /// Panics if channel index is out of bounds.
     #[nonblocking]
-    fn channel_slice_mut(&mut self, channel: u16) -> &mut [S] {
+    pub fn channel_mut(&mut self, channel: u16) -> &mut [S] {
         assert!(channel < self.num_channels);
         &mut self.data[channel as usize].as_mut()[..self.num_frames]
+    }
+
+    /// Returns an iterator over all channels in the block.
+    ///
+    /// Each channel is represented as a slice of samples.
+    #[nonblocking]
+    pub fn channels(&self) -> impl Iterator<Item = &[S]> {
+        self.data
+            .iter()
+            .take(self.num_channels as usize)
+            .map(|channel_data| &channel_data.as_ref()[..self.num_frames])
+    }
+
+    /// Returns a mutable iterator over all channels in the block.
+    ///
+    /// Each channel is represented as a mutable slice of samples.
+    #[nonblocking]
+    pub fn channels_mut(&mut self) -> impl Iterator<Item = &mut [S]> {
+        self.data
+            .iter_mut()
+            .take(self.num_channels as usize)
+            .map(|channel_data| &mut channel_data.as_mut()[..self.num_frames])
     }
 
     /// Provides direct access to the underlying memory.
@@ -174,7 +199,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn channel(&self, channel: u16) -> impl Iterator<Item = &S> {
+    fn channel_iter(&self, channel: u16) -> impl Iterator<Item = &S> {
         assert!(channel < self.num_channels);
         unsafe {
             self.data
@@ -185,7 +210,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn channel_iters(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
         let num_frames = self.num_frames; // Capture num_frames for the closure
         self.data
             .iter()
@@ -196,13 +221,13 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn try_channel_slice(&self, channel: u16) -> Option<&[S]> {
+    fn try_channel(&self, channel: u16) -> Option<&[S]> {
         assert!(channel < self.num_channels);
         Some(&self.data[channel as usize].as_ref()[..self.num_frames])
     }
 
     #[nonblocking]
-    fn frame(&self, frame: usize) -> impl Iterator<Item = &S> {
+    fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
             .iter()
@@ -211,7 +236,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn frame_iters(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         // Get an immutable slice of the channel boxes: `&[Box<[S]>]`
@@ -274,7 +299,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S> {
+    fn channel_iter_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S> {
         assert!(channel < self.num_channels);
         unsafe {
             self.data
@@ -285,7 +310,9 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+    fn channel_iters_mut(
+        &mut self,
+    ) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
         let num_frames = self.num_frames;
         self.data
             .iter_mut()
@@ -294,13 +321,13 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn try_channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
+    fn try_channel_mut(&mut self, channel: u16) -> Option<&mut [S]> {
         assert!(channel < self.num_channels);
         Some(&mut self.data[channel as usize].as_mut()[..self.num_frames])
     }
 
     #[nonblocking]
-    fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S> {
+    fn frame_iter_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S> {
         assert!(frame < self.num_frames);
         self.data
             .iter_mut()
@@ -309,7 +336,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+    fn frame_iters_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let data_slice: &mut [Box<[S]>] = &mut self.data;
@@ -349,16 +376,63 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     }
 }
 
+impl<S: Sample + core::fmt::Debug> core::fmt::Debug for AudioBlockPlanar<S> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        writeln!(f, "AudioBlockPlanar {{")?;
+        writeln!(f, "  num_channels: {}", self.num_channels)?;
+        writeln!(f, "  num_frames: {}", self.num_frames)?;
+        writeln!(
+            f,
+            "  num_channels_allocated: {}",
+            self.num_channels_allocated
+        )?;
+        writeln!(f, "  num_frames_allocated: {}", self.num_frames_allocated)?;
+        writeln!(f, "  channels:")?;
+
+        for (i, channel) in self.channels().enumerate() {
+            writeln!(f, "    {}: {:?}", i, channel)?;
+        }
+
+        writeln!(f, "  raw_data: {:?}", self.raw_data())?;
+        writeln!(f, "}}")?;
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rtsan_standalone::no_sanitize_realtime;
 
     use super::*;
-    use crate::interleaved::AudioBlockInterleavedView;
+    use crate::{AudioBlockSequentialView, interleaved::AudioBlockInterleavedView};
+
+    #[test]
+    fn test_channels() {
+        let block = AudioBlockSequentialView::from_slice(
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 0.0, 0.0, 0.0, 0.0],
+            3,
+            4,
+        );
+        let mut block = AudioBlockPlanar::<f32>::from_block(&block);
+        block.set_active_size(2, 3);
+
+        let mut channels = block.channels();
+        assert_eq!(channels.next().unwrap(), &[0.0, 1.0, 2.0]);
+        assert_eq!(channels.next().unwrap(), &[4.0, 5.0, 6.0]);
+        assert_eq!(channels.next(), None);
+        drop(channels);
+
+        let mut frames = block.channels_mut();
+        assert_eq!(frames.next().unwrap(), &[0.0, 1.0, 2.0]);
+        assert_eq!(frames.next().unwrap(), &[4.0, 5.0, 6.0]);
+        assert_eq!(frames.next(), None);
+    }
 
     #[test]
     fn test_samples() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 5);
+        dbg!(&block);
 
         let num_frames = block.num_frames();
         for ch in 0..block.num_channels() {
@@ -384,34 +458,34 @@ mod tests {
     }
 
     #[test]
-    fn test_channel() {
+    fn test_channel_iter() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 5);
 
-        let channel = block.channel(0).copied().collect::<Vec<_>>();
+        let channel = block.channel_iter(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
-        let channel = block.channel(1).copied().collect::<Vec<_>>();
+        let channel = block.channel_iter(1).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
 
         block
-            .channel_mut(0)
+            .channel_iter_mut(0)
             .enumerate()
             .for_each(|(i, v)| *v = i as f32);
         block
-            .channel_mut(1)
+            .channel_iter_mut(1)
             .enumerate()
             .for_each(|(i, v)| *v = i as f32 + 10.0);
 
-        let channel = block.channel(0).copied().collect::<Vec<_>>();
+        let channel = block.channel_iter(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
-        let channel = block.channel(1).copied().collect::<Vec<_>>();
+        let channel = block.channel_iter(1).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
     }
 
     #[test]
-    fn test_channels() {
+    fn test_channel_iters() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 5);
 
-        let mut channels_iter = block.channels();
+        let mut channels_iter = block.channel_iters();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -419,7 +493,7 @@ mod tests {
         assert!(channels_iter.next().is_none());
         drop(channels_iter);
 
-        let mut channels_iter = block.channels_mut();
+        let mut channels_iter = block.channel_iters_mut();
         channels_iter
             .next()
             .unwrap()
@@ -433,7 +507,7 @@ mod tests {
         assert!(channels_iter.next().is_none());
         drop(channels_iter);
 
-        let mut channels_iter = block.channels();
+        let mut channels_iter = block.channel_iters();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -443,41 +517,41 @@ mod tests {
     }
 
     #[test]
-    fn test_frame() {
+    fn test_frame_iter() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 5);
 
         for i in 0..block.num_frames() {
-            let frame = block.frame(i).copied().collect::<Vec<_>>();
+            let frame = block.frame_iter(i).copied().collect::<Vec<_>>();
             assert_eq!(frame, vec![0.0, 0.0]);
         }
 
         for i in 0..block.num_frames() {
             let add = i as f32 * 10.0;
             block
-                .frame_mut(i)
+                .frame_iter_mut(i)
                 .enumerate()
                 .for_each(|(i, v)| *v = i as f32 + add);
         }
 
-        let channel = block.frame(0).copied().collect::<Vec<_>>();
+        let channel = block.frame_iter(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0]);
-        let channel = block.frame(1).copied().collect::<Vec<_>>();
+        let channel = block.frame_iter(1).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![10.0, 11.0]);
-        let channel = block.frame(2).copied().collect::<Vec<_>>();
+        let channel = block.frame_iter(2).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![20.0, 21.0]);
-        let channel = block.frame(3).copied().collect::<Vec<_>>();
+        let channel = block.frame_iter(3).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![30.0, 31.0]);
-        let channel = block.frame(4).copied().collect::<Vec<_>>();
+        let channel = block.frame_iter(4).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![40.0, 41.0]);
     }
 
     #[test]
-    fn test_frames() {
+    fn test_frame_iters() {
         let mut block = AudioBlockPlanar::<f32>::new(3, 6);
         block.set_active_size(2, 5);
 
         let num_frames = block.num_frames;
-        let mut frames_iter = block.frames();
+        let mut frames_iter = block.frame_iters();
         for _ in 0..num_frames {
             let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
             assert_eq!(frame, vec![0.0, 0.0]);
@@ -485,7 +559,7 @@ mod tests {
         assert!(frames_iter.next().is_none());
         drop(frames_iter);
 
-        let mut frames_iter = block.frames_mut();
+        let mut frames_iter = block.frame_iters_mut();
         for i in 0..num_frames {
             let add = i as f32 * 10.0;
             frames_iter
@@ -497,7 +571,7 @@ mod tests {
         assert!(frames_iter.next().is_none());
         drop(frames_iter);
 
-        let mut frames_iter = block.frames();
+        let mut frames_iter = block.frame_iters();
         let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
         assert_eq!(frame, vec![0.0, 1.0]);
         let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -523,18 +597,33 @@ mod tests {
         assert_eq!(block.num_frames(), 5);
         assert_eq!(block.num_frames_allocated(), 5);
         assert_eq!(
-            block.channel(0).copied().collect::<Vec<_>>(),
+            block.channel_iter(0).copied().collect::<Vec<_>>(),
             vec![0.0, 2.0, 4.0, 6.0, 8.0]
         );
         assert_eq!(
-            block.channel(1).copied().collect::<Vec<_>>(),
+            block.channel_iter(1).copied().collect::<Vec<_>>(),
             vec![1.0, 3.0, 5.0, 7.0, 9.0]
         );
-        assert_eq!(block.frame(0).copied().collect::<Vec<_>>(), vec![0.0, 1.0]);
-        assert_eq!(block.frame(1).copied().collect::<Vec<_>>(), vec![2.0, 3.0]);
-        assert_eq!(block.frame(2).copied().collect::<Vec<_>>(), vec![4.0, 5.0]);
-        assert_eq!(block.frame(3).copied().collect::<Vec<_>>(), vec![6.0, 7.0]);
-        assert_eq!(block.frame(4).copied().collect::<Vec<_>>(), vec![8.0, 9.0]);
+        assert_eq!(
+            block.frame_iter(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 1.0]
+        );
+        assert_eq!(
+            block.frame_iter(1).copied().collect::<Vec<_>>(),
+            vec![2.0, 3.0]
+        );
+        assert_eq!(
+            block.frame_iter(2).copied().collect::<Vec<_>>(),
+            vec![4.0, 5.0]
+        );
+        assert_eq!(
+            block.frame_iter(3).copied().collect::<Vec<_>>(),
+            vec![6.0, 7.0]
+        );
+        assert_eq!(
+            block.frame_iter(4).copied().collect::<Vec<_>>(),
+            vec![8.0, 9.0]
+        );
     }
 
     #[test]
@@ -546,11 +635,11 @@ mod tests {
         ));
         let view = block.view();
         assert_eq!(
-            view.channel(0).copied().collect::<Vec<_>>(),
+            view.channel_iter(0).copied().collect::<Vec<_>>(),
             vec![0.0, 2.0, 4.0, 6.0, 8.0]
         );
         assert_eq!(
-            view.channel(1).copied().collect::<Vec<_>>(),
+            view.channel_iter(1).copied().collect::<Vec<_>>(),
             vec![1.0, 3.0, 5.0, 7.0, 9.0]
         );
     }
@@ -560,20 +649,20 @@ mod tests {
         let mut block = AudioBlockPlanar::<f32>::new(2, 5);
         {
             let mut view = block.view_mut();
-            view.channel_mut(0)
+            view.channel_iter_mut(0)
                 .enumerate()
                 .for_each(|(i, v)| *v = i as f32);
-            view.channel_mut(1)
+            view.channel_iter_mut(1)
                 .enumerate()
                 .for_each(|(i, v)| *v = i as f32 + 10.0);
         }
 
         assert_eq!(
-            block.channel(0).copied().collect::<Vec<_>>(),
+            block.channel_iter(0).copied().collect::<Vec<_>>(),
             vec![0.0, 1.0, 2.0, 3.0, 4.0]
         );
         assert_eq!(
-            block.channel(1).copied().collect::<Vec<_>>(),
+            block.channel_iter(1).copied().collect::<Vec<_>>(),
             vec![10.0, 11.0, 12.0, 13.0, 14.0]
         );
     }
@@ -587,12 +676,12 @@ mod tests {
         assert_eq!(block.num_frames_allocated(), 10);
 
         for i in 0..block.num_channels() {
-            assert_eq!(block.channel(i).count(), 10);
-            assert_eq!(block.channel_mut(i).count(), 10);
+            assert_eq!(block.channel_iter(i).count(), 10);
+            assert_eq!(block.channel_iter_mut(i).count(), 10);
         }
         for i in 0..block.num_frames() {
-            assert_eq!(block.frame(i).count(), 3);
-            assert_eq!(block.frame_mut(i).count(), 3);
+            assert_eq!(block.frame_iter(i).count(), 3);
+            assert_eq!(block.frame_iter_mut(i).count(), 3);
         }
 
         block.set_active_size(3, 10);
@@ -604,12 +693,12 @@ mod tests {
         assert_eq!(block.num_frames_allocated(), 10);
 
         for i in 0..block.num_channels() {
-            assert_eq!(block.channel(i).count(), 5);
-            assert_eq!(block.channel_mut(i).count(), 5);
+            assert_eq!(block.channel_iter(i).count(), 5);
+            assert_eq!(block.channel_iter_mut(i).count(), 5);
         }
         for i in 0..block.num_frames() {
-            assert_eq!(block.frame(i).count(), 2);
-            assert_eq!(block.frame_mut(i).count(), 2);
+            assert_eq!(block.frame_iter(i).count(), 2);
+            assert_eq!(block.frame_iter_mut(i).count(), 2);
         }
     }
 
@@ -635,7 +724,7 @@ mod tests {
     fn test_wrong_channel() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 10);
         block.set_active_size(1, 10);
-        let _ = block.channel(1);
+        let _ = block.channel_iter(1);
     }
 
     #[test]
@@ -644,7 +733,7 @@ mod tests {
     fn test_wrong_frame() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 10);
         block.set_active_size(2, 5);
-        let _ = block.frame(5);
+        let _ = block.frame_iter(5);
     }
 
     #[test]
@@ -653,7 +742,7 @@ mod tests {
     fn test_wrong_channel_mut() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 10);
         block.set_active_size(1, 10);
-        let _ = block.channel_mut(1);
+        let _ = block.channel_iter_mut(1);
     }
 
     #[test]
@@ -662,7 +751,7 @@ mod tests {
     fn test_wrong_frame_mut() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 10);
         block.set_active_size(2, 5);
-        let _ = block.frame_mut(5);
+        let _ = block.frame_iter_mut(5);
     }
 
     #[test]
@@ -670,22 +759,22 @@ mod tests {
         let mut block = AudioBlockPlanar::<f32>::new(3, 4);
         block.set_active_size(2, 3);
 
-        assert!(block.try_frame_slice(0).is_none());
+        assert!(block.try_frame(0).is_none());
 
-        block.channel_mut(0).for_each(|s| *s = 1.0);
-        block.channel_mut(1).for_each(|s| *s = 2.0);
+        block.channel_iter_mut(0).for_each(|s| *s = 1.0);
+        block.channel_iter_mut(1).for_each(|s| *s = 2.0);
 
-        assert_eq!(block.channel_slice(0), &[1.0; 3]);
-        assert_eq!(block.channel_slice(1), &[2.0; 3]);
+        assert_eq!(block.channel(0), &[1.0; 3]);
+        assert_eq!(block.channel(1), &[2.0; 3]);
 
-        assert_eq!(block.channel_slice_mut(0), &[1.0; 3]);
-        assert_eq!(block.channel_slice_mut(1), &[2.0; 3]);
+        assert_eq!(block.channel_mut(0), &[1.0; 3]);
+        assert_eq!(block.channel_mut(1), &[2.0; 3]);
 
-        assert_eq!(block.try_channel_slice(0).unwrap(), &[1.0; 3]);
-        assert_eq!(block.try_channel_slice(1).unwrap(), &[2.0; 3]);
+        assert_eq!(block.try_channel(0).unwrap(), &[1.0; 3]);
+        assert_eq!(block.try_channel(1).unwrap(), &[2.0; 3]);
 
-        assert_eq!(block.try_channel_slice_mut(0).unwrap(), &[1.0; 3]);
-        assert_eq!(block.try_channel_slice_mut(1).unwrap(), &[2.0; 3]);
+        assert_eq!(block.try_channel_mut(0).unwrap(), &[1.0; 3]);
+        assert_eq!(block.try_channel_mut(1).unwrap(), &[2.0; 3]);
     }
 
     #[test]
@@ -695,7 +784,7 @@ mod tests {
         let mut block = AudioBlockPlanar::<f32>::new(3, 4);
         block.set_active_size(2, 3);
 
-        block.channel_slice(2);
+        block.channel(2);
     }
 
     #[test]
@@ -705,7 +794,7 @@ mod tests {
         let mut block = AudioBlockPlanar::<f32>::new(3, 4);
         block.set_active_size(2, 3);
 
-        block.try_channel_slice(2);
+        block.try_channel(2);
     }
 
     #[test]
@@ -715,7 +804,7 @@ mod tests {
         let mut block = AudioBlockPlanar::<f32>::new(3, 4);
         block.set_active_size(2, 3);
 
-        block.channel_slice_mut(2);
+        block.channel_mut(2);
     }
 
     #[test]
@@ -725,7 +814,7 @@ mod tests {
         let mut block = AudioBlockPlanar::<f32>::new(3, 4);
         block.set_active_size(2, 3);
 
-        block.try_channel_slice_mut(2);
+        block.try_channel_mut(2);
     }
 
     #[test]

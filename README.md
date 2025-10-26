@@ -187,9 +187,20 @@ let block = adapter.planar_view();
 
 If you know your audio processing will only work with one specific memory layout, you can use the concrete block types directly instead of the generic `AudioBlock` trait. This provides additional convenience functions that give you direct access to the underlying data without the `Option` wrapper.
 
-For example, when working directly with `AudioBlockSequential` or `AudioBlockInterleaved`, you gain access to:
+For example, when working directly with `AudioBlockSequential`:
 
 ```rust,ignore
+fn channel_slice(&self) -> &[S];
+fn channel_slice_mut(&self) -> &mut [S];
+fn raw_data(&self) -> &[S];
+fn raw_data_mut(&mut self) -> &mut [S];
+```
+
+`AudioBlockInterleaved` offers:
+
+```rust,ignore
+fn frame_slice(&self) -> &[S];
+fn frame_slice_mut(&self) -> &mut [S];
 fn raw_data(&self) -> &[S];
 fn raw_data_mut(&mut self) -> &mut [S];
 ```

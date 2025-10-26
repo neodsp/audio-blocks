@@ -111,14 +111,14 @@ impl<T> Sample for T where T: Copy + Zero + 'static {}
 ///     let first_sample = audio.sample(0, 0);
 ///
 ///     // Process one channel
-///     for sample in audio.channel(0) {
+///     for sample in audio.channel_iter(0) {
 ///         // work with each sample
 ///     }
 ///
 ///     // Process all channels
-///     for channel in audio.channels() {
+///     for channel in audio.channel_iters() {
 ///         for sample in channel {
-///             // Apply processing to each sample
+///             // work with each sample
 ///         }
 ///     }
 /// }
@@ -155,17 +155,17 @@ pub trait AudioBlock<S: Sample> {
     /// # Panics
     ///
     /// Panics if channel index is out of bounds.
-    fn channel(&self, channel: u16) -> impl Iterator<Item = &S>;
+    fn channel_iter(&self, channel: u16) -> impl Iterator<Item = &S>;
 
-    /// Returns an iterator that yields iterators for each channel.
-    fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
+    /// Returns an iterator that yields an iterator for each channel.
+    fn channel_iters(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 
     /// Returns a slice for a single channel in case of sequential or planar layout.
     ///
     /// # Panics
     ///
     /// Panics if channel index is out of bounds.
-    fn try_channel_slice(&self, channel: u16) -> Option<&[S]> {
+    fn try_channel(&self, channel: u16) -> Option<&[S]> {
         let _ = channel;
         None
     }
@@ -175,17 +175,17 @@ pub trait AudioBlock<S: Sample> {
     /// # Panics
     ///
     /// Panics if frame index is out of bounds.
-    fn frame(&self, frame: usize) -> impl Iterator<Item = &S>;
+    fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S>;
 
-    /// Returns an iterator that yields iterators for each frame.
-    fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
+    /// Returns an iterator that yields an iterator for each frame.
+    fn frame_iters(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 
     /// Returns a slice for a single frame in case of interleaved memory layout.
     ///
     /// # Panics
     ///
     /// Panics if frame index is out of bounds.
-    fn try_frame_slice(&self, frame: usize) -> Option<&[S]> {
+    fn try_frame(&self, frame: usize) -> Option<&[S]> {
         let _ = frame;
         None
     }
@@ -270,12 +270,12 @@ pub trait AudioBlock<S: Sample> {
 ///     *audio.sample_mut(0, 0) = 0.5;
 ///
 ///     // Process one channel with mutable access
-///     for sample in audio.channel_mut(0) {
+///     for sample in audio.channel_iter_mut(0) {
 ///         *sample *= 0.8; // Apply gain reduction
 ///     }
 ///
 ///     // Process all channels
-///     for mut channel in audio.channels_mut() {
+///     for mut channel in audio.channel_iters_mut() {
 ///         for sample in channel {
 ///             // Apply processing to each sample
 ///         }
@@ -321,17 +321,18 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// # Panics
     ///
     /// Panics if channel index is out of bounds.
-    fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
+    fn channel_iter_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
 
     /// Returns a mutable iterator that yields mutable iterators for each channel.
-    fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
+    fn channel_iters_mut(&mut self)
+    -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 
     /// Returns a mutable slice for a single channel in case of sequential or planar layout.
     ///
     /// # Panics
     ///
     /// Panics if channel index is out of bounds.
-    fn try_channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
+    fn try_channel_mut(&mut self, channel: u16) -> Option<&mut [S]> {
         let _ = channel;
         None
     }
@@ -341,17 +342,17 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// # Panics
     ///
     /// Panics if frame index is out of bounds.
-    fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
+    fn frame_iter_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
 
     /// Returns a mutable iterator that yields mutable iterators for each frame.
-    fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
+    fn frame_iters_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 
     /// Returns a mutable slice for a single frame in case of interleaved memory layout.
     ///
     /// # Panics
     ///
     /// Panics if frame index is out of bounds.
-    fn try_frame_slice_mut(&mut self, frame: usize) -> Option<&mut [S]> {
+    fn try_frame_mut(&mut self, frame: usize) -> Option<&mut [S]> {
         let _ = frame;
         None
     }
