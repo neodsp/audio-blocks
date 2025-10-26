@@ -8,6 +8,8 @@ It provides interleaved, sequential, and planar block types, allowing you to cho
 
 All block types implement the `AudioBlock` and `AudioBlockMut` traits, with mutable blocks providing in-place modification operations.
 
+Even if you only need to work with a single memory layout, this crate is still valuable, providing the additional benefit of simplified direct memory access through a consistent interface.
+
 This crate supports `no_std` environments by disabling default features. Note that owned blocks require either the `alloc` or the `std` feature due to heap allocation.
 
 With the exception of creating new owned blocks, all functionalities within this library are real-time safe.
@@ -88,7 +90,7 @@ fn try_frame_slice(&self, frame: usize) -> Option<&[S]>;
 /// View and raw data access
 fn view(&self) -> impl AudioBlock<S>;
 fn try_raw_data_interleaved(&self) -> Option<&[S]>;
-fn try_raw_data_planar(&self, ch: u16) -> Option<&[S]>;
+fn try_raw_channel_planar(&self, ch: u16) -> Option<&[S]>;
 fn try_raw_data_sequential(&self) -> Option<&[S]>;
 ```
 
@@ -118,7 +120,7 @@ fn try_frame_slice_mut(&mut self, frame: usize) -> Option<&mut [T]>;
 /// View and raw data access
 fn view_mut(&mut self) -> impl AudioBlockMut<S>;
 fn try_raw_data_interleaved_mut(&mut self) -> Option<&mut [S]>;
-fn try_raw_data_planar_mut(&mut self, ch: u16) -> Option<&mut [S]>;
+fn try_raw_channel_planar_mut(&mut self, ch: u16) -> Option<&mut [S]>;
 fn try_raw_data_sequential_mut(&mut self) -> Option<&mut [S]>;
 ```
 
@@ -174,12 +176,36 @@ unsafe fn from_ptr(data: *const S, num_channels: u16, num_frames: usize) -> Self
 unsafe fn from_ptr_limited(data: *const S, num_channels_visible: u16, num_frames_visible: usize, num_channels_allocated: u16, num_frames_allocated: usize) -> Self;
 ```
 
-Planar blocks can only be created from raw pointers using `PlanarPtrAdapter` / `PlanarPtrAdapterMut`:
+Planar blocks can only be created from raw pointers using `PlanarPtrAdapter` / `PlanarPtrAdapterMut`. Note that you need to specify the maximum number of channels you want to support (here 16):
 
 ```rust,ignore
 let mut adapter = unsafe { PlanarPtrAdapter::<_, 16>::from_ptr(data, num_channels, num_frames) };
 let block = adapter.planar_view();
 ```
+
+## Working with a Single Layout
+
+If you know your audio processing will only work with one specific memory layout, you can use the concrete block types directly instead of the generic `AudioBlock` trait. This provides additional convenience functions that give you direct access to the underlying data without the `Option` wrapper.
+
+For example, when working directly with `AudioBlockSequential` or `AudioBlockInterleaved`, you gain access to:
+
+```rust,ignore
+fn raw_data(&self) -> &[S];
+fn raw_data_mut(&mut self) -> &mut [S];
+```
+
+And `AudioBlockPlanar` offers:
+
+```rust,ignore
+fn raw_data(&self, ch: u16) -> &[Box<[S]>];
+fn raw_data_mut(&mut self, ch: u16) -> &mut [Box<[S]>];
+```
+
+These functions give you guaranteed access to the underlying memory without needing to unwrap an `Option`, making your code simpler when you're certain about the layout you're working with.
+
+The same applies to `channel_slice`, `frame_slice`, and their mutable variants - when using the concrete types, these functions return slices directly rather than `Option<&[S]>`.
+
+This approach is particularly useful when building DSP components that are designed around a specific memory layout for performance reasons, while still benefiting from the structured API this crate provides.
 
 ## Handling Varying Number of Frames
 
