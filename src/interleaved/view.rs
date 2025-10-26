@@ -142,6 +142,28 @@ impl<'a, S: Sample> AudioBlockInterleavedView<'a, S> {
             num_frames_allocated,
         }
     }
+
+    /// Returns a slice for a single frame.
+    ///
+    /// # Panics
+    ///
+    /// Panics if frame index is out of bounds.
+    #[nonblocking]
+    fn frame_slice(&self, frame: usize) -> &[S] {
+        assert!(frame < self.num_frames);
+        let start = frame * self.num_channels_allocated as usize;
+        let end = start + self.num_channels as usize;
+        &self.data[start..end]
+    }
+
+    /// Provides direct access to the underlying memory as an interleaved slice.
+    ///
+    /// This function gives access to all allocated data, including any reserved capacity
+    /// beyond the active range.
+    #[nonblocking]
+    pub fn raw_data(&self) -> &[S] {
+        &self.data
+    }
 }
 
 impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedView<'_, S> {
@@ -238,7 +260,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedView<'_, S> {
     }
 
     #[nonblocking]
-    fn frame_slice(&self, frame: usize) -> Option<&[S]> {
+    fn try_frame_slice(&self, frame: usize) -> Option<&[S]> {
         assert!(frame < self.num_frames);
         let start = frame * self.num_channels_allocated as usize;
         let end = start + self.num_channels as usize;
@@ -262,7 +284,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedView<'_, S> {
     }
 
     #[nonblocking]
-    fn raw_data_interleaved(&self) -> Option<&[S]> {
+    fn try_raw_data_interleaved(&self) -> Option<&[S]> {
         Some(self.data)
     }
 }
@@ -453,11 +475,15 @@ mod tests {
     fn test_slice() {
         let data = [1.0, 1.0, 0.0, 2.0, 2.0, 0.0, 3.0, 3.0, 0.0, 0.0, 0.0, 0.0];
         let block = AudioBlockInterleavedView::<f32>::from_slice_limited(&data, 2, 3, 3, 4);
-        assert!(block.channel_slice(0).is_none());
+        assert!(block.try_channel_slice(0).is_none());
 
-        assert_eq!(block.frame_slice(0).unwrap(), &[1.0; 2]);
-        assert_eq!(block.frame_slice(1).unwrap(), &[2.0; 2]);
-        assert_eq!(block.frame_slice(2).unwrap(), &[3.0; 2]);
+        assert_eq!(block.frame_slice(0), &[1.0; 2]);
+        assert_eq!(block.frame_slice(1), &[2.0; 2]);
+        assert_eq!(block.frame_slice(2), &[3.0; 2]);
+
+        assert_eq!(block.try_frame_slice(0).unwrap(), &[1.0; 2]);
+        assert_eq!(block.try_frame_slice(1).unwrap(), &[2.0; 2]);
+        assert_eq!(block.try_frame_slice(2).unwrap(), &[3.0; 2]);
     }
 
     #[test]
@@ -470,17 +496,31 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    #[no_sanitize_realtime]
+    fn test_slice_out_of_bounds_trait() {
+        let data = [1.0, 2.0, 3.0, 0.0, 1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let block = AudioBlockInterleavedView::<f32>::from_slice_limited(&data, 2, 3, 3, 4);
+        block.try_frame_slice(5);
+    }
+
+    #[test]
     fn test_raw_data() {
         let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = AudioBlockInterleavedView::<f32>::from_slice(&data, 2, 5);
+        let block = AudioBlockInterleavedView::<f32>::from_slice_limited(&data, 1, 4, 2, 5);
 
         assert_eq!(block.layout(), crate::BlockLayout::Interleaved);
 
-        assert_eq!(block.raw_data_sequential(), None);
-        assert_eq!(block.raw_data_planar(0), None);
+        assert_eq!(block.try_raw_data_sequential(), None);
+        assert_eq!(block.try_raw_channel_planar(0), None);
 
         assert_eq!(
-            block.raw_data_interleaved().unwrap(),
+            block.raw_data(),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+
+        assert_eq!(
+            block.try_raw_data_interleaved().unwrap(),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }

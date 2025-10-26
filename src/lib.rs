@@ -12,7 +12,7 @@ extern crate core as std;
 extern crate std;
 
 pub use num::Zero;
-pub use ops::Ops;
+pub use ops::AudioBlockOps;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
 pub use interleaved::AudioBlockInterleaved;
@@ -160,12 +160,12 @@ pub trait AudioBlock<S: Sample> {
     /// Returns an iterator that yields iterators for each channel.
     fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 
-    /// Returns a slice of the data in case of sequential or planar layout.
+    /// Returns a slice for a single channel in case of sequential or planar layout.
     ///
     /// # Panics
     ///
     /// Panics if channel index is out of bounds.
-    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
+    fn try_channel_slice(&self, channel: u16) -> Option<&[S]> {
         let _ = channel;
         None
     }
@@ -180,12 +180,12 @@ pub trait AudioBlock<S: Sample> {
     /// Returns an iterator that yields iterators for each frame.
     fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 
-    /// Returns a slice of the data in case of interleaved memory layout.
+    /// Returns a slice for a single frame in case of interleaved memory layout.
     ///
     /// # Panics
     ///
     /// Panics if frame index is out of bounds.
-    fn frame_slice(&self, frame: usize) -> Option<&[S]> {
+    fn try_frame_slice(&self, frame: usize) -> Option<&[S]> {
         let _ = frame;
         None
     }
@@ -199,21 +199,21 @@ pub trait AudioBlock<S: Sample> {
     /// Provides direct access to the underlying memory as an interleaved slice.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range, but it is safe in terms of memory safety.
+    /// beyond the active range.
     ///
     /// # Returns
     ///
     /// Returns `Some(&[S])` if the block's layout is [`BlockLayout::Interleaved`], containing
     /// interleaved samples across all allocated channels. Returns `None` if the layout is
     /// not interleaved. Check `block.layout() == BlockLayout::Interleaved` before calling.
-    fn raw_data_interleaved(&self) -> Option<&[S]> {
+    fn try_raw_data_interleaved(&self) -> Option<&[S]> {
         None
     }
 
     /// Provides direct access to the underlying memory as a planar slice for a specific channel.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range, but it is safe in terms of memory safety.
+    /// beyond the active range.
     ///
     /// # Parameters
     ///
@@ -224,7 +224,7 @@ pub trait AudioBlock<S: Sample> {
     /// Returns `Some(&[S])` if the block's layout is [`BlockLayout::Planar`], containing
     /// data for the specified channel only. Returns `None` if the layout is
     /// not planar. Check `block.layout() == BlockLayout::Planar` before calling.
-    fn raw_data_planar(&self, ch: u16) -> Option<&[S]> {
+    fn try_raw_channel_planar(&self, ch: u16) -> Option<&[S]> {
         let _ = ch;
         None
     }
@@ -232,14 +232,14 @@ pub trait AudioBlock<S: Sample> {
     /// Provides direct access to the underlying memory as a sequential slice.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range, but it is safe in terms of memory safety.
+    /// beyond the active range.
     ///
     /// # Returns
     ///
     /// Returns `Some(&[S])` if the block's layout is [`BlockLayout::Sequential`], containing
     /// sequential data with all allocated channels. Returns `None` if the layout is
     /// not sequential. Check `block.layout() == BlockLayout::Sequential` before calling.
-    fn raw_data_sequential(&self) -> Option<&[S]> {
+    fn try_raw_data_sequential(&self) -> Option<&[S]> {
         None
     }
 }
@@ -326,12 +326,12 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// Returns a mutable iterator that yields mutable iterators for each channel.
     fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 
-    /// Returns a slice of the data in case of sequential or planar layout.
+    /// Returns a mutable slice for a single channel in case of sequential or planar layout.
     ///
     /// # Panics
     ///
     /// Panics if channel index is out of bounds.
-    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
+    fn try_channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
         let _ = channel;
         None
     }
@@ -346,12 +346,12 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// Returns a mutable iterator that yields mutable iterators for each frame.
     fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 
-    /// Returns a slice of the data in case of interleaved memory layout.
+    /// Returns a mutable slice for a single frame in case of interleaved memory layout.
     ///
     /// # Panics
     ///
     /// Panics if frame index is out of bounds.
-    fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [S]> {
+    fn try_frame_slice_mut(&mut self, frame: usize) -> Option<&mut [S]> {
         let _ = frame;
         None
     }
@@ -365,21 +365,21 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// Provides direct mutable access to the underlying memory as an interleaved slice.
     ///
     /// This function gives mutable access to all allocated data, including any reserved capacity
-    /// beyond the active range, but it is safe in terms of memory safety.
+    /// beyond the active range.
     ///
     /// # Returns
     ///
     /// Returns `Some(&mut [S])` if the block's layout is [`BlockLayout::Interleaved`], containing
     /// interleaved samples across all allocated channels. Returns `None` if the layout is
     /// not interleaved. Check `block.layout() == BlockLayout::Interleaved` before calling.
-    fn raw_data_interleaved_mut(&mut self) -> Option<&mut [S]> {
+    fn try_raw_data_interleaved_mut(&mut self) -> Option<&mut [S]> {
         None
     }
 
     /// Provides direct mutable access to the underlying memory as a planar slice for a specific channel.
     ///
     /// This function gives mutable access to all allocated data, including any reserved capacity
-    /// beyond the active range, but it is safe in terms of memory safety.
+    /// beyond the active range.
     ///
     /// # Parameters
     ///
@@ -390,7 +390,7 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// Returns `Some(&mut [S])` if the block's layout is [`BlockLayout::Planar`], containing
     /// data for the specified channel only. Returns `None` if the layout is
     /// not planar. Check `block.layout() == BlockLayout::Planar` before calling.
-    fn raw_data_planar_mut(&mut self, ch: u16) -> Option<&mut [S]> {
+    fn try_raw_channel_planar_mut(&mut self, ch: u16) -> Option<&mut [S]> {
         let _ = ch;
         None
     }
@@ -398,14 +398,14 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// Provides direct mutable access to the underlying memory as a sequential slice.
     ///
     /// This function gives mutable access to all allocated data, including any reserved capacity
-    /// beyond the active range, but it is safe in terms of memory safety.
+    /// beyond the active range.
     ///
     /// # Returns
     ///
     /// Returns `Some(&mut [S])` if the block's layout is [`BlockLayout::Sequential`], containing
     /// sequential data with all allocated channels. Returns `None` if the layout is
     /// not sequential. Check `block.layout() == BlockLayout::Sequential` before calling.
-    fn raw_data_sequential_mut(&mut self) -> Option<&mut [S]> {
+    fn try_raw_data_sequential_mut(&mut self) -> Option<&mut [S]> {
         None
     }
 }

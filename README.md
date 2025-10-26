@@ -78,18 +78,18 @@ fn sample(&self, channel: u16, frame: usize) -> S;
 /// Channel-based access
 fn channel(&self, channel: u16) -> impl Iterator<Item = &S>;
 fn channels(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
-fn channel_slice(&self, channel: u16) -> Option<&[S]>;
+fn try_channel_slice(&self, channel: u16) -> Option<&[S]>;
 
 /// Frame-based access
 fn frame(&self, frame: usize) -> impl Iterator<Item = &S>;
 fn frames(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
-fn frame_slice(&self, frame: usize) -> Option<&[S]>;
+fn try_frame_slice(&self, frame: usize) -> Option<&[S]>;
 
 /// View and raw data access
 fn view(&self) -> impl AudioBlock<S>;
-fn raw_data_interleaved(&self) -> Option<&[S]>;
-fn raw_data_planar(&self, ch: u16) -> Option<&[S]>;
-fn raw_data_sequential(&self) -> Option<&[S]>;
+fn try_raw_data_interleaved(&self) -> Option<&[S]>;
+fn try_raw_data_planar(&self, ch: u16) -> Option<&[S]>;
+fn try_raw_data_sequential(&self) -> Option<&[S]>;
 ```
 
 ### `AudioBlockMut`
@@ -108,18 +108,18 @@ fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S;
 /// Channel-based access
 fn channel_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
 fn channels_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
-fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [T]>;
+fn try_channel_slice_mut(&mut self, channel: u16) -> Option<&mut [T]>;
 
 /// Frame-based access
 fn frame_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
 fn frames_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
-fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [T]>;
+fn try_frame_slice_mut(&mut self, frame: usize) -> Option<&mut [T]>;
 
 /// View and raw data access
 fn view_mut(&mut self) -> impl AudioBlockMut<S>;
-fn raw_data_interleaved_mut(&mut self) -> Option<&mut [S]>;
-fn raw_data_planar_mut(&mut self, ch: u16) -> Option<&mut [S]>;
-fn raw_data_sequential_mut(&mut self) -> Option<&mut [S]>;
+fn try_raw_data_interleaved_mut(&mut self) -> Option<&mut [S]>;
+fn try_raw_data_planar_mut(&mut self, ch: u16) -> Option<&mut [S]>;
+fn try_raw_data_sequential_mut(&mut self) -> Option<&mut [S]>;
 ```
 
 ## Operations

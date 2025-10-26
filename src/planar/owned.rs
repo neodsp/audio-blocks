@@ -29,8 +29,8 @@ use super::{view::AudioBlockPlanarView, view_mut::AudioBlockPlanarViewMut};
 /// block.channel_mut(0).for_each(|v| *v = 0.0);
 /// block.channel_mut(1).for_each(|v| *v = 1.0);
 ///
-/// assert_eq!(block.raw_data_planar(0).unwrap(), &[0.0, 0.0, 0.0]);
-/// assert_eq!(block.raw_data_planar(1).unwrap(), &[1.0, 1.0, 1.0]);
+/// assert_eq!(block.raw_data()[0].as_ref(), &[0.0, 0.0, 0.0]);
+/// assert_eq!(block.raw_data()[1].as_ref(), &[1.0, 1.0, 1.0]);
 /// ```
 pub struct AudioBlockPlanar<S: Sample> {
     data: Box<[Box<[S]>]>,
@@ -92,6 +92,46 @@ impl<S: Sample> AudioBlockPlanar<S> {
             num_channels_allocated: block.num_channels(),
             num_frames_allocated: block.num_frames(),
         }
+    }
+
+    /// Returns a slice for a single channel.
+    ///
+    /// # Panics
+    ///
+    /// Panics if channel index is out of bounds.
+    #[nonblocking]
+    fn channel_slice(&self, channel: u16) -> &[S] {
+        assert!(channel < self.num_channels);
+        &self.data[channel as usize].as_ref()[..self.num_frames]
+    }
+
+    /// Returns a mutable slice for a single channel.
+    ///
+    /// # Panics
+    ///
+    /// Panics if channel index is out of bounds.
+    #[nonblocking]
+    fn channel_slice_mut(&mut self, channel: u16) -> &mut [S] {
+        assert!(channel < self.num_channels);
+        &mut self.data[channel as usize].as_mut()[..self.num_frames]
+    }
+
+    /// Provides direct access to the underlying memory.
+    ///
+    /// This function gives access to all allocated data, including any reserved capacity
+    /// beyond the active range.
+    #[nonblocking]
+    pub fn raw_data(&self) -> &[Box<[S]>] {
+        &self.data
+    }
+
+    /// Provides direct access to the underlying memory.
+    ///
+    /// This function gives access to all allocated data, including any reserved capacity
+    /// beyond the active range.
+    #[nonblocking]
+    pub fn raw_data_mut(&mut self) -> &mut [Box<[S]>] {
+        &mut self.data
     }
 }
 
@@ -156,7 +196,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn channel_slice(&self, channel: u16) -> Option<&[S]> {
+    fn try_channel_slice(&self, channel: u16) -> Option<&[S]> {
         assert!(channel < self.num_channels);
         Some(&self.data[channel as usize].as_ref()[..self.num_frames])
     }
@@ -203,7 +243,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn raw_data_planar(&self, ch: u16) -> Option<&[S]> {
+    fn try_raw_channel_planar(&self, ch: u16) -> Option<&[S]> {
         assert!(ch < self.num_channels_allocated);
         Some(unsafe { self.data.get_unchecked(ch as usize) })
     }
@@ -254,7 +294,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
+    fn try_channel_slice_mut(&mut self, channel: u16) -> Option<&mut [S]> {
         assert!(channel < self.num_channels);
         Some(&mut self.data[channel as usize].as_mut()[..self.num_frames])
     }
@@ -303,7 +343,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn raw_data_planar_mut(&mut self, ch: u16) -> Option<&mut [S]> {
+    fn try_raw_channel_planar_mut(&mut self, ch: u16) -> Option<&mut [S]> {
         assert!(ch < self.num_channels_allocated);
         Some(unsafe { self.data.get_unchecked_mut(ch as usize) })
     }
@@ -334,11 +374,11 @@ mod tests {
         }
 
         assert_eq!(
-            block.raw_data_planar(0).unwrap(),
+            block.try_raw_channel_planar(0).unwrap(),
             &[0.0, 1.0, 2.0, 3.0, 4.0]
         );
         assert_eq!(
-            block.raw_data_planar(1).unwrap(),
+            block.try_raw_channel_planar(1).unwrap(),
             &[5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }
@@ -630,12 +670,22 @@ mod tests {
         let mut block = AudioBlockPlanar::<f32>::new(3, 4);
         block.set_active_size(2, 3);
 
-        assert!(block.frame_slice(0).is_none());
+        assert!(block.try_frame_slice(0).is_none());
 
-        block.channel_slice_mut(0).unwrap().fill(1.0);
-        block.channel_slice_mut(1).unwrap().fill(2.0);
-        assert_eq!(block.channel_slice(0).unwrap(), &[1.0; 3]);
-        assert_eq!(block.channel_slice(1).unwrap(), &[2.0; 3]);
+        block.channel_mut(0).for_each(|s| *s = 1.0);
+        block.channel_mut(1).for_each(|s| *s = 2.0);
+
+        assert_eq!(block.channel_slice(0), &[1.0; 3]);
+        assert_eq!(block.channel_slice(1), &[2.0; 3]);
+
+        assert_eq!(block.channel_slice_mut(0), &[1.0; 3]);
+        assert_eq!(block.channel_slice_mut(1), &[2.0; 3]);
+
+        assert_eq!(block.try_channel_slice(0).unwrap(), &[1.0; 3]);
+        assert_eq!(block.try_channel_slice(1).unwrap(), &[2.0; 3]);
+
+        assert_eq!(block.try_channel_slice_mut(0).unwrap(), &[1.0; 3]);
+        assert_eq!(block.try_channel_slice_mut(1).unwrap(), &[2.0; 3]);
     }
 
     #[test]
@@ -651,6 +701,16 @@ mod tests {
     #[test]
     #[should_panic]
     #[no_sanitize_realtime]
+    fn test_slice_out_of_bounds_trait() {
+        let mut block = AudioBlockPlanar::<f32>::new(3, 4);
+        block.set_active_size(2, 3);
+
+        block.try_channel_slice(2);
+    }
+
+    #[test]
+    #[should_panic]
+    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
         let mut block = AudioBlockPlanar::<f32>::new(3, 4);
         block.set_active_size(2, 3);
@@ -659,33 +719,50 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    #[no_sanitize_realtime]
+    fn test_slice_out_of_bounds_mut_trait() {
+        let mut block = AudioBlockPlanar::<f32>::new(3, 4);
+        block.set_active_size(2, 3);
+
+        block.try_channel_slice_mut(2);
+    }
+
+    #[test]
     fn test_raw_data() {
         let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
         let mut block =
             AudioBlockPlanar::from_block(&AudioBlockPlanarViewMut::from_slice(&mut vec));
 
+        // resize to make sure unactive data can be accesses as well
+        block.set_active_size(1, 4);
+
         assert_eq!(block.layout(), crate::BlockLayout::Planar);
 
-        assert_eq!(block.raw_data_interleaved(), None);
-        assert_eq!(block.raw_data_interleaved_mut(), None);
-        assert_eq!(block.raw_data_sequential(), None);
-        assert_eq!(block.raw_data_sequential_mut(), None);
+        assert_eq!(block.try_raw_data_interleaved(), None);
+        assert_eq!(block.try_raw_data_interleaved_mut(), None);
+        assert_eq!(block.try_raw_data_sequential(), None);
+        assert_eq!(block.try_raw_data_sequential_mut(), None);
 
+        assert_eq!(block.raw_data()[0].as_ref(), &[0.0, 2.0, 4.0, 6.0, 8.0]);
+        assert_eq!(block.raw_data()[1].as_ref(), &[1.0, 3.0, 5.0, 7.0, 9.0]);
         assert_eq!(
-            block.raw_data_planar(0).unwrap(),
+            block.try_raw_channel_planar(0).unwrap(),
             &[0.0, 2.0, 4.0, 6.0, 8.0]
         );
         assert_eq!(
-            block.raw_data_planar(1).unwrap(),
+            block.try_raw_channel_planar(1).unwrap(),
             &[1.0, 3.0, 5.0, 7.0, 9.0]
         );
 
+        assert_eq!(block.raw_data_mut()[0].as_ref(), &[0.0, 2.0, 4.0, 6.0, 8.0]);
+        assert_eq!(block.raw_data_mut()[1].as_ref(), &[1.0, 3.0, 5.0, 7.0, 9.0]);
         assert_eq!(
-            block.raw_data_planar_mut(0).unwrap(),
+            block.try_raw_channel_planar_mut(0).unwrap(),
             &[0.0, 2.0, 4.0, 6.0, 8.0]
         );
         assert_eq!(
-            block.raw_data_planar_mut(1).unwrap(),
+            block.try_raw_channel_planar_mut(1).unwrap(),
             &[1.0, 3.0, 5.0, 7.0, 9.0]
         );
     }

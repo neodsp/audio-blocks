@@ -148,6 +148,50 @@ impl<'a, S: Sample> AudioBlockInterleavedViewMut<'a, S> {
             num_frames_allocated: num_frames_available,
         }
     }
+
+    /// Returns a slice for a single frame.
+    ///
+    /// # Panics
+    ///
+    /// Panics if frame index is out of bounds.
+    #[nonblocking]
+    fn frame_slice(&self, frame: usize) -> &[S] {
+        assert!(frame < self.num_frames);
+        let start = frame * self.num_channels_allocated as usize;
+        let end = start + self.num_channels as usize;
+        &self.data[start..end]
+    }
+
+    /// Returns a mutable slice for a single frame.
+    ///
+    /// # Panics
+    ///
+    /// Panics if frame index is out of bounds.
+    #[nonblocking]
+    fn frame_slice_mut(&mut self, frame: usize) -> &mut [S] {
+        assert!(frame < self.num_frames);
+        let start = frame * self.num_channels_allocated as usize;
+        let end = start + self.num_channels as usize;
+        &mut self.data[start..end]
+    }
+
+    /// Provides direct access to the underlying memory as an interleaved slice.
+    ///
+    /// This function gives access to all allocated data, including any reserved capacity
+    /// beyond the active range.
+    #[nonblocking]
+    pub fn raw_data(&self) -> &[S] {
+        &self.data
+    }
+
+    /// Provides direct mutable access to the underlying memory as an interleaved slice.
+    ///
+    /// This function gives mutable access to all allocated data, including any reserved capacity
+    /// beyond the active range.
+    #[nonblocking]
+    pub fn raw_data_mut(&mut self) -> &mut [S] {
+        &mut self.data
+    }
 }
 
 impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedViewMut<'_, S> {
@@ -249,7 +293,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn frame_slice(&self, frame: usize) -> Option<&[S]> {
+    fn try_frame_slice(&self, frame: usize) -> Option<&[S]> {
         assert!(frame < self.num_frames);
         let start = frame * self.num_channels_allocated as usize;
         let end = start + self.num_channels as usize;
@@ -268,7 +312,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn raw_data_interleaved(&self) -> Option<&[S]> {
+    fn try_raw_data_interleaved(&self) -> Option<&[S]> {
         Some(self.data)
     }
 }
@@ -355,7 +399,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockInterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn frame_slice_mut(&mut self, frame: usize) -> Option<&mut [S]> {
+    fn try_frame_slice_mut(&mut self, frame: usize) -> Option<&mut [S]> {
         assert!(frame < self.num_frames);
         let start = frame * self.num_channels_allocated as usize;
         let end = start + self.num_channels as usize;
@@ -374,7 +418,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockInterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn raw_data_interleaved_mut(&mut self) -> Option<&mut [S]> {
+    fn try_raw_data_interleaved_mut(&mut self) -> Option<&mut [S]> {
         Some(self.data)
     }
 }
@@ -404,7 +448,7 @@ mod tests {
         }
 
         assert_eq!(
-            block.raw_data_interleaved().unwrap(),
+            block.try_raw_data_interleaved().unwrap(),
             &[0.0, 5.0, 1.0, 6.0, 2.0, 7.0, 3.0, 8.0, 4.0, 9.0]
         );
     }
@@ -677,14 +721,19 @@ mod tests {
         let mut data = [0.0; 12];
         let mut block =
             AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
-        assert!(block.channel_slice(0).is_none());
+        assert!(block.try_channel_slice(0).is_none());
 
-        block.frame_slice_mut(0).unwrap().fill(1.0);
-        block.frame_slice_mut(1).unwrap().fill(2.0);
-        block.frame_slice_mut(2).unwrap().fill(3.0);
-        assert_eq!(block.frame_slice(0).unwrap(), &[1.0; 2]);
-        assert_eq!(block.frame_slice(1).unwrap(), &[2.0; 2]);
-        assert_eq!(block.frame_slice(2).unwrap(), &[3.0; 2]);
+        block.try_frame_slice_mut(0).unwrap().fill(1.0);
+        block.try_frame_slice_mut(1).unwrap().fill(2.0);
+        block.try_frame_slice_mut(2).unwrap().fill(3.0);
+
+        assert_eq!(block.frame_slice(0), &[1.0; 2]);
+        assert_eq!(block.frame_slice(1), &[2.0; 2]);
+        assert_eq!(block.frame_slice(2), &[3.0; 2]);
+
+        assert_eq!(block.try_frame_slice(0).unwrap(), &[1.0; 2]);
+        assert_eq!(block.try_frame_slice(1).unwrap(), &[2.0; 2]);
+        assert_eq!(block.try_frame_slice(2).unwrap(), &[3.0; 2]);
     }
 
     #[test]
@@ -701,6 +750,17 @@ mod tests {
     #[test]
     #[should_panic]
     #[no_sanitize_realtime]
+    fn test_slice_out_of_bounds_trait() {
+        let mut data = [0.0; 12];
+        let mut block =
+            AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
+        block.set_active_size(2, 5);
+        block.try_frame_slice(5);
+    }
+
+    #[test]
+    #[should_panic]
+    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
         let mut data = [0.0; 12];
         let mut block =
@@ -710,24 +770,46 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    #[no_sanitize_realtime]
+    fn test_slice_out_of_bounds_mut_trait() {
+        let mut data = [0.0; 12];
+        let mut block =
+            AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
+        block.set_active_size(2, 5);
+        block.try_frame_slice(5);
+    }
+
+    #[test]
     fn test_raw_data() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let mut block = AudioBlockInterleavedViewMut::<f32>::from_slice(&mut data, 2, 5);
+        let mut block =
+            AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 1, 4, 2, 5);
 
         assert_eq!(block.layout(), crate::BlockLayout::Interleaved);
 
-        assert_eq!(block.raw_data_sequential(), None);
-        assert_eq!(block.raw_data_sequential_mut(), None);
-        assert_eq!(block.raw_data_planar(0), None);
-        assert_eq!(block.raw_data_planar_mut(0), None);
+        assert_eq!(block.try_raw_data_sequential(), None);
+        assert_eq!(block.try_raw_data_sequential_mut(), None);
+        assert_eq!(block.try_raw_channel_planar(0), None);
+        assert_eq!(block.try_raw_channel_planar_mut(0), None);
 
         assert_eq!(
-            block.raw_data_interleaved().unwrap(),
+            block.raw_data(),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
 
         assert_eq!(
-            block.raw_data_interleaved_mut().unwrap(),
+            block.try_raw_data_interleaved().unwrap(),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+
+        assert_eq!(
+            block.raw_data_mut(),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+
+        assert_eq!(
+            block.try_raw_data_interleaved_mut().unwrap(),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }

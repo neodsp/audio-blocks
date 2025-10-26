@@ -2,7 +2,7 @@ use rtsan_standalone::nonblocking;
 
 use crate::{AudioBlock, AudioBlockMut, BlockLayout, Sample};
 
-pub trait Ops<S: Sample> {
+pub trait AudioBlockOps<S: Sample> {
     /// Copy will panic if blocks don't have the exact same size
     fn copy_from_block(&mut self, block: &impl AudioBlock<S>);
     /// Destination block will take over the size from source block.
@@ -31,7 +31,7 @@ pub trait Ops<S: Sample> {
     fn clear(&mut self);
 }
 
-impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
+impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
     #[nonblocking]
     fn copy_from_block(&mut self, block: &impl AudioBlock<S>) {
         assert_eq!(block.num_channels(), self.num_channels());
@@ -83,18 +83,18 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
     fn for_each_including_non_visible(&mut self, mut f: impl FnMut(&mut S)) {
         match self.layout() {
             BlockLayout::Interleaved => self
-                .raw_data_interleaved_mut()
+                .try_raw_data_interleaved_mut()
                 .expect("Layout is interleaved")
                 .iter_mut()
                 .for_each(&mut f),
             BlockLayout::Sequential => self
-                .raw_data_sequential_mut()
+                .try_raw_data_sequential_mut()
                 .expect("Layout is sequential")
                 .iter_mut()
                 .for_each(&mut f),
             BlockLayout::Planar => {
                 for ch in 0..self.num_channels() {
-                    self.raw_data_planar_mut(ch)
+                    self.try_raw_channel_planar_mut(ch)
                         .expect("Layout is planar")
                         .iter_mut()
                         .for_each(&mut f);
@@ -137,7 +137,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
         match self.layout() {
             BlockLayout::Interleaved => {
                 let num_frames = self.num_frames_allocated();
-                self.raw_data_interleaved_mut()
+                self.try_raw_data_interleaved_mut()
                     .expect("Layout is interleaved")
                     .iter_mut()
                     .enumerate()
@@ -149,7 +149,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
             }
             BlockLayout::Planar => {
                 for ch in 0..self.num_channels() {
-                    self.raw_data_planar_mut(ch)
+                    self.try_raw_channel_planar_mut(ch)
                         .expect("Layout is sequential")
                         .iter_mut()
                         .enumerate()
@@ -158,7 +158,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
             }
             BlockLayout::Sequential => {
                 let num_frames = self.num_frames_allocated();
-                self.raw_data_sequential_mut()
+                self.try_raw_data_sequential_mut()
                     .expect("Layout is sequential")
                     .iter_mut()
                     .enumerate()
