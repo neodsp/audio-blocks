@@ -131,6 +131,11 @@ Direct slice access on concrete types:
 ```rust,ignore
 let mut block = AudioBlockPlanar::new(2, 512);
 let channel: &[f32] = block.channel(0);
+let raw_data: &[Box<[f32]>] = block.raw_data();
+
+let mut block = AudioBlockInterleaved::new(2, 512);
+let frame: &[f32] = block.frame(0);
+let raw_data: &[f32] = block.raw_data();
 ```
 
 ## Trait API Reference
