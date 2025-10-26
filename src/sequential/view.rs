@@ -173,9 +173,22 @@ impl<'a, S: Sample> AudioBlockSequentialView<'a, S> {
     pub fn raw_data(&self) -> &[S] {
         &self.data
     }
+
+    #[nonblocking]
+    pub fn view(&self) -> AudioBlockSequentialView<'_, S> {
+        AudioBlockSequentialView::from_slice_limited(
+            self.data,
+            self.num_channels,
+            self.num_frames,
+            self.num_channels_allocated,
+            self.num_frames_allocated,
+        )
+    }
 }
 
 impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
+    type PlanarView = [S; 0];
+
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -233,14 +246,6 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
     }
 
     #[nonblocking]
-    fn try_channel(&self, channel: u16) -> Option<&[S]> {
-        assert!(channel < self.num_channels);
-        let start = channel as usize * self.num_frames_allocated;
-        let end = start + self.num_frames;
-        Some(&self.data[start..end])
-    }
-
-    #[nonblocking]
     fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -283,19 +288,13 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
     }
 
     #[nonblocking]
-    fn view(&self) -> impl AudioBlock<S> {
-        AudioBlockSequentialView::from_slice_limited(
-            self.data,
-            self.num_channels,
-            self.num_frames,
-            self.num_channels_allocated,
-            self.num_frames_allocated,
-        )
+    fn as_view(&self) -> impl AudioBlock<S> {
+        self.view()
     }
 
     #[nonblocking]
-    fn try_raw_data_sequential(&self) -> Option<&[S]> {
-        Some(self.data)
+    fn as_sequential_view(&self) -> Option<AudioBlockSequentialView<'_, S>> {
+        Some(self.view())
     }
 }
 
@@ -325,9 +324,47 @@ impl<S: Sample + core::fmt::Debug> core::fmt::Debug for AudioBlockSequentialView
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use rtsan_standalone::no_sanitize_realtime;
 
-    use super::*;
+    #[test]
+    fn test_member_functions() {
+        let block = AudioBlockSequentialView::from_slice_limited(
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 0.0, 0.0, 0.0, 0.0],
+            2,
+            3,
+            3,
+            4,
+        );
+
+        // single frame
+        assert_eq!(block.channel(0), &[0.0, 1.0, 2.0]);
+        assert_eq!(block.channel(1), &[4.0, 5.0, 6.0]);
+
+        // all frames
+        let mut channels = block.channels();
+        assert_eq!(channels.next().unwrap(), &[0.0, 1.0, 2.0]);
+        assert_eq!(channels.next().unwrap(), &[4.0, 5.0, 6.0]);
+        assert_eq!(channels.next(), None);
+        drop(channels);
+
+        // raw data
+        assert_eq!(
+            block.raw_data(),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 0.0, 0.0, 0.0, 0.0]
+        );
+
+        // views
+        let view = block.view();
+        assert_eq!(view.num_channels(), block.num_channels());
+        assert_eq!(view.num_frames(), block.num_frames());
+        assert_eq!(
+            view.num_channels_allocated(),
+            block.num_channels_allocated()
+        );
+        assert_eq!(view.num_frames_allocated(), block.num_frames_allocated());
+        assert_eq!(view.raw_data(), block.raw_data());
+    }
 
     #[test]
     fn test_samples() {
@@ -342,22 +379,6 @@ mod tests {
                 );
             }
         }
-    }
-
-    #[test]
-    fn test_channels() {
-        let block = AudioBlockSequentialView::from_slice_limited(
-            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 0.0, 0.0, 0.0, 0.0],
-            2,
-            3,
-            3,
-            4,
-        );
-
-        let mut channels = block.channels();
-        assert_eq!(channels.next().unwrap(), &[0.0, 1.0, 2.0]);
-        assert_eq!(channels.next().unwrap(), &[4.0, 5.0, 6.0]);
-        assert_eq!(channels.next(), None);
     }
 
     #[test]
@@ -463,7 +484,10 @@ mod tests {
     fn test_view() {
         let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let block = AudioBlockSequentialView::<f32>::from_slice(&data, 2, 5);
-        let view = block.view();
+        assert!(block.as_interleaved_view().is_none());
+        assert!(block.as_planar_view().is_none());
+        assert!(block.as_sequential_view().is_some());
+        let view = block.as_view();
         assert_eq!(
             view.channel_iter(0).copied().collect::<Vec<_>>(),
             vec![0.0, 1.0, 2.0, 3.0, 4.0]
@@ -552,20 +576,6 @@ mod tests {
     }
 
     #[test]
-    fn test_slice() {
-        let data = [1.0, 1.0, 1.0, 0.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-        let block = AudioBlockSequentialView::from_slice_limited(&data, 2, 3, 3, 4);
-
-        assert!(block.try_frame(0).is_none());
-
-        assert_eq!(block.channel(0), &[1.0; 3]);
-        assert_eq!(block.channel(1), &[2.0; 3]);
-
-        assert_eq!(block.try_channel(0).unwrap(), &[1.0; 3]);
-        assert_eq!(block.try_channel(1).unwrap(), &[2.0; 3]);
-    }
-
-    #[test]
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
@@ -573,36 +583,5 @@ mod tests {
         let block = AudioBlockSequentialView::from_slice_limited(&data, 2, 3, 3, 4);
 
         block.channel(2);
-    }
-
-    #[test]
-    #[should_panic]
-    #[no_sanitize_realtime]
-    fn test_slice_out_of_bounds_trait() {
-        let data = [1.0, 1.0, 1.0, 0.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-        let block = AudioBlockSequentialView::from_slice_limited(&data, 2, 3, 3, 4);
-
-        block.try_channel(2);
-    }
-
-    #[test]
-    fn test_raw_data() {
-        let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = AudioBlockSequentialView::<f32>::from_slice_limited(&data, 1, 4, 2, 5);
-
-        assert_eq!(block.layout(), crate::BlockLayout::Sequential);
-
-        assert_eq!(block.try_raw_data_interleaved(), None);
-        assert_eq!(block.try_raw_channel_planar(0), None);
-
-        assert_eq!(
-            block.raw_data(),
-            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
-        );
-
-        assert_eq!(
-            block.try_raw_data_sequential().unwrap(),
-            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
-        );
     }
 }

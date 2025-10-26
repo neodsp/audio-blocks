@@ -83,23 +83,23 @@ impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
     fn for_each_including_non_visible(&mut self, mut f: impl FnMut(&mut S)) {
         match self.layout() {
             BlockLayout::Interleaved => self
-                .try_raw_data_interleaved_mut()
+                .as_interleaved_view_mut()
                 .expect("Layout is interleaved")
+                .raw_data_mut()
                 .iter_mut()
                 .for_each(&mut f),
+            BlockLayout::Planar => self
+                .as_planar_view_mut()
+                .expect("Layout is planar")
+                .raw_data_mut()
+                .iter_mut()
+                .for_each(|c| c.as_mut().iter_mut().for_each(&mut f)),
             BlockLayout::Sequential => self
-                .try_raw_data_sequential_mut()
+                .as_sequential_view_mut()
                 .expect("Layout is sequential")
+                .raw_data_mut()
                 .iter_mut()
                 .for_each(&mut f),
-            BlockLayout::Planar => {
-                for ch in 0..self.num_channels() {
-                    self.try_raw_channel_planar_mut(ch)
-                        .expect("Layout is planar")
-                        .iter_mut()
-                        .for_each(&mut f);
-                }
-            }
         }
     }
 
@@ -107,25 +107,25 @@ impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
     fn enumerate(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
         // below 8 channels it is faster to always go per channel
         if self.num_channels() < 8 {
-            for ch in 0..self.num_channels() {
-                self.channel_iter_mut(ch)
-                    .enumerate()
-                    .for_each(|(frame, sample)| f(ch, frame, sample));
+            for (ch, channel) in self.channel_iters_mut().enumerate() {
+                for (fr, sample) in channel.enumerate() {
+                    f(ch as u16, fr, sample)
+                }
             }
         } else {
             match self.layout() {
                 BlockLayout::Interleaved => {
-                    for frame in 0..self.num_frames() {
-                        self.frame_iter_mut(frame)
-                            .enumerate()
-                            .for_each(|(ch, sample)| f(ch as u16, frame, sample));
+                    for (fr, frame) in self.frame_iters_mut().enumerate() {
+                        for (ch, sample) in frame.enumerate() {
+                            f(ch as u16, fr, sample)
+                        }
                     }
                 }
                 BlockLayout::Planar | BlockLayout::Sequential => {
-                    for ch in 0..self.num_channels() {
-                        self.channel_iter_mut(ch)
-                            .enumerate()
-                            .for_each(|(frame, sample)| f(ch, frame, sample));
+                    for (ch, channel) in self.channel_iters_mut().enumerate() {
+                        for (fr, sample) in channel.enumerate() {
+                            f(ch as u16, fr, sample)
+                        }
                     }
                 }
             }
@@ -137,8 +137,9 @@ impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
         match self.layout() {
             BlockLayout::Interleaved => {
                 let num_frames = self.num_frames_allocated();
-                self.try_raw_data_interleaved_mut()
+                self.as_interleaved_view_mut()
                     .expect("Layout is interleaved")
+                    .raw_data_mut()
                     .iter_mut()
                     .enumerate()
                     .for_each(|(i, sample)| {
@@ -147,19 +148,23 @@ impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
                         f(channel as u16, frame, sample)
                     });
             }
-            BlockLayout::Planar => {
-                for ch in 0..self.num_channels() {
-                    self.try_raw_channel_planar_mut(ch)
-                        .expect("Layout is sequential")
+            BlockLayout::Planar => self
+                .as_planar_view_mut()
+                .expect("Layout is planar")
+                .raw_data_mut()
+                .iter_mut()
+                .enumerate()
+                .for_each(|(ch, v)| {
+                    v.as_mut()
                         .iter_mut()
                         .enumerate()
-                        .for_each(|(frame, sample)| f(ch, frame, sample));
-                }
-            }
+                        .for_each(|(frame, sample)| f(ch as u16, frame, sample))
+                }),
             BlockLayout::Sequential => {
                 let num_frames = self.num_frames_allocated();
-                self.try_raw_data_sequential_mut()
+                self.as_sequential_view_mut()
                     .expect("Layout is sequential")
+                    .raw_data_mut()
                     .iter_mut()
                     .enumerate()
                     .for_each(|(i, sample)| {

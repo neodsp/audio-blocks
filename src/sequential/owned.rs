@@ -166,9 +166,33 @@ impl<S: Sample> AudioBlockSequential<S> {
     pub fn raw_data_mut(&mut self) -> &mut [S] {
         &mut self.data
     }
+
+    #[nonblocking]
+    pub fn view(&self) -> AudioBlockSequentialView<'_, S> {
+        AudioBlockSequentialView::from_slice_limited(
+            &self.data,
+            self.num_channels,
+            self.num_frames,
+            self.num_channels_allocated,
+            self.num_frames_allocated,
+        )
+    }
+
+    #[nonblocking]
+    pub fn view_mut(&mut self) -> AudioBlockSequentialViewMut<'_, S> {
+        AudioBlockSequentialViewMut::from_slice_limited(
+            &mut self.data,
+            self.num_channels,
+            self.num_frames,
+            self.num_channels_allocated,
+            self.num_frames_allocated,
+        )
+    }
 }
 
 impl<S: Sample> AudioBlock<S> for AudioBlockSequential<S> {
+    type PlanarView = [S; 0];
+
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -226,14 +250,6 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequential<S> {
     }
 
     #[nonblocking]
-    fn try_channel(&self, channel: u16) -> Option<&[S]> {
-        assert!(channel < self.num_channels);
-        let start = channel as usize * self.num_frames_allocated;
-        let end = start + self.num_frames;
-        Some(&self.data[start..end])
-    }
-
-    #[nonblocking]
     fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
@@ -276,23 +292,19 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequential<S> {
     }
 
     #[nonblocking]
-    fn view(&self) -> impl AudioBlock<S> {
-        AudioBlockSequentialView::from_slice_limited(
-            &self.data,
-            self.num_channels,
-            self.num_frames,
-            self.num_channels_allocated,
-            self.num_frames_allocated,
-        )
+    fn as_view(&self) -> impl AudioBlock<S> {
+        self.view()
     }
 
     #[nonblocking]
-    fn try_raw_data_sequential(&self) -> Option<&[S]> {
-        Some(&self.data)
+    fn as_sequential_view(&self) -> Option<AudioBlockSequentialView<'_, S>> {
+        Some(self.view())
     }
 }
 
 impl<S: Sample> AudioBlockMut<S> for AudioBlockSequential<S> {
+    type PlanarViewMut = [S; 0];
+
     #[nonblocking]
     fn set_active_num_channels(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
@@ -334,14 +346,6 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockSequential<S> {
             .chunks_mut(num_frames_allocated)
             .take(self.num_channels as usize)
             .map(move |channel_chunk| channel_chunk.iter_mut().take(num_frames))
-    }
-
-    #[nonblocking]
-    fn try_channel_mut(&mut self, channel: u16) -> Option<&mut [S]> {
-        assert!(channel < self.num_channels);
-        let start = channel as usize * self.num_frames_allocated;
-        let end = start + self.num_frames;
-        Some(&mut self.data[start..end])
     }
 
     #[nonblocking]
@@ -387,19 +391,13 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockSequential<S> {
     }
 
     #[nonblocking]
-    fn view_mut(&mut self) -> impl AudioBlockMut<S> {
-        AudioBlockSequentialViewMut::from_slice_limited(
-            &mut self.data,
-            self.num_channels,
-            self.num_frames,
-            self.num_channels_allocated,
-            self.num_frames_allocated,
-        )
+    fn as_view_mut(&mut self) -> impl AudioBlockMut<S> {
+        self.view_mut()
     }
 
     #[nonblocking]
-    fn try_raw_data_sequential_mut(&mut self) -> Option<&mut [S]> {
-        Some(&mut self.data)
+    fn as_sequential_view_mut(&mut self) -> Option<AudioBlockSequentialViewMut<'_, S>> {
+        Some(self.view_mut())
     }
 }
 
@@ -429,21 +427,25 @@ impl<S: Sample + core::fmt::Debug> core::fmt::Debug for AudioBlockSequential<S> 
 
 #[cfg(test)]
 mod tests {
-    use rtsan_standalone::no_sanitize_realtime;
-
     use super::*;
     use crate::interleaved::AudioBlockInterleavedView;
+    use rtsan_standalone::no_sanitize_realtime;
 
     #[test]
-    fn test_channels() {
-        let block = AudioBlockSequentialView::from_slice(
-            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 0.0, 0.0, 0.0, 0.0],
-            3,
-            4,
-        );
-        let mut block = AudioBlockSequential::<f32>::from_block(&block);
+    fn test_member_functions() {
+        let mut block = AudioBlockSequential::<f32>::new(3, 4);
+        block.channel_mut(0).copy_from_slice(&[0.0, 1.0, 2.0, 3.0]);
+        block.channel_mut(1).copy_from_slice(&[4.0, 5.0, 6.0, 7.0]);
         block.set_active_size(2, 3);
 
+        // single frame
+        assert_eq!(block.channel(0), &[0.0, 1.0, 2.0]);
+        assert_eq!(block.channel(1), &[4.0, 5.0, 6.0]);
+
+        assert_eq!(block.channel_mut(0), &[0.0, 1.0, 2.0]);
+        assert_eq!(block.channel_mut(1), &[4.0, 5.0, 6.0]);
+
+        // all frames
         let mut channels = block.channels();
         assert_eq!(channels.next().unwrap(), &[0.0, 1.0, 2.0]);
         assert_eq!(channels.next().unwrap(), &[4.0, 5.0, 6.0]);
@@ -454,6 +456,36 @@ mod tests {
         assert_eq!(channels.next().unwrap(), &[0.0, 1.0, 2.0]);
         assert_eq!(channels.next().unwrap(), &[4.0, 5.0, 6.0]);
         assert_eq!(channels.next(), None);
+        drop(channels);
+
+        // raw data
+        assert_eq!(
+            block.raw_data(),
+            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 0.0, 0.0, 0.0, 0.0]
+        );
+
+        // views
+        let view = block.view();
+        assert_eq!(view.num_channels(), block.num_channels());
+        assert_eq!(view.num_frames(), block.num_frames());
+        assert_eq!(
+            view.num_channels_allocated(),
+            block.num_channels_allocated()
+        );
+        assert_eq!(view.num_frames_allocated(), block.num_frames_allocated());
+        assert_eq!(view.raw_data(), block.raw_data());
+
+        let num_channels = block.num_channels();
+        let num_frames = block.num_frames();
+        let num_channels_allocated = block.num_channels_allocated();
+        let num_frames_allocated = block.num_frames_allocated();
+        let data = block.raw_data().to_vec();
+        let view = block.view_mut();
+        assert_eq!(view.num_channels(), num_channels);
+        assert_eq!(view.num_frames(), num_frames);
+        assert_eq!(view.num_channels_allocated(), num_channels_allocated);
+        assert_eq!(view.num_frames_allocated(), num_frames_allocated);
+        assert_eq!(view.raw_data(), &data);
     }
 
     #[test]
@@ -474,7 +506,7 @@ mod tests {
         }
 
         assert_eq!(
-            block.try_raw_data_sequential().unwrap(),
+            block.raw_data(),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
         );
     }
@@ -657,7 +689,10 @@ mod tests {
                 2,
                 5,
             ));
-        let view = block.view();
+        assert!(block.as_interleaved_view().is_none());
+        assert!(block.as_planar_view().is_none());
+        assert!(block.as_sequential_view().is_some());
+        let view = block.as_view();
         assert_eq!(
             view.channel_iter(0).copied().collect::<Vec<_>>(),
             vec![0.0, 2.0, 4.0, 6.0, 8.0]
@@ -671,8 +706,11 @@ mod tests {
     #[test]
     fn test_view_mut() {
         let mut block = AudioBlockSequential::<f32>::new(2, 5);
+        assert!(block.as_interleaved_view().is_none());
+        assert!(block.as_planar_view().is_none());
+        assert!(block.as_sequential_view().is_some());
         {
-            let mut view = block.view_mut();
+            let mut view = block.as_view_mut();
             view.channel_iter_mut(0)
                 .enumerate()
                 .for_each(|(i, v)| *v = i as f32);
@@ -692,26 +730,6 @@ mod tests {
     }
 
     #[test]
-    fn test_slice() {
-        let mut block = AudioBlockSequential::<f32>::new(3, 6);
-        block.set_active_size(2, 5);
-        assert!(block.try_frame(0).is_none());
-
-        block.channel_iter_mut(0).for_each(|s| *s = 1.0);
-        block.channel_iter_mut(1).for_each(|s| *s = 2.0);
-
-        assert_eq!(block.channel(0), &[1.0; 5]);
-        assert_eq!(block.channel(1), &[2.0; 5]);
-        assert_eq!(block.channel_mut(0), &[1.0; 5]);
-        assert_eq!(block.channel_mut(1), &[2.0; 5]);
-
-        assert_eq!(block.try_channel(0).unwrap(), &[1.0; 5]);
-        assert_eq!(block.try_channel(1).unwrap(), &[2.0; 5]);
-        assert_eq!(block.try_channel_mut(0).unwrap(), &[1.0; 5]);
-        assert_eq!(block.try_channel_mut(1).unwrap(), &[2.0; 5]);
-    }
-
-    #[test]
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
@@ -723,28 +741,10 @@ mod tests {
     #[test]
     #[should_panic]
     #[no_sanitize_realtime]
-    fn test_slice_out_of_bounds_trait() {
-        let mut block = AudioBlockSequential::<f32>::new(3, 6);
-        block.set_active_size(2, 5);
-        block.try_channel(2);
-    }
-
-    #[test]
-    #[should_panic]
-    #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
         let mut block = AudioBlockSequential::<f32>::new(3, 6);
         block.set_active_size(2, 5);
         block.channel_mut(2);
-    }
-
-    #[test]
-    #[should_panic]
-    #[no_sanitize_realtime]
-    fn test_slice_out_of_bounds_mut_trait() {
-        let mut block = AudioBlockSequential::<f32>::new(3, 6);
-        block.set_active_size(2, 5);
-        block.try_channel_mut(2);
     }
 
     #[test]
@@ -823,41 +823,5 @@ mod tests {
         let mut block = AudioBlockSequential::<f32>::new(2, 10);
         block.set_active_size(1, 10);
         let _ = block.channel_iter_mut(1);
-    }
-
-    #[test]
-    fn test_raw_data() {
-        let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = AudioBlockSequentialView::<f32>::from_slice(&data, 2, 5);
-        let mut block = AudioBlockSequential::from_block(&block);
-
-        block.set_active_size(1, 4);
-
-        assert_eq!(block.layout(), crate::BlockLayout::Sequential);
-
-        assert_eq!(block.try_raw_data_interleaved(), None);
-        assert_eq!(block.try_raw_data_interleaved_mut(), None);
-        assert_eq!(block.try_raw_channel_planar(0), None);
-        assert_eq!(block.try_raw_channel_planar_mut(0), None);
-
-        assert_eq!(
-            block.raw_data(),
-            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
-        );
-
-        assert_eq!(
-            block.raw_data_mut(),
-            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
-        );
-
-        assert_eq!(
-            block.try_raw_data_sequential().unwrap(),
-            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
-        );
-
-        assert_eq!(
-            block.try_raw_data_sequential_mut().unwrap(),
-            &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
-        );
     }
 }
