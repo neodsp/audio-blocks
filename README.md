@@ -191,7 +191,7 @@ fn frames_iter_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut 
 
 Generic view (zero-allocation):
 ```rust,ignore
-fn as_view(&mut self) -> impl AudioBlockMut<S>;
+fn as_view_mut(&mut self) -> impl AudioBlockMut<S>;
 ```
 
 Downcast to concrete type:
