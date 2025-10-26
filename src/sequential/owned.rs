@@ -90,7 +90,7 @@ impl<S: Sample> AudioBlockSequential<S> {
     pub fn from_block(block: &impl AudioBlock<S>) -> Self {
         let mut data = Vec::with_capacity(block.num_channels() as usize * block.num_frames());
         block
-            .channel_iters()
+            .channels_iter()
             .for_each(|c| c.for_each(|&v| data.push(v)));
         Self {
             data: data.into_boxed_slice(),
@@ -239,7 +239,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequential<S> {
     }
 
     #[nonblocking]
-    fn channel_iters(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
         let num_frames = self.num_frames; // Active frames per channel
         let num_frames_allocated = self.num_frames_allocated; // Allocated frames per channel (chunk size)
 
@@ -539,7 +539,7 @@ mod tests {
     fn test_channel_iters() {
         let mut block = AudioBlockSequential::<f32>::new(2, 5);
 
-        let mut channels_iter = block.channel_iters();
+        let mut channels_iter = block.channels_iter();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -561,7 +561,7 @@ mod tests {
         assert!(channels_iter.next().is_none());
         drop(channels_iter);
 
-        let mut channels_iter = block.channel_iters();
+        let mut channels_iter = block.channels_iter();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();

@@ -182,7 +182,7 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> 
     }
 
     #[nonblocking]
-    fn channel_iters(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
         let num_frames = self.num_frames; // Capture num_frames for the closure
         self.data
             .iter()
@@ -443,7 +443,7 @@ mod tests {
         let data = vec![ch1, ch2];
         let block = AudioBlockPlanarView::from_slice(&data);
 
-        let mut channels_iter = block.channel_iters();
+        let mut channels_iter = block.channels_iter();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 2.0, 4.0, 6.0, 8.0]);
 
