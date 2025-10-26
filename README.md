@@ -189,6 +189,18 @@ fn frame_iter_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
 fn frames_iter_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
 ```
 
+Generic view (zero-allocation):
+```rust,ignore
+fn as_view(&mut self) -> impl AudioBlockMut<S>;
+```
+
+Downcast to concrete type:
+```rust,ignore
+fn as_interleaved_view_mut(&mut self) -> Option<AudioBlockInterleavedViewMut<'_, S>>;
+fn as_planar_view_mut(&mut self) -> Option<AudioBlockPlanarViewMut<'_, S, Self::PlanarView>>;
+fn as_sequential_view_mut(&mut self) -> Option<AudioBlockSequentialViewMut<'_, S>>;
+```
+
 Operations:
 ```rust,ignore
 fn copy_from_block(&mut self, block: &impl AudioBlock<S>);
