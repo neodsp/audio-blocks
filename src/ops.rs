@@ -2,7 +2,7 @@ use rtsan_standalone::nonblocking;
 
 use crate::{AudioBlock, AudioBlockMut, BlockLayout, Sample};
 
-pub trait Ops<S: Sample> {
+pub trait AudioBlockOps<S: Sample> {
     /// Copy will panic if blocks don't have the exact same size
     fn copy_from_block(&mut self, block: &impl AudioBlock<S>);
     /// Destination block will take over the size from source block.
@@ -31,13 +31,13 @@ pub trait Ops<S: Sample> {
     fn clear(&mut self);
 }
 
-impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
+impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
     #[nonblocking]
     fn copy_from_block(&mut self, block: &impl AudioBlock<S>) {
         assert_eq!(block.num_channels(), self.num_channels());
         assert_eq!(block.num_frames(), self.num_frames());
         for ch in 0..self.num_channels() {
-            for (sample_mut, sample) in self.channel_mut(ch).zip(block.channel(ch)) {
+            for (sample_mut, sample) in self.channel_iter_mut(ch).zip(block.channel_iter(ch)) {
                 *sample_mut = *sample;
             }
         }
@@ -50,7 +50,7 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
         self.set_active_size(block.num_channels(), block.num_frames());
 
         for ch in 0..self.num_channels() {
-            for (sample_mut, sample) in self.channel_mut(ch).zip(block.channel(ch)) {
+            for (sample_mut, sample) in self.channel_iter_mut(ch).zip(block.channel_iter(ch)) {
                 *sample_mut = *sample;
             }
         }
@@ -60,19 +60,19 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
     fn for_each(&mut self, mut f: impl FnMut(&mut S)) {
         // below 8 channels it is faster to always go per channel
         if self.num_channels() < 8 {
-            for channel in self.channels_mut() {
+            for channel in self.channels_iter_mut() {
                 channel.for_each(&mut f);
             }
         } else {
             match self.layout() {
                 BlockLayout::Sequential | BlockLayout::Planar => {
-                    for channel in self.channels_mut() {
+                    for channel in self.channels_iter_mut() {
                         channel.for_each(&mut f);
                     }
                 }
                 BlockLayout::Interleaved => {
                     for frame in 0..self.num_frames() {
-                        self.frame_mut(frame).for_each(&mut f);
+                        self.frame_iter_mut(frame).for_each(&mut f);
                     }
                 }
             }
@@ -83,23 +83,23 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
     fn for_each_including_non_visible(&mut self, mut f: impl FnMut(&mut S)) {
         match self.layout() {
             BlockLayout::Interleaved => self
-                .raw_data_interleaved_mut()
+                .as_interleaved_view_mut()
                 .expect("Layout is interleaved")
+                .raw_data_mut()
                 .iter_mut()
                 .for_each(&mut f),
+            BlockLayout::Planar => self
+                .as_planar_view_mut()
+                .expect("Layout is planar")
+                .raw_data_mut()
+                .iter_mut()
+                .for_each(|c| c.as_mut().iter_mut().for_each(&mut f)),
             BlockLayout::Sequential => self
-                .raw_data_sequential_mut()
+                .as_sequential_view_mut()
                 .expect("Layout is sequential")
+                .raw_data_mut()
                 .iter_mut()
                 .for_each(&mut f),
-            BlockLayout::Planar => {
-                for ch in 0..self.num_channels() {
-                    self.raw_data_planar_mut(ch)
-                        .expect("Layout is planar")
-                        .iter_mut()
-                        .for_each(&mut f);
-                }
-            }
         }
     }
 
@@ -107,25 +107,25 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
     fn enumerate(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
         // below 8 channels it is faster to always go per channel
         if self.num_channels() < 8 {
-            for ch in 0..self.num_channels() {
-                self.channel_mut(ch)
-                    .enumerate()
-                    .for_each(|(frame, sample)| f(ch, frame, sample));
+            for (ch, channel) in self.channels_iter_mut().enumerate() {
+                for (fr, sample) in channel.enumerate() {
+                    f(ch as u16, fr, sample)
+                }
             }
         } else {
             match self.layout() {
                 BlockLayout::Interleaved => {
-                    for frame in 0..self.num_frames() {
-                        self.frame_mut(frame)
-                            .enumerate()
-                            .for_each(|(ch, sample)| f(ch as u16, frame, sample));
+                    for (fr, frame) in self.frames_iter_mut().enumerate() {
+                        for (ch, sample) in frame.enumerate() {
+                            f(ch as u16, fr, sample)
+                        }
                     }
                 }
                 BlockLayout::Planar | BlockLayout::Sequential => {
-                    for ch in 0..self.num_channels() {
-                        self.channel_mut(ch)
-                            .enumerate()
-                            .for_each(|(frame, sample)| f(ch, frame, sample));
+                    for (ch, channel) in self.channels_iter_mut().enumerate() {
+                        for (fr, sample) in channel.enumerate() {
+                            f(ch as u16, fr, sample)
+                        }
                     }
                 }
             }
@@ -137,8 +137,9 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
         match self.layout() {
             BlockLayout::Interleaved => {
                 let num_frames = self.num_frames_allocated();
-                self.raw_data_interleaved_mut()
+                self.as_interleaved_view_mut()
                     .expect("Layout is interleaved")
+                    .raw_data_mut()
                     .iter_mut()
                     .enumerate()
                     .for_each(|(i, sample)| {
@@ -147,19 +148,23 @@ impl<S: Sample, B: AudioBlockMut<S>> Ops<S> for B {
                         f(channel as u16, frame, sample)
                     });
             }
-            BlockLayout::Planar => {
-                for ch in 0..self.num_channels() {
-                    self.raw_data_planar_mut(ch)
-                        .expect("Layout is sequential")
+            BlockLayout::Planar => self
+                .as_planar_view_mut()
+                .expect("Layout is planar")
+                .raw_data_mut()
+                .iter_mut()
+                .enumerate()
+                .for_each(|(ch, v)| {
+                    v.as_mut()
                         .iter_mut()
                         .enumerate()
-                        .for_each(|(frame, sample)| f(ch, frame, sample));
-                }
-            }
+                        .for_each(|(frame, sample)| f(ch as u16, frame, sample))
+                }),
             BlockLayout::Sequential => {
                 let num_frames = self.num_frames_allocated();
-                self.raw_data_sequential_mut()
+                self.as_sequential_view_mut()
                     .expect("Layout is sequential")
+                    .raw_data_mut()
                     .iter_mut()
                     .enumerate()
                     .for_each(|(i, sample)| {
@@ -208,11 +213,11 @@ mod tests {
         assert_eq!(block.num_frames_allocated(), 5);
 
         assert_eq!(
-            block.channel(0).copied().collect::<Vec<_>>(),
+            block.channel_iter(0).copied().collect::<Vec<_>>(),
             vec![0.0, 1.0, 2.0, 3.0]
         );
         assert_eq!(
-            block.channel(1).copied().collect::<Vec<_>>(),
+            block.channel_iter(1).copied().collect::<Vec<_>>(),
             vec![4.0, 5.0, 6.0, 7.0]
         );
     }
@@ -231,11 +236,11 @@ mod tests {
         assert_eq!(block.num_frames_allocated(), 4);
 
         assert_eq!(
-            block.channel(0).copied().collect::<Vec<_>>(),
+            block.channel_iter(0).copied().collect::<Vec<_>>(),
             vec![0.0, 1.0, 2.0, 3.0]
         );
         assert_eq!(
-            block.channel(1).copied().collect::<Vec<_>>(),
+            block.channel_iter(1).copied().collect::<Vec<_>>(),
             vec![4.0, 5.0, 6.0, 7.0]
         );
     }
@@ -346,22 +351,22 @@ mod tests {
         block.fill_with(1.0);
 
         assert_eq!(
-            block.channel(0).copied().collect::<Vec<_>>(),
+            block.channel_iter(0).copied().collect::<Vec<_>>(),
             vec![1.0, 1.0, 1.0, 1.0]
         );
         assert_eq!(
-            block.channel(1).copied().collect::<Vec<_>>(),
+            block.channel_iter(1).copied().collect::<Vec<_>>(),
             vec![1.0, 1.0, 1.0, 1.0]
         );
 
         block.clear();
 
         assert_eq!(
-            block.channel(0).copied().collect::<Vec<_>>(),
+            block.channel_iter(0).copied().collect::<Vec<_>>(),
             vec![0.0, 0.0, 0.0, 0.0]
         );
         assert_eq!(
-            block.channel(1).copied().collect::<Vec<_>>(),
+            block.channel_iter(1).copied().collect::<Vec<_>>(),
             vec![0.0, 0.0, 0.0, 0.0]
         );
     }
