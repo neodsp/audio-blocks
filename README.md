@@ -6,7 +6,7 @@ Real-time safe abstractions over audio data with support for all common layouts.
 
 Install:
 ```sh
-cargo add audio-block
+cargo add audio-blocks
 ```
 
 Basic planar usage (most common for DSP):
