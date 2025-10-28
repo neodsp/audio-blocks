@@ -92,7 +92,7 @@ impl<S: Sample> AudioBlockInterleaved<S> {
     pub fn from_block(block: &impl AudioBlock<S>) -> Self {
         let mut data = Vec::with_capacity(block.num_channels() as usize * block.num_frames());
         block
-            .frame_iters()
+            .frames_iter()
             .for_each(|f| f.for_each(|&v| data.push(v)));
         Self {
             data: data.into_boxed_slice(),
@@ -290,7 +290,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleaved<S> {
     }
 
     #[nonblocking]
-    fn frame_iters(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn frames_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
         let num_channels = self.num_channels as usize;
         let num_channels_allocated = self.num_channels_allocated as usize;
         self.data
@@ -612,7 +612,7 @@ mod tests {
     fn test_frame_iters() {
         let mut block = AudioBlockInterleaved::<f32>::new(2, 5);
         let num_frames = block.num_frames;
-        let mut frames_iter = block.frame_iters();
+        let mut frames_iter = block.frames_iter();
         for _ in 0..num_frames {
             let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
             assert_eq!(frame, vec![0.0, 0.0]);
@@ -632,7 +632,7 @@ mod tests {
         assert!(frames_iter.next().is_none());
         drop(frames_iter);
 
-        let mut frames_iter = block.frame_iters();
+        let mut frames_iter = block.frames_iter();
         let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
         assert_eq!(frame, vec![0.0, 1.0]);
         let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();

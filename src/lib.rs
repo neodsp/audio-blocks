@@ -169,7 +169,7 @@ pub trait AudioBlock<S: Sample> {
     fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S>;
 
     /// Returns an iterator that yields an iterator for each frame.
-    fn frame_iters(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
+    fn frames_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
 
     /// Creates a non-owning view of this audio block.
     ///
