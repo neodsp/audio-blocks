@@ -14,7 +14,7 @@ Basic planar usage (most common for DSP):
 use audio_blocks::*;
 
 // Create a planar block - each channel gets its own buffer
-let mut block = AudioBlockPlanar::new(2, 512);
+let mut block = AudioBlockPlanar::<f32>::new(2, 512);
 
 // Process per channel
 for channel in block.channels_mut() {
@@ -27,7 +27,7 @@ for channel in block.channels_mut() {
 Generic function that accepts any layout:
 ```rust,ignore
 fn process(block: &mut impl AudioBlockMut<f32>) {
-    for channel in block.channels_mut() {
+    for channel in block.channels_iter_mut() {
         for sample in channel {
             *sample *= 0.5;
         }
