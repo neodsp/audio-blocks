@@ -11,7 +11,7 @@ use crate::{AudioBlock, AudioBlockMut, Sample};
 
 use super::{view::AudioBlockPlanarView, view_mut::AudioBlockPlanarViewMut};
 
-/// A planar / seperate-channel audio block that owns its data.
+/// A planar / separate-channel audio block that owns its data.
 ///
 /// * **Layout:** `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
 /// * **Interpretation:** Each channel has its own separate buffer or array.

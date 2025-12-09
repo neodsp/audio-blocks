@@ -66,7 +66,7 @@ pub enum BlockLayout {
     ///
     /// Format: `[ch0, ch0, ch0, ..., ch1, ch1, ch1, ...]`
     ///
-    /// Also known as "planar" format in some audio libraries.
+    /// Note: Unlike `Planar`, this uses a single contiguous buffer rather than separate buffers per channel.
     Sequential,
 }
 

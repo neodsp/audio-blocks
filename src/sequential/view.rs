@@ -165,7 +165,7 @@ impl<'a, S: Sample> AudioBlockSequentialView<'a, S> {
             .map(|frame| &frame[..self.num_frames])
     }
 
-    /// Provides direct access to the underlying memory as an interleaved slice.
+    /// Provides direct access to the underlying memory as a sequential slice.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
     /// beyond the active range.

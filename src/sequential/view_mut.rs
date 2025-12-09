@@ -197,7 +197,7 @@ impl<'a, S: Sample> AudioBlockSequentialViewMut<'a, S> {
             .map(|frame| &mut frame[..self.num_frames])
     }
 
-    /// Provides direct access to the underlying memory as an interleaved slice.
+    /// Provides direct access to the underlying memory as a sequential slice.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
     /// beyond the active range.
@@ -206,7 +206,7 @@ impl<'a, S: Sample> AudioBlockSequentialViewMut<'a, S> {
         &self.data
     }
 
-    /// Provides direct mutable access to the underlying memory as an interleaved slice.
+    /// Provides direct mutable access to the underlying memory as a sequential slice.
     ///
     /// This function gives mutable access to all allocated data, including any reserved capacity
     /// beyond the active range.

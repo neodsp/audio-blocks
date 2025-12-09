@@ -40,13 +40,13 @@ fn process(block: &mut impl AudioBlockMut<f32>) {
 Three layouts supported:
 
 **Planar** - `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
-Each channel has its own buffer. Standard for real-time DSP.
+Each channel has its own separate buffer. Standard for real-time DSP. Optimal for SIMD/vectorization.
 
 **Sequential** - `[ch0, ch0, ch0, ch1, ch1, ch1]`
-All samples for channel 0, then all samples for channel 1.
+Single contiguous buffer with all samples for channel 0, then all samples for channel 1. Channel-contiguous in one allocation.
 
 **Interleaved** - `[ch0, ch1, ch0, ch1, ch0, ch1]`
-Channels alternate sample-by-sample. Common in audio APIs.
+Channels alternate sample-by-sample. Common in audio APIs and hardware interfaces.
 
 ## Core Traits
 
