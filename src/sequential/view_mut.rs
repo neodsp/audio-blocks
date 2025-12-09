@@ -354,13 +354,13 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockSequentialViewMut<'_, S> {
     type PlanarViewMut = [S; 0];
 
     #[nonblocking]
-    fn set_active_num_channels(&mut self, num_channels: u16) {
+    fn set_num_channels_visible(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
         self.num_channels = num_channels;
     }
 
     #[nonblocking]
-    fn set_active_num_frames(&mut self, num_frames: usize) {
+    fn set_num_frames_visible(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
@@ -640,7 +640,7 @@ mod tests {
     fn test_frame_iter() {
         let mut data = vec![0.0; 12];
         let mut block = AudioBlockSequentialViewMut::<f32>::from_slice(&mut data, 2, 6);
-        block.set_active_size(2, 5);
+        block.set_visible_size(2, 5);
 
         for i in 0..block.num_frames() {
             let frame = block.frame_iter(i).copied().collect::<Vec<_>>();
@@ -671,7 +671,7 @@ mod tests {
     fn test_frame_iters() {
         let mut data = vec![0.0; 12];
         let mut block = AudioBlockSequentialViewMut::<f32>::from_slice(&mut data, 2, 6);
-        block.set_active_size(2, 5);
+        block.set_visible_size(2, 5);
 
         let num_frames = block.num_frames;
         let mut frames_iter = block.frames_iter();

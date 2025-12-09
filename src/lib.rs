@@ -225,7 +225,7 @@ pub trait AudioBlock<S: Sample> {
 ///
 /// fn process_audio(audio: &mut impl AudioBlockMut<f32>) {
 ///     // Resize to 2 channels, 1024 frames
-///     audio.set_active_size(2, 1024);
+///     audio.set_visible_size(2, 1024);
 ///
 ///     // Modify individual samples
 ///     *audio.sample_mut(0, 0) = 0.5;
@@ -246,31 +246,31 @@ pub trait AudioBlock<S: Sample> {
 pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     type PlanarViewMut: AsRef<[S]> + AsMut<[S]>;
 
-    /// Sets the active size of the audio block to the specified number of channels and frames.
+    /// Sets the visible size of the audio block to the specified number of channels and frames.
     ///
     /// # Panics
     ///
     /// When `num_channels` exceeds [`AudioBlock::num_channels_allocated`] or `num_frames` exceeds [`AudioBlock::num_frames_allocated`].
-    fn set_active_size(&mut self, num_channels: u16, num_frames: usize) {
-        self.set_active_num_channels(num_channels);
-        self.set_active_num_frames(num_frames);
+    fn set_visible_size(&mut self, num_channels: u16, num_frames: usize) {
+        self.set_num_channels_visible(num_channels);
+        self.set_num_frames_visible(num_frames);
     }
 
-    /// Sets the active size of the audio block to the specified number of channels.
+    /// Sets the visible size of the audio block to the specified number of channels.
     ///
     /// This operation is real-time safe but only works up to [`AudioBlock::num_channels_allocated`].
     ///
     /// # Panics
     ///
     /// When `num_channels` exceeds [`AudioBlock::num_channels_allocated`].
-    fn set_active_num_channels(&mut self, num_channels: u16);
+    fn set_num_channels_visible(&mut self, num_channels: u16);
 
-    /// Sets the active size of the audio block to the specified number of frames.
+    /// Sets the visible size of the audio block to the specified number of frames.
     ///
     /// # Panics
     ///
     ///  When `num_frames` exceeds [`AudioBlock::num_frames_allocated`].
-    fn set_active_num_frames(&mut self, num_frames: usize);
+    fn set_num_frames_visible(&mut self, num_frames: usize);
 
     /// Returns a mutable reference to the sample at the specified channel and frame position.
     ///

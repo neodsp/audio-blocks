@@ -287,13 +287,13 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     type PlanarViewMut = Box<[S]>;
 
     #[nonblocking]
-    fn set_active_num_channels(&mut self, num_channels: u16) {
+    fn set_num_channels_visible(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
         self.num_channels = num_channels;
     }
 
     #[nonblocking]
-    fn set_active_num_frames(&mut self, num_frames: usize) {
+    fn set_num_frames_visible(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
@@ -414,7 +414,7 @@ mod tests {
         block.channel_mut(0).copy_from_slice(&[0.0, 1.0, 2.0, 3.0]);
         block.channel_mut(1).copy_from_slice(&[4.0, 5.0, 6.0, 7.0]);
 
-        block.set_active_size(2, 3);
+        block.set_visible_size(2, 3);
 
         // single frame
         assert_eq!(block.channel(0), &[0.0, 1.0, 2.0]);
@@ -581,7 +581,7 @@ mod tests {
     #[test]
     fn test_frame_iters() {
         let mut block = AudioBlockPlanar::<f32>::new(3, 6);
-        block.set_active_size(2, 5);
+        block.set_visible_size(2, 5);
 
         let num_frames = block.num_frames;
         let mut frames_iter = block.frames_iter();
@@ -725,8 +725,8 @@ mod tests {
             assert_eq!(block.frame_iter_mut(i).count(), 3);
         }
 
-        block.set_active_size(3, 10);
-        block.set_active_size(2, 5);
+        block.set_visible_size(3, 10);
+        block.set_visible_size(2, 5);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 5);
@@ -748,7 +748,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 10);
-        block.set_active_size(3, 10);
+        block.set_visible_size(3, 10);
     }
 
     #[test]
@@ -756,7 +756,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 10);
-        block.set_active_size(2, 11);
+        block.set_visible_size(2, 11);
     }
 
     #[test]
@@ -764,7 +764,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_channel() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 10);
-        block.set_active_size(1, 10);
+        block.set_visible_size(1, 10);
         let _ = block.channel_iter(1);
     }
 
@@ -773,7 +773,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_frame() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 10);
-        block.set_active_size(2, 5);
+        block.set_visible_size(2, 5);
         let _ = block.frame_iter(5);
     }
 
@@ -782,7 +782,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 10);
-        block.set_active_size(1, 10);
+        block.set_visible_size(1, 10);
         let _ = block.channel_iter_mut(1);
     }
 
@@ -791,7 +791,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_frame_mut() {
         let mut block = AudioBlockPlanar::<f32>::new(2, 10);
-        block.set_active_size(2, 5);
+        block.set_visible_size(2, 5);
         let _ = block.frame_iter_mut(5);
     }
 
@@ -800,7 +800,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let mut block = AudioBlockPlanar::<f32>::new(3, 4);
-        block.set_active_size(2, 3);
+        block.set_visible_size(2, 3);
 
         block.channel(2);
     }
@@ -810,7 +810,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
         let mut block = AudioBlockPlanar::<f32>::new(3, 4);
-        block.set_active_size(2, 3);
+        block.set_visible_size(2, 3);
 
         block.channel_mut(2);
     }

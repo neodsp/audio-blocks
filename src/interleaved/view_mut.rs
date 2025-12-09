@@ -355,13 +355,13 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockInterleavedViewMut<'_, S> {
     type PlanarViewMut = [S; 0];
 
     #[nonblocking]
-    fn set_active_num_channels(&mut self, num_channels: u16) {
+    fn set_num_channels_visible(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
         self.num_channels = num_channels;
     }
 
     #[nonblocking]
-    fn set_active_num_frames(&mut self, num_frames: usize) {
+    fn set_num_frames_visible(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
@@ -482,7 +482,7 @@ mod tests {
         let mut block =
             AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 3, 2, 4, 3);
 
-        block.set_active_size(3, 2);
+        block.set_visible_size(3, 2);
 
         // single frame
         assert_eq!(block.frame(0), &[0.0, 1.0, 2.0]);
@@ -872,7 +872,7 @@ mod tests {
         let mut data = [0.0; 12];
         let mut block =
             AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
-        block.set_active_size(2, 5);
+        block.set_visible_size(2, 5);
         block.frame(5);
     }
 
@@ -883,7 +883,7 @@ mod tests {
         let mut data = [0.0; 12];
         let mut block =
             AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
-        block.set_active_size(2, 5);
+        block.set_visible_size(2, 5);
         block.frame(5);
     }
 }

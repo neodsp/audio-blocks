@@ -223,7 +223,7 @@ Blocks separate allocated capacity from visible size. Resize visible portion wit
 
 ```rust,ignore
 let mut block = AudioBlockPlanar::new(2, 512);  // Allocate 512 frames
-block.set_active_num_frames(256);  // Use only 256
+block.set_num_frames_visible(256);  // Use only 256
 ```
 
 Create views with limited visibility:
