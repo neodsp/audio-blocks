@@ -200,7 +200,7 @@ impl<'a, S: Sample> AudioBlockSequentialViewMut<'a, S> {
     /// Provides direct access to the underlying memory as a sequential slice.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data(&self) -> &[S] {
         &self.data
@@ -209,7 +209,7 @@ impl<'a, S: Sample> AudioBlockSequentialViewMut<'a, S> {
     /// Provides direct mutable access to the underlying memory as a sequential slice.
     ///
     /// This function gives mutable access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data_mut(&mut self) -> &mut [S] {
         &mut self.data
@@ -288,7 +288,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialViewMut<'_, S> {
 
     #[nonblocking]
     fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
-        let num_frames = self.num_frames; // Active frames per channel
+        let num_frames = self.num_frames; // Visible frames per channel
         let num_frames_allocated = self.num_frames_allocated; // Allocated frames per channel (chunk size)
 
         self.data
@@ -640,7 +640,7 @@ mod tests {
     fn test_frame_iter() {
         let mut data = vec![0.0; 12];
         let mut block = AudioBlockSequentialViewMut::<f32>::from_slice(&mut data, 2, 6);
-        block.set_visible_size(2, 5);
+        block.set_visible(2, 5);
 
         for i in 0..block.num_frames() {
             let frame = block.frame_iter(i).copied().collect::<Vec<_>>();
@@ -671,7 +671,7 @@ mod tests {
     fn test_frame_iters() {
         let mut data = vec![0.0; 12];
         let mut block = AudioBlockSequentialViewMut::<f32>::from_slice(&mut data, 2, 6);
-        block.set_visible_size(2, 5);
+        block.set_visible(2, 5);
 
         let num_frames = block.num_frames;
         let mut frames_iter = block.frames_iter();

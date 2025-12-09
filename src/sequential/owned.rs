@@ -152,7 +152,7 @@ impl<S: Sample> AudioBlockSequential<S> {
     /// Provides direct access to the underlying memory as a sequential slice.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data(&self) -> &[S] {
         &self.data
@@ -161,7 +161,7 @@ impl<S: Sample> AudioBlockSequential<S> {
     /// Provides direct mutable access to the underlying memory as a sequential slice.
     ///
     /// This function gives mutable access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data_mut(&mut self) -> &mut [S] {
         &mut self.data
@@ -240,7 +240,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequential<S> {
 
     #[nonblocking]
     fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
-        let num_frames = self.num_frames; // Active frames per channel
+        let num_frames = self.num_frames; // Visible frames per channel
         let num_frames_allocated = self.num_frames_allocated; // Allocated frames per channel (chunk size)
 
         self.data
@@ -436,7 +436,7 @@ mod tests {
         let mut block = AudioBlockSequential::<f32>::new(3, 4);
         block.channel_mut(0).copy_from_slice(&[0.0, 1.0, 2.0, 3.0]);
         block.channel_mut(1).copy_from_slice(&[4.0, 5.0, 6.0, 7.0]);
-        block.set_visible_size(2, 3);
+        block.set_visible(2, 3);
 
         // single frame
         assert_eq!(block.channel(0), &[0.0, 1.0, 2.0]);
@@ -602,7 +602,7 @@ mod tests {
     #[test]
     fn test_frame_iters() {
         let mut block = AudioBlockSequential::<f32>::new(3, 6);
-        block.set_visible_size(2, 5);
+        block.set_visible(2, 5);
 
         let num_frames = block.num_frames;
         let mut frames_iter = block.frames_iter();
@@ -734,7 +734,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let mut block = AudioBlockSequential::<f32>::new(3, 6);
-        block.set_visible_size(2, 5);
+        block.set_visible(2, 5);
         block.channel(2);
     }
 
@@ -743,7 +743,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
         let mut block = AudioBlockSequential::<f32>::new(3, 6);
-        block.set_visible_size(2, 5);
+        block.set_visible(2, 5);
         block.channel_mut(2);
     }
 
@@ -764,8 +764,8 @@ mod tests {
             assert_eq!(block.frame_iter_mut(i).count(), 3);
         }
 
-        block.set_visible_size(3, 10);
-        block.set_visible_size(2, 5);
+        block.set_visible(3, 10);
+        block.set_visible(2, 5);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 5);
@@ -787,7 +787,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
         let mut block = AudioBlockSequential::<f32>::new(2, 10);
-        block.set_visible_size(3, 10);
+        block.set_visible(3, 10);
     }
 
     #[test]
@@ -795,7 +795,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
         let mut block = AudioBlockSequential::<f32>::new(2, 10);
-        block.set_visible_size(2, 11);
+        block.set_visible(2, 11);
     }
 
     #[test]
@@ -803,7 +803,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_channel() {
         let mut block = AudioBlockSequential::<f32>::new(2, 10);
-        block.set_visible_size(1, 10);
+        block.set_visible(1, 10);
         let _ = block.channel_iter(1);
     }
 
@@ -812,7 +812,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_frame() {
         let mut block = AudioBlockSequential::<f32>::new(2, 10);
-        block.set_visible_size(2, 5);
+        block.set_visible(2, 5);
         let _ = block.frame_iter(5);
     }
 
@@ -821,7 +821,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
         let mut block = AudioBlockSequential::<f32>::new(2, 10);
-        block.set_visible_size(1, 10);
+        block.set_visible(1, 10);
         let _ = block.channel_iter_mut(1);
     }
 }

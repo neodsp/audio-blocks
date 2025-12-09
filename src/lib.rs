@@ -225,7 +225,7 @@ pub trait AudioBlock<S: Sample> {
 ///
 /// fn process_audio(audio: &mut impl AudioBlockMut<f32>) {
 ///     // Resize to 2 channels, 1024 frames
-///     audio.set_visible_size(2, 1024);
+///     audio.set_visible(2, 1024);
 ///
 ///     // Modify individual samples
 ///     *audio.sample_mut(0, 0) = 0.5;
@@ -251,7 +251,7 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// # Panics
     ///
     /// When `num_channels` exceeds [`AudioBlock::num_channels_allocated`] or `num_frames` exceeds [`AudioBlock::num_frames_allocated`].
-    fn set_visible_size(&mut self, num_channels: u16, num_frames: usize) {
+    fn set_visible(&mut self, num_channels: u16, num_frames: usize) {
         self.set_num_channels_visible(num_channels);
         self.set_num_frames_visible(num_frames);
     }

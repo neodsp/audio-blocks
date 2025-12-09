@@ -168,7 +168,7 @@ impl<'a, S: Sample> AudioBlockSequentialView<'a, S> {
     /// Provides direct access to the underlying memory as a sequential slice.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data(&self) -> &[S] {
         &self.data
@@ -236,7 +236,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
 
     #[nonblocking]
     fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
-        let num_frames = self.num_frames; // Active frames per channel
+        let num_frames = self.num_frames; // Visible frames per channel
         let num_frames_allocated = self.num_frames_allocated; // Allocated frames per channel (chunk size)
 
         self.data

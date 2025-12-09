@@ -181,9 +181,9 @@ Everything from `AudioBlock` plus:
 
 Resizing:
 ```rust,ignore
-fn set_active_size(&mut self, num_channels: u16, num_frames: usize);
-fn set_active_num_channels(&mut self, num_channels: u16);
-fn set_active_num_frames(&mut self, num_frames: usize);
+fn set_visible(&mut self, num_channels: u16, num_frames: usize);
+fn set_num_channels_visible(&mut self, num_channels: u16);
+fn set_num_frames_visible(&mut self, num_frames: usize);
 ```
 
 Mutable access:

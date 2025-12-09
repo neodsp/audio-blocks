@@ -171,7 +171,7 @@ impl<'a, S: Sample> AudioBlockInterleavedView<'a, S> {
     /// Provides direct access to the underlying memory as an interleaved slice.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data(&self) -> &[S] {
         &self.data

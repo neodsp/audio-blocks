@@ -140,7 +140,7 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockPlanarViewMut<'a, S, V
     /// Provides direct access to the underlying memory.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data(&self) -> &[V] {
         self.data
@@ -149,7 +149,7 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockPlanarViewMut<'a, S, V
     /// Provides direct access to the underlying memory.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data_mut(&mut self) -> &mut [V] {
         self.data
@@ -224,7 +224,7 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarVi
         let num_frames = self.num_frames; // Capture num_frames for the closure
         self.data
             .iter()
-            // Limit to the active number of channels
+            // Limit to the visible number of channels
             .take(self.num_channels as usize)
             // For each channel slice, create an iterator over its samples
             .map(move |channel_data| channel_data.as_ref().iter().take(num_frames))
@@ -701,7 +701,7 @@ mod tests {
         let mut ch3 = vec![0.0; 10];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice(), ch3.as_mut_slice()];
         let mut block = AudioBlockPlanarViewMut::from_slice(&mut data);
-        block.set_visible_size(2, 5);
+        block.set_visible(2, 5);
 
         let num_frames = block.num_frames;
         let mut frames_iter = block.frames_iter();

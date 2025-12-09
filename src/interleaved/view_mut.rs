@@ -202,7 +202,7 @@ impl<'a, S: Sample> AudioBlockInterleavedViewMut<'a, S> {
     /// Provides direct access to the underlying memory as an interleaved slice.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data(&self) -> &[S] {
         &self.data
@@ -211,7 +211,7 @@ impl<'a, S: Sample> AudioBlockInterleavedViewMut<'a, S> {
     /// Provides direct mutable access to the underlying memory as an interleaved slice.
     ///
     /// This function gives mutable access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data_mut(&mut self) -> &mut [S] {
         &mut self.data
@@ -482,7 +482,7 @@ mod tests {
         let mut block =
             AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 3, 2, 4, 3);
 
-        block.set_visible_size(3, 2);
+        block.set_visible(3, 2);
 
         // single frame
         assert_eq!(block.frame(0), &[0.0, 1.0, 2.0]);
@@ -872,7 +872,7 @@ mod tests {
         let mut data = [0.0; 12];
         let mut block =
             AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
-        block.set_visible_size(2, 5);
+        block.set_visible(2, 5);
         block.frame(5);
     }
 
@@ -883,7 +883,7 @@ mod tests {
         let mut data = [0.0; 12];
         let mut block =
             AudioBlockInterleavedViewMut::<f32>::from_slice_limited(&mut data, 2, 3, 3, 4);
-        block.set_visible_size(2, 5);
+        block.set_visible(2, 5);
         block.frame(5);
     }
 }
