@@ -506,7 +506,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_raw() {
+    fn test_from_ptr() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let block = unsafe { AudioBlockInterleavedView::<f32>::from_ptr(data.as_mut_ptr(), 2, 5) };
         assert_eq!(block.num_channels(), 2);
@@ -544,7 +544,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_raw_limited() {
+    fn test_from_ptr_limited() {
         let data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
 
         let block =

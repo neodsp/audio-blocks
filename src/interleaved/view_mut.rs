@@ -97,7 +97,7 @@ impl<'a, S: Sample> AudioBlockInterleavedViewMut<'a, S> {
         }
     }
 
-    /// Creates a new audio block from raw parts.
+    /// Creates a new audio block from a pointer.
     ///
     /// # Safety
     ///
@@ -106,7 +106,7 @@ impl<'a, S: Sample> AudioBlockInterleavedViewMut<'a, S> {
     /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
     /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]
-    pub unsafe fn from_raw(ptr: *mut S, num_channels: u16, num_frames: usize) -> Self {
+    pub unsafe fn from_ptr(ptr: *mut S, num_channels: u16, num_frames: usize) -> Self {
         Self {
             data: unsafe {
                 std::slice::from_raw_parts_mut(ptr, num_channels as usize * num_frames)
@@ -118,7 +118,7 @@ impl<'a, S: Sample> AudioBlockInterleavedViewMut<'a, S> {
         }
     }
 
-    /// Creates a new audio block from raw parts with a limited amount of channels and/or frames.
+    /// Creates a new audio block from a pointer with a limited amount of channels and/or frames.
     ///
     /// # Safety
     ///
@@ -127,7 +127,7 @@ impl<'a, S: Sample> AudioBlockInterleavedViewMut<'a, S> {
     /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
     /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]
-    pub unsafe fn from_raw_limited(
+    pub unsafe fn from_ptr_limited(
         ptr: *mut S,
         num_channels_visible: u16,
         num_frames_visible: usize,
@@ -804,10 +804,10 @@ mod tests {
     }
 
     #[test]
-    fn test_from_raw() {
+    fn test_from_ptr() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let block =
-            unsafe { AudioBlockInterleavedViewMut::<f32>::from_raw(data.as_mut_ptr(), 2, 5) };
+            unsafe { AudioBlockInterleavedViewMut::<f32>::from_ptr(data.as_mut_ptr(), 2, 5) };
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated, 2);
         assert_eq!(block.num_frames(), 5);
@@ -843,11 +843,11 @@ mod tests {
     }
 
     #[test]
-    fn test_from_raw_limited() {
+    fn test_from_ptr_limited() {
         let mut data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
 
         let mut block = unsafe {
-            AudioBlockInterleavedViewMut::from_raw_limited(data.as_mut_ptr(), 2, 3, 3, 4)
+            AudioBlockInterleavedViewMut::from_ptr_limited(data.as_mut_ptr(), 2, 3, 3, 4)
         };
 
         assert_eq!(block.num_channels(), 2);
