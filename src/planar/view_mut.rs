@@ -44,12 +44,12 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockPlanarViewMut<'a, S, V
     /// Panics if the channel slices have different lengths.
     #[nonblocking]
     pub fn from_slice(data: &'a mut [V]) -> Self {
-        let num_frames_available = if data.is_empty() {
+        let num_frames_allocated = if data.is_empty() {
             0
         } else {
             data[0].as_ref().len()
         };
-        Self::from_slice_limited(data, data.len() as u16, num_frames_available)
+        Self::from_slice_limited(data, data.len() as u16, num_frames_allocated)
     }
 
     /// Creates a new audio block from a mutable slice with limited visibility.
@@ -72,23 +72,23 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockPlanarViewMut<'a, S, V
         num_channels_visible: u16,
         num_frames_visible: usize,
     ) -> Self {
-        let num_channels_available = data.len();
-        let num_frames_available = if num_channels_available == 0 {
+        let num_channels_allocated = data.len();
+        let num_frames_allocated = if num_channels_allocated == 0 {
             0
         } else {
             data[0].as_ref().len()
         };
-        assert!(num_channels_visible <= num_channels_available as u16);
-        assert!(num_frames_visible <= num_frames_available);
+        assert!(num_channels_visible <= num_channels_allocated as u16);
+        assert!(num_frames_visible <= num_frames_allocated);
         data.iter()
-            .for_each(|v| assert_eq!(v.as_ref().len(), num_frames_available));
+            .for_each(|v| assert_eq!(v.as_ref().len(), num_frames_allocated));
 
         Self {
             data,
             num_channels: num_channels_visible,
             num_frames: num_frames_visible,
-            num_channels_allocated: num_channels_available as u16,
-            num_frames_allocated: num_frames_available,
+            num_channels_allocated: num_channels_allocated as u16,
+            num_frames_allocated: num_frames_allocated,
             _phantom: PhantomData,
         }
     }

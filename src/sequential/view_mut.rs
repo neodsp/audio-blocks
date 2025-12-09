@@ -78,21 +78,21 @@ impl<'a, S: Sample> AudioBlockSequentialViewMut<'a, S> {
         data: &'a mut [S],
         num_channels_visible: u16,
         num_frames_visible: usize,
-        num_channels_available: u16,
-        num_frames_available: usize,
+        num_channels_allocated: u16,
+        num_frames_allocated: usize,
     ) -> Self {
-        assert!(num_channels_visible <= num_channels_available);
-        assert!(num_frames_visible <= num_frames_available);
+        assert!(num_channels_visible <= num_channels_allocated);
+        assert!(num_frames_visible <= num_frames_allocated);
         assert_eq!(
             data.len(),
-            num_channels_available as usize * num_frames_available
+            num_channels_allocated as usize * num_frames_allocated
         );
         Self {
             data,
             num_channels: num_channels_visible,
             num_frames: num_frames_visible,
-            num_channels_allocated: num_channels_available,
-            num_frames_allocated: num_frames_available,
+            num_channels_allocated,
+            num_frames_allocated,
         }
     }
 
@@ -101,7 +101,7 @@ impl<'a, S: Sample> AudioBlockSequentialViewMut<'a, S> {
     /// # Safety
     ///
     /// The caller must ensure that:
-    /// - `ptr` points to valid memory containing at least `num_channels_available * num_frames_available` elements
+    /// - `ptr` points to valid memory containing at least `num_channels_allocated * num_frames_allocated` elements
     /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
     /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]
@@ -122,7 +122,7 @@ impl<'a, S: Sample> AudioBlockSequentialViewMut<'a, S> {
     /// # Safety
     ///
     /// The caller must ensure that:
-    /// - `ptr` points to valid memory containing at least `num_channels_available * num_frames_available` elements
+    /// - `ptr` points to valid memory containing at least `num_channels_allocated * num_frames_allocated` elements
     /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
     /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]

@@ -98,7 +98,7 @@ impl<'a, S: Sample> AudioBlockInterleavedView<'a, S> {
     /// # Safety
     ///
     /// The caller must ensure that:
-    /// - `ptr` points to valid memory containing at least `num_channels_available * num_frames_available` elements
+    /// - `ptr` points to valid memory containing at least `num_channels_allocated * num_frames_allocated` elements
     /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
     /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]
@@ -117,7 +117,7 @@ impl<'a, S: Sample> AudioBlockInterleavedView<'a, S> {
     /// # Safety
     ///
     /// The caller must ensure that:
-    /// - `ptr` points to valid memory containing at least `num_channels_available * num_frames_available` elements
+    /// - `ptr` points to valid memory containing at least `num_channels_allocated * num_frames_allocated` elements
     /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
     /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]

@@ -42,12 +42,12 @@ impl<'a, S: Sample, V: AsRef<[S]>> AudioBlockPlanarView<'a, S, V> {
     /// Panics if the channel slices have different lengths.
     #[nonblocking]
     pub fn from_slice(data: &'a [V]) -> Self {
-        let num_frames_available = if data.is_empty() {
+        let num_frames_allocated = if data.is_empty() {
             0
         } else {
             data[0].as_ref().len()
         };
-        Self::from_slice_limited(data, data.len() as u16, num_frames_available)
+        Self::from_slice_limited(data, data.len() as u16, num_frames_allocated)
     }
 
     /// Creates a new audio block from a slice with limited visibility.
