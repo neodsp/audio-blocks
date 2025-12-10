@@ -1,13 +1,27 @@
 use rtsan_standalone::nonblocking;
 
-use crate::{AudioBlock, AudioBlockMut, BlockLayout, Sample};
+use crate::{
+    AudioBlock, AudioBlockMut, BlockLayout, Sample,
+    mono::{AudioBlockMonoView, AudioBlockMonoViewMut},
+};
 
 pub trait AudioBlockOps<S: Sample> {
+    /// Mix all channels to mono by averaging them.
+    /// Panics if source and destination don't have the same number of frames.
+    fn mix_to_mono(&self, dest: &mut AudioBlockMonoViewMut<S>)
+    where
+        S: std::ops::AddAssign + std::ops::Div<Output = S> + From<u16>;
+}
+
+pub trait AudioBlockOpsMut<S: Sample> {
     /// Copy will panic if blocks don't have the exact same size
     fn copy_from_block(&mut self, block: &impl AudioBlock<S>);
     /// Destination block will take over the size from source block.
     /// Panics if destination block has not enough memory allocated to grow.
     fn copy_from_block_resize(&mut self, block: &impl AudioBlock<S>);
+    /// Copy a mono block to all channels of this block.
+    /// Panics if blocks don't have the same number of frames.
+    fn copy_mono_to_all_channels(&mut self, mono: &AudioBlockMonoView<S>);
     /// Gives access to all samples in the block.
     fn for_each(&mut self, f: impl FnMut(&mut S));
     /// Gives access to all samples in the block.
@@ -29,7 +43,27 @@ pub trait AudioBlockOps<S: Sample> {
     fn fill_with(&mut self, sample: S);
 }
 
-impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
+impl<S: Sample, B: AudioBlock<S>> AudioBlockOps<S> for B {
+    #[nonblocking]
+    fn mix_to_mono(&self, dest: &mut AudioBlockMonoViewMut<S>)
+    where
+        S: std::ops::AddAssign + std::ops::Div<Output = S> + From<u16>,
+    {
+        assert_eq!(self.num_frames(), dest.num_frames());
+
+        let num_channels = S::from(self.num_channels());
+
+        for frame in 0..self.num_frames() {
+            let mut sum = *self.frame_iter(frame).next().unwrap();
+            for sample in self.frame_iter(frame).skip(1) {
+                sum += *sample;
+            }
+            *dest.sample_mut(frame) = sum / num_channels;
+        }
+    }
+}
+
+impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOpsMut<S> for B {
     #[nonblocking]
     fn copy_from_block(&mut self, block: &impl AudioBlock<S>) {
         assert_eq!(block.num_channels(), self.num_channels());
@@ -46,9 +80,18 @@ impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
         assert!(block.num_channels() <= self.num_channels_allocated());
         assert!(block.num_frames() <= self.num_frames_allocated());
         self.set_visible(block.num_channels(), block.num_frames());
+        for (this_channel, other_channel) in self.channels_iter_mut().zip(block.channels_iter()) {
+            for (sample_mut, sample) in this_channel.zip(other_channel) {
+                *sample_mut = *sample;
+            }
+        }
+    }
 
-        for ch in 0..self.num_channels() {
-            for (sample_mut, sample) in self.channel_iter_mut(ch).zip(block.channel_iter(ch)) {
+    #[nonblocking]
+    fn copy_mono_to_all_channels(&mut self, mono: &AudioBlockMonoView<S>) {
+        assert_eq!(mono.num_frames(), self.num_frames());
+        for channel in self.channels_iter_mut() {
+            for (sample_mut, sample) in channel.zip(mono.samples()) {
                 *sample_mut = *sample;
             }
         }
@@ -361,6 +404,51 @@ mod tests {
         assert_eq!(
             block.channel_iter(1).copied().collect::<Vec<_>>(),
             vec![0.0, 0.0, 0.0, 0.0]
+        );
+    }
+
+    #[test]
+    fn test_mix_to_mono() {
+        use crate::mono::AudioBlockMonoViewMut;
+
+        let data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let block = AudioBlockSequentialView::from_slice(&data, 2, 4);
+
+        let mut mono_data = [0.0; 4];
+        let mut mono = AudioBlockMonoViewMut::from_slice(&mut mono_data);
+
+        block.mix_to_mono(&mut mono);
+
+        assert_eq!(mono.num_frames(), 4);
+        assert_eq!(
+            mono.samples().iter().copied().collect::<Vec<_>>(),
+            vec![3.0, 4.0, 5.0, 6.0] // (1+5)/2, (2+6)/2, (3+7)/2, (4+8)/2
+        );
+    }
+
+    #[test]
+    fn test_copy_mono_to_all_channels() {
+        use crate::mono::AudioBlockMonoView;
+
+        let mono_data = [1.0, 2.0, 3.0, 4.0];
+        let mono = AudioBlockMonoView::from_slice(&mono_data);
+
+        let mut data = [0.0; 12];
+        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 3, 4);
+
+        block.copy_mono_to_all_channels(&mono);
+
+        assert_eq!(
+            block.channel_iter(0).copied().collect::<Vec<_>>(),
+            vec![1.0, 2.0, 3.0, 4.0]
+        );
+        assert_eq!(
+            block.channel_iter(1).copied().collect::<Vec<_>>(),
+            vec![1.0, 2.0, 3.0, 4.0]
+        );
+        assert_eq!(
+            block.channel_iter(2).copied().collect::<Vec<_>>(),
+            vec![1.0, 2.0, 3.0, 4.0]
         );
     }
 }

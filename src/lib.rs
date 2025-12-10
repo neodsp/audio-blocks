@@ -11,6 +11,7 @@ extern crate core as std;
 extern crate std;
 
 pub use ops::AudioBlockOps;
+pub use ops::AudioBlockOpsMut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
 pub use interleaved::AudioBlockInterleaved;
