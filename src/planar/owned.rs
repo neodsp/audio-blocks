@@ -40,7 +40,7 @@ pub struct AudioBlockPlanar<S: Sample> {
     num_frames_allocated: usize,
 }
 
-impl<S: Sample> AudioBlockPlanar<S> {
+impl<S: Sample + Default> AudioBlockPlanar<S> {
     /// Creates a new audio block with the specified dimensions.
     ///
     /// Allocates memory for a new planar audio block with exactly the specified
@@ -60,7 +60,7 @@ impl<S: Sample> AudioBlockPlanar<S> {
     #[blocking]
     pub fn new(num_channels: u16, num_frames: usize) -> Self {
         Self {
-            data: vec![vec![S::zero(); num_frames].into_boxed_slice(); num_channels as usize]
+            data: vec![vec![S::default(); num_frames].into_boxed_slice(); num_channels as usize]
                 .into_boxed_slice(),
             num_channels,
             num_frames,
@@ -68,7 +68,9 @@ impl<S: Sample> AudioBlockPlanar<S> {
             num_frames_allocated: num_frames,
         }
     }
+}
 
+impl<S: Sample> AudioBlockPlanar<S> {
     /// Creates a new audio block by copying data from another [`AudioBlock`].
     ///
     /// Converts any [`AudioBlock`] implementation to a planar format by iterating

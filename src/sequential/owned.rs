@@ -43,7 +43,7 @@ pub struct AudioBlockSequential<S: Sample> {
     num_frames_allocated: usize,
 }
 
-impl<S: Sample> AudioBlockSequential<S> {
+impl<S: Sample + Default> AudioBlockSequential<S> {
     /// Creates a new audio block with the specified dimensions.
     ///
     /// Allocates memory with exactly the specified number of channels and
@@ -65,14 +65,15 @@ impl<S: Sample> AudioBlockSequential<S> {
             .checked_mul(num_frames)
             .expect("Multiplication overflow: num_channels * num_frames is too large");
         Self {
-            data: vec![S::zero(); total_samples].into_boxed_slice(),
+            data: vec![S::default(); total_samples].into_boxed_slice(),
             num_channels,
             num_frames,
             num_channels_allocated: num_channels,
             num_frames_allocated: num_frames,
         }
     }
-
+}
+impl<S: Sample> AudioBlockSequential<S> {
     /// Creates a new audio block by copying data from another [`AudioBlock`].
     ///
     /// Converts any [`AudioBlock`] implementation to a sequential format by iterating

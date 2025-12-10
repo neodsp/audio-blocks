@@ -43,7 +43,7 @@ pub struct AudioBlockInterleaved<S: Sample> {
     num_frames_allocated: usize,
 }
 
-impl<S: Sample> AudioBlockInterleaved<S> {
+impl<S: Sample + Default> AudioBlockInterleaved<S> {
     /// Creates a new interleaved audio block with the specified dimensions.
     ///
     /// Allocates memory for a new interleaved audio block with exactly the specified
@@ -67,14 +67,16 @@ impl<S: Sample> AudioBlockInterleaved<S> {
             .expect("Multiplication overflow: num_channels * num_frames is too large");
 
         Self {
-            data: vec![S::zero(); total_samples].into_boxed_slice(),
+            data: vec![S::default(); total_samples].into_boxed_slice(),
             num_channels,
             num_frames,
             num_channels_allocated: num_channels,
             num_frames_allocated: num_frames,
         }
     }
+}
 
+impl<S: Sample> AudioBlockInterleaved<S> {
     /// Creates a new audio block by copying data from another [`AudioBlock`].
     ///
     /// Converts any [`AudioBlock`] implementation to an interleaved format by iterating

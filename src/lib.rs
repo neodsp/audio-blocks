@@ -10,7 +10,6 @@ extern crate core as std;
 #[cfg(feature = "std")]
 extern crate std;
 
-pub use num::Zero;
 pub use ops::AudioBlockOps;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
@@ -30,8 +29,14 @@ pub use planar::AudioBlockPlanarViewMut;
 pub use planar::PlanarPtrAdapter;
 pub use planar::PlanarPtrAdapterMut;
 
+#[cfg(any(feature = "std", feature = "alloc"))]
+pub use mono::AudioBlockMono;
+pub use mono::AudioBlockMonoView;
+pub use mono::AudioBlockMonoViewMut;
+
 pub mod interleaved;
 mod iter;
+pub mod mono;
 pub mod ops;
 pub mod planar;
 pub mod sequential;
@@ -79,8 +84,8 @@ pub enum BlockLayout {
 ///
 /// All numeric types (f32, f64, i16, i32, etc.) automatically implement this trait,
 /// as well as any custom types that satisfy these bounds.
-pub trait Sample: Copy + Zero + 'static {}
-impl<T> Sample for T where T: Copy + Zero + 'static {}
+pub trait Sample: Copy + 'static {}
+impl<T> Sample for T where T: Copy + 'static {}
 
 /// Core trait for audio data access operations across various memory layouts.
 ///

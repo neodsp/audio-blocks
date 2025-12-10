@@ -88,7 +88,7 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockPlanarViewMut<'a, S, V
             num_channels: num_channels_visible,
             num_frames: num_frames_visible,
             num_channels_allocated: num_channels_allocated as u16,
-            num_frames_allocated: num_frames_allocated,
+            num_frames_allocated,
             _phantom: PhantomData,
         }
     }

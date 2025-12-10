@@ -27,8 +27,6 @@ pub trait AudioBlockOps<S: Sample> {
     fn enumerate_including_non_visible(&mut self, f: impl FnMut(u16, usize, &mut S));
     /// Sets all samples in the block to the specified value
     fn fill_with(&mut self, sample: S);
-    /// Sets all samples in the block to zero
-    fn clear(&mut self);
 }
 
 impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
@@ -179,11 +177,6 @@ impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOps<S> for B {
     #[nonblocking]
     fn fill_with(&mut self, sample: S) {
         self.for_each_including_non_visible(|v| *v = sample);
-    }
-
-    #[nonblocking]
-    fn clear(&mut self) {
-        self.fill_with(S::zero());
     }
 }
 
@@ -359,7 +352,7 @@ mod tests {
             vec![1.0, 1.0, 1.0, 1.0]
         );
 
-        block.clear();
+        block.fill_with(0.0);
 
         assert_eq!(
             block.channel_iter(0).copied().collect::<Vec<_>>(),
