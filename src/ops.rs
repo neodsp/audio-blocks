@@ -14,11 +14,13 @@ pub trait AudioBlockOps<S: Sample> {
 }
 
 pub trait AudioBlockOpsMut<S: Sample> {
-    /// Copy will panic if blocks don't have the exact same size
+    /// Copy samples from source block, clamping to the smaller dimensions.
+    /// Resizes destination to `min(src, dst)` channels and frames.
+    /// Never panics - safely handles mismatched block sizes.
     fn copy_from_block(&mut self, block: &impl AudioBlock<S>);
-    /// Destination block will take over the size from source block.
-    /// Panics if destination block has not enough memory allocated to grow.
-    fn copy_from_block_resize(&mut self, block: &impl AudioBlock<S>);
+    /// Copy samples from source block, requiring exact size match.
+    /// Panics if source and destination don't have identical channels and frames.
+    fn copy_from_block_exact(&mut self, block: &impl AudioBlock<S>);
     /// Copy a mono block to all channels of this block.
     /// Panics if blocks don't have the same number of frames.
     fn copy_mono_to_all_channels(&mut self, mono: &AudioBlockMonoView<S>);
@@ -66,22 +68,23 @@ impl<S: Sample, B: AudioBlock<S>> AudioBlockOps<S> for B {
 impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOpsMut<S> for B {
     #[nonblocking]
     fn copy_from_block(&mut self, block: &impl AudioBlock<S>) {
-        assert_eq!(block.num_channels(), self.num_channels());
-        assert_eq!(block.num_frames(), self.num_frames());
-        for ch in 0..self.num_channels() {
-            for (sample_mut, sample) in self.channel_iter_mut(ch).zip(block.channel_iter(ch)) {
+        let channels = self.num_channels().min(block.num_channels());
+        let frames = self.num_frames().min(block.num_frames());
+
+        self.set_visible(channels, frames);
+        for (this_channel, other_channel) in self.channels_iter_mut().zip(block.channels_iter()) {
+            for (sample_mut, sample) in this_channel.zip(other_channel) {
                 *sample_mut = *sample;
             }
         }
     }
 
     #[nonblocking]
-    fn copy_from_block_resize(&mut self, block: &impl AudioBlock<S>) {
-        assert!(block.num_channels() <= self.num_channels_allocated());
-        assert!(block.num_frames() <= self.num_frames_allocated());
-        self.set_visible(block.num_channels(), block.num_frames());
-        for (this_channel, other_channel) in self.channels_iter_mut().zip(block.channels_iter()) {
-            for (sample_mut, sample) in this_channel.zip(other_channel) {
+    fn copy_from_block_exact(&mut self, block: &impl AudioBlock<S>) {
+        assert_eq!(block.num_channels(), self.num_channels());
+        assert_eq!(block.num_frames(), self.num_frames());
+        for ch in 0..self.num_channels() {
+            for (sample_mut, sample) in self.channel_iter_mut(ch).zip(block.channel_iter(ch)) {
                 *sample_mut = *sample;
             }
         }
@@ -236,12 +239,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_copy_from() {
+    fn test_copy_from_block_resizes_to_smaller() {
+        // Destination is larger than source - should resize to source size
         let mut data = [0.0; 15];
-        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 3, 5);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 3);
         let view =
-            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
-        block.copy_from_block_resize(&view);
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2);
+        block.copy_from_block(&view);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 4);
@@ -259,17 +263,54 @@ mod tests {
     }
 
     #[test]
-    fn test_copy_from_exact() {
-        let mut data = [0.0; 8];
-        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2, 4);
+    fn test_copy_from_block_clamps_to_dest_size() {
+        // Source is larger than destination - should clamp to destination size
+        let mut data = [0.0; 4]; // 2 channels, 2 frames
+        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 2);
         let view =
-            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2);
         block.copy_from_block(&view);
 
         assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_frames(), 2);
+        // Only first 2 frames copied from each channel
+        assert_eq!(
+            block.channel_iter(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 1.0]
+        );
+        assert_eq!(
+            block.channel_iter(1).copied().collect::<Vec<_>>(),
+            vec![4.0, 5.0]
+        );
+    }
+
+    #[test]
+    fn test_copy_from_block_clamps_channels() {
+        // Source has more channels than destination
+        let mut data = [0.0; 4]; // 1 channel, 4 frames
+        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 1);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2);
+        block.copy_from_block(&view);
+
+        assert_eq!(block.num_channels(), 1);
         assert_eq!(block.num_frames(), 4);
-        assert_eq!(block.num_channels_allocated(), 2);
-        assert_eq!(block.num_frames_allocated(), 4);
+        assert_eq!(
+            block.channel_iter(0).copied().collect::<Vec<_>>(),
+            vec![0.0, 1.0, 2.0, 3.0]
+        );
+    }
+
+    #[test]
+    fn test_copy_from_block_exact() {
+        let mut data = [0.0; 8];
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2);
+        let view =
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2);
+        block.copy_from_block_exact(&view);
+
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.num_frames(), 4);
 
         assert_eq!(
             block.channel_iter(0).copied().collect::<Vec<_>>(),
@@ -284,51 +325,29 @@ mod tests {
     #[test]
     #[should_panic]
     #[no_sanitize_realtime]
-    fn test_copy_data_wrong_channels() {
-        let mut data = [0.0; 5];
-        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 1, 5);
-        let view =
-            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
-        block.copy_from_block_resize(&view);
-    }
-
-    #[test]
-    #[should_panic]
-    #[no_sanitize_realtime]
-    fn test_copy_data_wrong_frames() {
-        let mut data = [0.0; 9];
-        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 3, 3);
-        let view =
-            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
-        block.copy_from_block(&view);
-    }
-
-    #[test]
-    #[should_panic]
-    #[no_sanitize_realtime]
-    fn test_copy_data_exact_wrong_channels() {
+    fn test_copy_from_block_exact_wrong_channels() {
         let mut data = [0.0; 12];
-        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 3, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 3);
         let view =
-            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
-        block.copy_from_block(&view);
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2);
+        block.copy_from_block_exact(&view);
     }
 
     #[test]
     #[should_panic]
     #[no_sanitize_realtime]
-    fn test_copy_data_exact_wrong_frames() {
+    fn test_copy_from_block_exact_wrong_frames() {
         let mut data = [0.0; 10];
-        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2, 5);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2);
         let view =
-            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2, 4);
-        block.copy_from_block(&view);
+            AudioBlockSequentialView::from_slice(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 2);
+        block.copy_from_block_exact(&view);
     }
 
     #[test]
     fn test_for_each() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 2, 4);
+        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 2);
 
         let mut i = 0;
         let mut c_exp = 0;
@@ -345,7 +364,7 @@ mod tests {
         });
 
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2, 4);
+        let mut block = AudioBlockInterleavedViewMut::from_slice(&mut data, 2);
 
         let mut i = 0;
         let mut f_exp = 0;
@@ -382,7 +401,7 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
-        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 2, 4);
+        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 2);
 
         block.fill_with(1.0);
 
@@ -412,7 +431,7 @@ mod tests {
         use crate::mono::AudioBlockMonoViewMut;
 
         let data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
-        let block = AudioBlockSequentialView::from_slice(&data, 2, 4);
+        let block = AudioBlockSequentialView::from_slice(&data, 2);
 
         let mut mono_data = [0.0; 4];
         let mut mono = AudioBlockMonoViewMut::from_slice(&mut mono_data);
@@ -434,7 +453,7 @@ mod tests {
         let mono = AudioBlockMonoView::from_slice(&mono_data);
 
         let mut data = [0.0; 12];
-        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 3, 4);
+        let mut block = AudioBlockSequentialViewMut::from_slice(&mut data, 3);
 
         block.copy_mono_to_all_channels(&mono);
 

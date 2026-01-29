@@ -688,7 +688,6 @@ mod tests {
         let block = AudioBlockPlanar::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
-            5,
         ));
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated(), 2);
@@ -729,7 +728,6 @@ mod tests {
         let block = AudioBlockPlanar::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
-            5,
         ));
 
         assert!(block.as_interleaved_view().is_none());

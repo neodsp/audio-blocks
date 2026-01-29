@@ -14,7 +14,7 @@ Basic planar usage (most common for DSP):
 use audio_blocks::*;
 
 // Create a planar block - each channel gets its own buffer
-let mut block = AudioBlockPlanar::<f32>::new(2, 512);
+let mut block = AudioBlockPlanar::<f32>::new(2, 512); // 2 channels, 512 frames
 
 // Process per channel
 for channel in block.channels_mut() {
@@ -37,7 +37,7 @@ fn process(block: &mut impl AudioBlockMut<f32>) {
 
 ## Block Types
 
-Three layouts supported:
+Three multi-channel layouts supported:
 
 **Planar** - `[[ch0, ch0, ch0], [ch1, ch1, ch1]]`
 Each channel has its own separate buffer. Standard for real-time DSP. Optimal for SIMD/vectorization.
@@ -47,6 +47,11 @@ Single contiguous buffer with all samples for channel 0, then all samples for ch
 
 **Interleaved** - `[ch0, ch1, ch0, ch1, ch0, ch1]`
 Channels alternate sample-by-sample. Common in audio APIs and hardware interfaces.
+
+Plus a dedicated mono type:
+
+**Mono** - `[sample0, sample1, sample2, ...]`
+Simplified single-channel block with a streamlined API that doesn't require channel indexing.
 
 ## Core Traits
 
@@ -76,29 +81,38 @@ fn process<F: num::Float + 'static>(block: &mut impl AudioBlockMut<F>) {
 ### Owned Blocks
 
 ```rust,ignore
-let mut block = AudioBlockPlanar::new(2, 512);
-let mut block = AudioBlockSequential::new(2, 512);
-let mut block = AudioBlockInterleaved::new(2, 512);
+// Allocate with default values (zero)
+let mut block = AudioBlockPlanar::new(2, 512);       // 2 channels, 512 frames
+let mut block = AudioBlockSequential::new(2, 512);  // 2 channels, 512 frames
+let mut block = AudioBlockInterleaved::new(2, 512); // 2 channels, 512 frames
+let mut block = AudioBlockMono::new(512);           // 512 frames
+
+// Copy from existing data
+let mut block = AudioBlockPlanar::from_slice(&channel_data);  // channels derived from slice
+let mut block = AudioBlockSequential::from_slice(&data, 2);   // 2 channels
+let mut block = AudioBlockInterleaved::from_slice(&data, 2);  // 2 channels
+let mut block = AudioBlockMono::from_slice(&data);
 ```
 
-Allocation only happens here. Never create owned blocks in real-time contexts.
+Allocation only happens when creating owned blocks. Never do that in real-time contexts.
 
-### Views (zero-allocation)
+### Views (zero-allocation, borrows data)
 
 ```rust,ignore
-let block = AudioBlockPlanarView::from_slice(&data, 2, 512);
-let block = AudioBlockSequentialView::from_slice(&data, 2, 512);
-let block = AudioBlockInterleavedView::from_slice(&data, 2, 512);
+let block = AudioBlockPlanarView::from_slice(&channel_data);  // channels derived from slice
+let block = AudioBlockSequentialView::from_slice(&data, 2);  // 2 channels
+let block = AudioBlockInterleavedView::from_slice(&data, 2); // 2 channels
+let block = AudioBlockMonoView::from_slice(&data);
 ```
 
 From raw pointers:
 ```rust,ignore
-let block = unsafe { AudioBlockInterleavedView::from_ptr(ptr, 2, 512) };
+let block = unsafe { AudioBlockInterleavedView::from_ptr(ptr, 2, 512) }; // 2 channels, 512 frames
 ```
 
 Planar requires adapter:
 ```rust,ignore
-let mut adapter = unsafe { PlanarPtrAdapter::<_, 16>::from_ptr(data, 2, 512) };
+let mut adapter = unsafe { PlanarPtrAdapter::<_, 16>::from_ptr(data, 2, 512) }; // 2 channels, 512 frames
 let block = adapter.planar_view();
 ```
 
@@ -130,11 +144,11 @@ fn process(block: &mut impl AudioBlockMut<f32>) {
 Direct slice access on concrete types:
 
 ```rust,ignore
-let mut block = AudioBlockPlanar::new(2, 512);
+let mut block = AudioBlockPlanar::new(2, 512); // 2 channels, 512 frames
 let channel: &[f32] = block.channel(0);
 let raw_data: &[Box<[f32]>] = block.raw_data();
 
-let mut block = AudioBlockInterleaved::new(2, 512);
+let mut block = AudioBlockInterleaved::new(2, 512); // 2 channels, 512 frames
 let frame: &[f32] = block.frame(0);
 let raw_data: &[f32] = block.raw_data();
 ```
@@ -222,18 +236,18 @@ fn clear(&mut self);
 Blocks separate allocated capacity from visible size. Resize visible portion without reallocation:
 
 ```rust,ignore
-let mut block = AudioBlockPlanar::new(2, 512);  // Allocate 512 frames
-block.set_num_frames_visible(256);  // Use only 256
+let mut block = AudioBlockPlanar::new(2, 512); // 2 channels, 512 frames
+block.set_num_frames_visible(256); // use only 256 frames
 ```
 
 Create views with limited visibility:
 ```rust,ignore
 let view = AudioBlockInterleavedView::from_slice_limited(
-    data,
-    2,    // visible channels
-    256,  // visible frames
-    2,    // allocated channels
-    512   // allocated frames
+    &data,
+    2,   // num_channels_visible
+    256, // num_frames_visible
+    2,   // num_channels_allocated
+    512  // num_frames_allocated
 );
 ```
 

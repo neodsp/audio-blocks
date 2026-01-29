@@ -82,13 +82,18 @@ impl<S: Sample> AudioBlockInterleaved<S> {
     /// # Parameters
     /// * `data` - The slice containing interleaved audio samples
     /// * `num_channels` - Number of audio channels in the data
-    /// * `num_frames` - Number of audio frames in the data
     ///
     /// # Panics
-    /// Panics if the length of `data` doesn't equal `num_channels * num_frames`.
+    /// Panics if the length of `data` is not evenly divisible by `num_channels`.
     #[blocking]
-    pub fn from_slice(data: &[S], num_channels: u16, num_frames: usize) -> Self {
-        assert_eq!(data.len(), num_channels as usize * num_frames);
+    pub fn from_slice(data: &[S], num_channels: u16) -> Self {
+        assert!(
+            num_channels > 0 && data.len() % num_channels as usize == 0,
+            "data length {} must be divisible by num_channels {}",
+            data.len(),
+            num_channels
+        );
+        let num_frames = data.len() / num_channels as usize;
         Self {
             data: data.to_vec().into_boxed_slice(),
             num_channels,
@@ -714,7 +719,6 @@ mod tests {
             AudioBlockInterleaved::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
                 &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
                 2,
-                5,
             ));
 
         assert!(block.as_interleaved_view().is_some());
@@ -765,7 +769,6 @@ mod tests {
             AudioBlockInterleaved::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
                 &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
                 2,
-                5,
             ));
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated(), 2);
@@ -806,7 +809,6 @@ mod tests {
         let block = AudioBlockSequentialView::<f32>::from_slice(
             &[0.0, 2.0, 4.0, 6.0, 8.0, 1.0, 3.0, 5.0, 7.0, 9.0],
             2,
-            5,
         );
 
         let block = AudioBlockInterleaved::<f32>::from_block(&block);

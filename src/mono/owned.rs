@@ -106,6 +106,7 @@ impl<S: Sample> AudioBlockMono<S> {
     /// * `num_frames_visible` - Number of audio frames to expose
     #[blocking]
     pub fn from_slice_limited(samples: &[S], num_frames_visible: usize) -> Self {
+        assert!(num_frames_visible <= samples.len());
         Self {
             data: samples.to_vec().into_boxed_slice(),
             num_frames: num_frames_visible,
