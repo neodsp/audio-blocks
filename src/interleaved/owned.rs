@@ -77,6 +77,66 @@ impl<S: Sample + Default> AudioBlockInterleaved<S> {
 }
 
 impl<S: Sample> AudioBlockInterleaved<S> {
+    /// Creates a new interleaved audio block by copying the data from a slice of interleaved audio data.
+    ///
+    /// # Parameters
+    /// * `data` - The slice containing interleaved audio samples
+    /// * `num_channels` - Number of audio channels in the data
+    /// * `num_frames` - Number of audio frames in the data
+    ///
+    /// # Panics
+    /// Panics if the length of `data` doesn't equal `num_channels * num_frames`.
+    #[blocking]
+    pub fn from_slice(data: &[S], num_channels: u16, num_frames: usize) -> Self {
+        assert_eq!(data.len(), num_channels as usize * num_frames);
+        Self {
+            data: data.to_vec().into_boxed_slice(),
+            num_channels,
+            num_frames,
+            num_channels_allocated: num_channels,
+            num_frames_allocated: num_frames,
+        }
+    }
+
+    /// Creates a new interleaved audio block by copying the data from a slice of interleaved audio data with limited visibility.
+    ///
+    /// This function allows creating a block that exposes only a subset of the allocated channels
+    /// and frames, which is useful for working with a logical section of a larger buffer.
+    ///
+    /// # Parameters
+    /// * `data` - The slice containing interleaved audio samples
+    /// * `num_channels_visible` - Number of audio channels to expose
+    /// * `num_frames_visible` - Number of audio frames to expose
+    /// * `num_channels_allocated` - Total number of channels allocated in the data buffer
+    /// * `num_frames_allocated` - Total number of frames allocated in the data buffer
+    ///
+    /// # Panics
+    /// * Panics if the length of `data` doesn't equal `num_channels_allocated * num_frames_allocated`
+    /// * Panics if `num_channels_visible` exceeds `num_channels_allocated`
+    /// * Panics if `num_frames_visible` exceeds `num_frames_allocated`
+    #[blocking]
+    pub fn from_slice_limited(
+        data: &[S],
+        num_channels_visible: u16,
+        num_frames_visible: usize,
+        num_channels_allocated: u16,
+        num_frames_allocated: usize,
+    ) -> Self {
+        assert_eq!(
+            data.len(),
+            num_channels_allocated as usize * num_frames_allocated
+        );
+        assert!(num_channels_visible <= num_channels_allocated);
+        assert!(num_frames_visible <= num_frames_allocated);
+        Self {
+            data: data.to_vec().into_boxed_slice(),
+            num_channels: num_channels_visible,
+            num_frames: num_frames_visible,
+            num_channels_allocated,
+            num_frames_allocated,
+        }
+    }
+
     /// Creates a new audio block by copying data from another [`AudioBlock`].
     ///
     /// Converts any [`AudioBlock`] implementation to an interleaved format by iterating

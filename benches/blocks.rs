@@ -1,5 +1,5 @@
 use audio_blocks::{
-    interleaved::AudioBlockInterleaved, ops::AudioBlockOps, planar::AudioBlockPlanar,
+    AudioBlockOpsMut, interleaved::AudioBlockInterleaved, planar::AudioBlockPlanar,
     sequential::AudioBlockSequential,
 };
 use criterion::{Criterion, criterion_group, criterion_main};

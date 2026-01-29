@@ -71,6 +71,69 @@ impl<S: Sample + Default> AudioBlockPlanar<S> {
 }
 
 impl<S: Sample> AudioBlockPlanar<S> {
+    /// Creates a new audio block from a slice of planar audio data.
+    ///
+    /// # Parameters
+    /// * `data` - The slice containing planar audio samples (one slice per channel)
+    ///
+    /// # Panics
+    /// Panics if the channel slices have different lengths.
+    #[nonblocking]
+    pub fn from_slice<V: AsRef<[S]>>(data: &[V]) -> Self {
+        let num_frames_allocated = if data.is_empty() {
+            0
+        } else {
+            data[0].as_ref().len()
+        };
+        Self::from_slice_limited(data, data.len() as u16, num_frames_allocated)
+    }
+
+    /// Creates a new audio block from a slice with limited visibility.
+    ///
+    /// This function allows creating a view that exposes only a subset of the allocated channels
+    /// and frames, which is useful for working with a logical section of a larger buffer.
+    ///
+    /// # Parameters
+    /// * `data` - The slice containing planar audio samples (one slice per channel)
+    /// * `num_channels_visible` - Number of audio channels to expose in the view
+    /// * `num_frames_visible` - Number of audio frames to expose in the view
+    ///
+    /// # Panics
+    /// * Panics if `num_channels_visible` exceeds the number of channels in `data`
+    /// * Panics if `num_frames_visible` exceeds the length of any channel buffer
+    /// * Panics if channel slices have different lengths
+    #[nonblocking]
+    pub fn from_slice_limited<V: AsRef<[S]>>(
+        data: &[V],
+        num_channels_visible: u16,
+        num_frames_visible: usize,
+    ) -> Self {
+        let num_channels_allocated = data.len() as u16;
+        let num_frames_allocated = if num_channels_allocated == 0 {
+            0
+        } else {
+            data[0].as_ref().len()
+        };
+        assert!(num_channels_visible <= num_channels_allocated);
+        assert!(num_frames_visible <= num_frames_allocated);
+        data.iter()
+            .for_each(|v| assert_eq!(v.as_ref().len(), num_frames_allocated));
+
+        let data: Box<[Box<[S]>]> = data
+            .iter()
+            .map(|v| v.as_ref().to_vec().into_boxed_slice())
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+
+        Self {
+            data,
+            num_channels: num_channels_visible,
+            num_frames: num_frames_visible,
+            num_channels_allocated,
+            num_frames_allocated,
+        }
+    }
+
     /// Creates a new audio block by copying data from another [`AudioBlock`].
     ///
     /// Converts any [`AudioBlock`] implementation to a planar format by iterating

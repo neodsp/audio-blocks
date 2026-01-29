@@ -72,6 +72,47 @@ impl<S: Sample + Default> AudioBlockMono<S> {
 }
 
 impl<S: Sample> AudioBlockMono<S> {
+    /// Creates a new mono audio block from a slice of samples.
+    ///
+    /// Copies the provided slice into a new owned mono block.
+    ///
+    /// # Warning
+    ///
+    /// This function allocates memory and should not be used in real-time audio processing contexts.
+    ///
+    /// # Arguments
+    ///
+    /// * `samples` - The slice of samples to copy
+    #[blocking]
+    pub fn from_slice(samples: &[S]) -> Self {
+        Self {
+            data: samples.to_vec().into_boxed_slice(),
+            num_frames: samples.len(),
+            num_frames_allocated: samples.len(),
+        }
+    }
+
+    /// Creates a new mono audio block from a slice of samples.
+    ///
+    /// Copies the provided slice into a new owned mono block.
+    ///
+    /// # Warning
+    ///
+    /// This function allocates memory and should not be used in real-time audio processing contexts.
+    ///
+    /// # Arguments
+    ///
+    /// * `samples` - The slice of samples to copy
+    /// * `num_frames_visible` - Number of audio frames to expose
+    #[blocking]
+    pub fn from_slice_limited(samples: &[S], num_frames_visible: usize) -> Self {
+        Self {
+            data: samples.to_vec().into_boxed_slice(),
+            num_frames: num_frames_visible,
+            num_frames_allocated: samples.len(),
+        }
+    }
+
     /// Creates a new mono audio block by copying data from another [`AudioBlock`].
     ///
     /// Extracts the first channel from any [`AudioBlock`] implementation.
@@ -102,26 +143,6 @@ impl<S: Sample> AudioBlockMono<S> {
             data: data.into_boxed_slice(),
             num_frames: block.num_frames(),
             num_frames_allocated: block.num_frames(),
-        }
-    }
-
-    /// Creates a new mono audio block from a slice of samples.
-    ///
-    /// Copies the provided slice into a new owned mono block.
-    ///
-    /// # Warning
-    ///
-    /// This function allocates memory and should not be used in real-time audio processing contexts.
-    ///
-    /// # Arguments
-    ///
-    /// * `samples` - The slice of samples to copy
-    #[blocking]
-    pub fn from_slice(samples: &[S]) -> Self {
-        Self {
-            data: samples.to_vec().into_boxed_slice(),
-            num_frames: samples.len(),
-            num_frames_allocated: samples.len(),
         }
     }
 
