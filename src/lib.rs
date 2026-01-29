@@ -10,8 +10,8 @@ extern crate core as std;
 #[cfg(feature = "std")]
 extern crate std;
 
-pub use num::Zero;
 pub use ops::AudioBlockOps;
+pub use ops::AudioBlockOpsMut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
 pub use interleaved::AudioBlockInterleaved;
@@ -30,8 +30,14 @@ pub use planar::AudioBlockPlanarViewMut;
 pub use planar::PlanarPtrAdapter;
 pub use planar::PlanarPtrAdapterMut;
 
+#[cfg(any(feature = "std", feature = "alloc"))]
+pub use mono::AudioBlockMono;
+pub use mono::AudioBlockMonoView;
+pub use mono::AudioBlockMonoViewMut;
+
 pub mod interleaved;
 mod iter;
+pub mod mono;
 pub mod ops;
 pub mod planar;
 pub mod sequential;
@@ -66,7 +72,7 @@ pub enum BlockLayout {
     ///
     /// Format: `[ch0, ch0, ch0, ..., ch1, ch1, ch1, ...]`
     ///
-    /// Also known as "planar" format in some audio libraries.
+    /// Note: Unlike `Planar`, this uses a single contiguous buffer rather than separate buffers per channel.
     Sequential,
 }
 
@@ -79,8 +85,8 @@ pub enum BlockLayout {
 ///
 /// All numeric types (f32, f64, i16, i32, etc.) automatically implement this trait,
 /// as well as any custom types that satisfy these bounds.
-pub trait Sample: Copy + Zero + 'static {}
-impl<T> Sample for T where T: Copy + Zero + 'static {}
+pub trait Sample: Copy + 'static {}
+impl<T> Sample for T where T: Copy + 'static {}
 
 /// Core trait for audio data access operations across various memory layouts.
 ///
@@ -225,7 +231,7 @@ pub trait AudioBlock<S: Sample> {
 ///
 /// fn process_audio(audio: &mut impl AudioBlockMut<f32>) {
 ///     // Resize to 2 channels, 1024 frames
-///     audio.set_active_size(2, 1024);
+///     audio.set_visible(2, 1024);
 ///
 ///     // Modify individual samples
 ///     *audio.sample_mut(0, 0) = 0.5;
@@ -246,31 +252,31 @@ pub trait AudioBlock<S: Sample> {
 pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     type PlanarViewMut: AsRef<[S]> + AsMut<[S]>;
 
-    /// Sets the active size of the audio block to the specified number of channels and frames.
+    /// Sets the visible size of the audio block to the specified number of channels and frames.
     ///
     /// # Panics
     ///
     /// When `num_channels` exceeds [`AudioBlock::num_channels_allocated`] or `num_frames` exceeds [`AudioBlock::num_frames_allocated`].
-    fn set_active_size(&mut self, num_channels: u16, num_frames: usize) {
-        self.set_active_num_channels(num_channels);
-        self.set_active_num_frames(num_frames);
+    fn set_visible(&mut self, num_channels: u16, num_frames: usize) {
+        self.set_num_channels_visible(num_channels);
+        self.set_num_frames_visible(num_frames);
     }
 
-    /// Sets the active size of the audio block to the specified number of channels.
+    /// Sets the visible size of the audio block to the specified number of channels.
     ///
     /// This operation is real-time safe but only works up to [`AudioBlock::num_channels_allocated`].
     ///
     /// # Panics
     ///
     /// When `num_channels` exceeds [`AudioBlock::num_channels_allocated`].
-    fn set_active_num_channels(&mut self, num_channels: u16);
+    fn set_num_channels_visible(&mut self, num_channels: u16);
 
-    /// Sets the active size of the audio block to the specified number of frames.
+    /// Sets the visible size of the audio block to the specified number of frames.
     ///
     /// # Panics
     ///
     ///  When `num_frames` exceeds [`AudioBlock::num_frames_allocated`].
-    fn set_active_num_frames(&mut self, num_frames: usize);
+    fn set_num_frames_visible(&mut self, num_frames: usize);
 
     /// Returns a mutable reference to the sample at the specified channel and frame position.
     ///

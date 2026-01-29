@@ -44,12 +44,12 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockPlanarViewMut<'a, S, V
     /// Panics if the channel slices have different lengths.
     #[nonblocking]
     pub fn from_slice(data: &'a mut [V]) -> Self {
-        let num_frames_available = if data.is_empty() {
+        let num_frames_allocated = if data.is_empty() {
             0
         } else {
             data[0].as_ref().len()
         };
-        Self::from_slice_limited(data, data.len() as u16, num_frames_available)
+        Self::from_slice_limited(data, data.len() as u16, num_frames_allocated)
     }
 
     /// Creates a new audio block from a mutable slice with limited visibility.
@@ -72,23 +72,23 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockPlanarViewMut<'a, S, V
         num_channels_visible: u16,
         num_frames_visible: usize,
     ) -> Self {
-        let num_channels_available = data.len();
-        let num_frames_available = if num_channels_available == 0 {
+        let num_channels_allocated = data.len();
+        let num_frames_allocated = if num_channels_allocated == 0 {
             0
         } else {
             data[0].as_ref().len()
         };
-        assert!(num_channels_visible <= num_channels_available as u16);
-        assert!(num_frames_visible <= num_frames_available);
+        assert!(num_channels_visible <= num_channels_allocated as u16);
+        assert!(num_frames_visible <= num_frames_allocated);
         data.iter()
-            .for_each(|v| assert_eq!(v.as_ref().len(), num_frames_available));
+            .for_each(|v| assert_eq!(v.as_ref().len(), num_frames_allocated));
 
         Self {
             data,
             num_channels: num_channels_visible,
             num_frames: num_frames_visible,
-            num_channels_allocated: num_channels_available as u16,
-            num_frames_allocated: num_frames_available,
+            num_channels_allocated: num_channels_allocated as u16,
+            num_frames_allocated,
             _phantom: PhantomData,
         }
     }
@@ -140,7 +140,7 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockPlanarViewMut<'a, S, V
     /// Provides direct access to the underlying memory.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data(&self) -> &[V] {
         self.data
@@ -149,7 +149,7 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockPlanarViewMut<'a, S, V
     /// Provides direct access to the underlying memory.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data_mut(&mut self) -> &mut [V] {
         self.data
@@ -224,7 +224,7 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarVi
         let num_frames = self.num_frames; // Capture num_frames for the closure
         self.data
             .iter()
-            // Limit to the active number of channels
+            // Limit to the visible number of channels
             .take(self.num_channels as usize)
             // For each channel slice, create an iterator over its samples
             .map(move |channel_data| channel_data.as_ref().iter().take(num_frames))
@@ -280,13 +280,13 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for AudioBlockPlana
     type PlanarViewMut = V;
 
     #[nonblocking]
-    fn set_active_num_channels(&mut self, num_channels: u16) {
+    fn set_num_channels_visible(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
         self.num_channels = num_channels;
     }
 
     #[nonblocking]
-    fn set_active_num_frames(&mut self, num_frames: usize) {
+    fn set_num_frames_visible(&mut self, num_frames: usize) {
         assert!(num_frames <= self.num_frames_allocated);
         self.num_frames = num_frames;
     }
@@ -701,7 +701,7 @@ mod tests {
         let mut ch3 = vec![0.0; 10];
         let mut data = vec![ch1.as_mut_slice(), ch2.as_mut_slice(), ch3.as_mut_slice()];
         let mut block = AudioBlockPlanarViewMut::from_slice(&mut data);
-        block.set_active_size(2, 5);
+        block.set_visible(2, 5);
 
         let num_frames = block.num_frames;
         let mut frames_iter = block.frames_iter();

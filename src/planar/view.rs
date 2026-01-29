@@ -42,12 +42,12 @@ impl<'a, S: Sample, V: AsRef<[S]>> AudioBlockPlanarView<'a, S, V> {
     /// Panics if the channel slices have different lengths.
     #[nonblocking]
     pub fn from_slice(data: &'a [V]) -> Self {
-        let num_frames_available = if data.is_empty() {
+        let num_frames_allocated = if data.is_empty() {
             0
         } else {
             data[0].as_ref().len()
         };
-        Self::from_slice_limited(data, data.len() as u16, num_frames_available)
+        Self::from_slice_limited(data, data.len() as u16, num_frames_allocated)
     }
 
     /// Creates a new audio block from a slice with limited visibility.
@@ -116,7 +116,7 @@ impl<'a, S: Sample, V: AsRef<[S]>> AudioBlockPlanarView<'a, S, V> {
     /// Provides direct mutable access to the underlying memory.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
-    /// beyond the active range.
+    /// beyond the visible range.
     #[nonblocking]
     pub fn raw_data(&self) -> &[V] {
         self.data
@@ -186,7 +186,7 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> 
         let num_frames = self.num_frames; // Capture num_frames for the closure
         self.data
             .iter()
-            // Limit to the active number of channels
+            // Limit to the visible number of channels
             .take(self.num_channels as usize)
             // For each channel slice, create an iterator over its samples
             .map(move |channel_data| channel_data.as_ref().iter().take(num_frames))

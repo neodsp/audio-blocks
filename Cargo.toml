@@ -9,14 +9,13 @@ name = "audio-blocks"
 readme = "README.md"
 repository = "https://github.com/neodsp/audio-blocks"
 rust-version = "1.85.0"
-version = "0.5.0"
+version = "0.6.0"
 
 [dependencies]
-num = { version = "0.4.3", default-features = false }
 rtsan-standalone = "0.3.0"
 
 [dev-dependencies]
-criterion = "0.7.0"
+criterion = "0.8.1"
 
 [features]
 default = ["std"]
