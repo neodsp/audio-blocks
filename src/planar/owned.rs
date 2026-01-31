@@ -188,7 +188,7 @@ impl<S: Sample> AudioBlockPlanar<S> {
     ///
     /// Each channel is represented as a slice of samples.
     #[nonblocking]
-    pub fn channels(&self) -> impl Iterator<Item = &[S]> {
+    pub fn channels(&self) -> impl ExactSizeIterator<Item = &[S]> {
         self.data
             .iter()
             .take(self.num_channels as usize)
@@ -199,7 +199,7 @@ impl<S: Sample> AudioBlockPlanar<S> {
     ///
     /// Each channel is represented as a mutable slice of samples.
     #[nonblocking]
-    pub fn channels_mut(&mut self) -> impl Iterator<Item = &mut [S]> {
+    pub fn channels_mut(&mut self) -> impl ExactSizeIterator<Item = &mut [S]> {
         self.data
             .iter_mut()
             .take(self.num_channels as usize)
@@ -280,7 +280,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn channel_iter(&self, channel: u16) -> impl Iterator<Item = &S> {
+    fn channel_iter(&self, channel: u16) -> impl ExactSizeIterator<Item = &S> {
         assert!(channel < self.num_channels);
         unsafe {
             self.data
@@ -291,7 +291,10 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn channels_iter(
+        &self,
+    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
+    {
         let num_frames = self.num_frames; // Capture num_frames for the closure
         self.data
             .iter()
@@ -302,7 +305,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S> {
+    fn frame_iter(&self, frame: usize) -> impl ExactSizeIterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
             .iter()
@@ -311,7 +314,10 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn frames_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn frames_iter(
+        &self,
+    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
+    {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         // Get an immutable slice of the channel boxes: `&[Box<[S]>]`
@@ -375,7 +381,10 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn channel_iter_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S> {
+    fn channel_iter_mut(
+        &mut self,
+        channel: u16,
+    ) -> impl ExactSizeIterator<Item = &mut S> {
         assert!(channel < self.num_channels);
         unsafe {
             self.data
@@ -388,7 +397,8 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     #[nonblocking]
     fn channels_iter_mut(
         &mut self,
-    ) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+    ) -> impl '_
+    + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &mut S>> {
         let num_frames = self.num_frames;
         self.data
             .iter_mut()
@@ -397,7 +407,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn frame_iter_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S> {
+    fn frame_iter_mut(&mut self, frame: usize) -> impl ExactSizeIterator<Item = &mut S> {
         assert!(frame < self.num_frames);
         self.data
             .iter_mut()
@@ -406,7 +416,10 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn frames_iter_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+    fn frames_iter_mut(
+        &mut self,
+    ) -> impl '_
+    + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &mut S>> {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let data_slice: &mut [Box<[S]>] = &mut self.data;

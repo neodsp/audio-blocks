@@ -162,20 +162,24 @@ pub trait AudioBlock<S: Sample> {
     /// # Panics
     ///
     /// Panics if channel index is out of bounds.
-    fn channel_iter(&self, channel: u16) -> impl Iterator<Item = &S>;
+    fn channel_iter(&self, channel: u16) -> impl ExactSizeIterator<Item = &S>;
 
     /// Returns an iterator that yields an iterator for each channel.
-    fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
+    fn channels_iter(
+        &self,
+    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>;
 
     /// Returns an iterator over all samples in the specified frame (across all channels).
     ///
     /// # Panics
     ///
     /// Panics if frame index is out of bounds.
-    fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S>;
+    fn frame_iter(&self, frame: usize) -> impl ExactSizeIterator<Item = &S>;
 
     /// Returns an iterator that yields an iterator for each frame.
-    fn frames_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_;
+    fn frames_iter(
+        &self,
+    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>;
 
     /// Creates a non-owning view of this audio block.
     ///
@@ -290,21 +294,29 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// # Panics
     ///
     /// Panics if channel index is out of bounds.
-    fn channel_iter_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
+    fn channel_iter_mut(
+        &mut self,
+        channel: u16,
+    ) -> impl ExactSizeIterator<Item = &mut S>;
 
     /// Returns a mutable iterator that yields mutable iterators for each channel.
-    fn channels_iter_mut(&mut self)
-    -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
+    fn channels_iter_mut(
+        &mut self,
+    ) -> impl '_
+    + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &mut S>>;
 
     /// Returns a mutable iterator over all samples in the specified frame (across all channels).
     ///
     /// # Panics
     ///
     /// Panics if frame index is out of bounds.
-    fn frame_iter_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
+    fn frame_iter_mut(&mut self, frame: usize) -> impl ExactSizeIterator<Item = &mut S>;
 
     /// Returns a mutable iterator that yields mutable iterators for each frame.
-    fn frames_iter_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
+    fn frames_iter_mut(
+        &mut self,
+    ) -> impl '_
+    + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &mut S>>;
 
     /// Creates a non-owning mutable view of this audio block.
     ///

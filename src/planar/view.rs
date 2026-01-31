@@ -106,7 +106,7 @@ impl<'a, S: Sample, V: AsRef<[S]>> AudioBlockPlanarView<'a, S, V> {
     ///
     /// Each channel is represented as a slice of samples.
     #[nonblocking]
-    pub fn channels(&self) -> impl Iterator<Item = &[S]> {
+    pub fn channels(&self) -> impl ExactSizeIterator<Item = &[S]> {
         self.data
             .iter()
             .take(self.num_channels as usize)
@@ -170,7 +170,7 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> 
     }
 
     #[nonblocking]
-    fn channel_iter(&self, channel: u16) -> impl Iterator<Item = &S> {
+    fn channel_iter(&self, channel: u16) -> impl ExactSizeIterator<Item = &S> {
         assert!(channel < self.num_channels);
         unsafe {
             self.data
@@ -182,7 +182,10 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> 
     }
 
     #[nonblocking]
-    fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn channels_iter(
+        &self,
+    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
+    {
         let num_frames = self.num_frames; // Capture num_frames for the closure
         self.data
             .iter()
@@ -193,7 +196,7 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> 
     }
 
     #[nonblocking]
-    fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S> {
+    fn frame_iter(&self, frame: usize) -> impl ExactSizeIterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
             .iter()
@@ -202,7 +205,10 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> 
     }
 
     #[nonblocking]
-    fn frames_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &'_ S> + '_> + '_ {
+    fn frames_iter(
+        &self,
+    ) -> impl '_
+    + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &'_ S>> {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let data_slice: &[V] = self.data;
