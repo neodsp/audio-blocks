@@ -4,6 +4,6 @@ mod view;
 mod view_mut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use owned::AudioBlockInterleaved;
-pub use view::AudioBlockInterleavedView;
-pub use view_mut::AudioBlockInterleavedViewMut;
+pub use owned::Interleaved;
+pub use view::InterleavedView;
+pub use view_mut::InterleavedViewMut;

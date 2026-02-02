@@ -18,12 +18,12 @@ use crate::{AudioBlock, Sample, iter::StridedSampleIter};
 ///
 /// let data = vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0];
 ///
-/// let block = AudioBlockSequentialView::from_slice(&data, 2);
+/// let block = SequentialView::from_slice(&data, 2);
 ///
 /// assert_eq!(block.channel(0), &[0.0, 0.0, 0.0]);
 /// assert_eq!(block.channel(1), &[1.0, 1.0, 1.0]);
 /// ```
-pub struct AudioBlockSequentialView<'a, S: Sample> {
+pub struct SequentialView<'a, S: Sample> {
     data: &'a [S],
     num_channels: u16,
     num_frames: usize,
@@ -31,7 +31,7 @@ pub struct AudioBlockSequentialView<'a, S: Sample> {
     num_frames_allocated: usize,
 }
 
-impl<'a, S: Sample> AudioBlockSequentialView<'a, S> {
+impl<'a, S: Sample> SequentialView<'a, S> {
     /// Creates a new audio block from a slice of sequential audio data.
     ///
     /// # Parameters
@@ -182,8 +182,8 @@ impl<'a, S: Sample> AudioBlockSequentialView<'a, S> {
     }
 
     #[nonblocking]
-    pub fn view(&self) -> AudioBlockSequentialView<'_, S> {
-        AudioBlockSequentialView::from_slice_limited(
+    pub fn view(&self) -> SequentialView<'_, S> {
+        SequentialView::from_slice_limited(
             self.data,
             self.num_channels,
             self.num_frames,
@@ -193,7 +193,7 @@ impl<'a, S: Sample> AudioBlockSequentialView<'a, S> {
     }
 }
 
-impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
+impl<S: Sample> AudioBlock<S> for SequentialView<'_, S> {
     type PlanarView = [S; 0];
 
     #[nonblocking]
@@ -300,14 +300,14 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
     }
 
     #[nonblocking]
-    fn as_sequential_view(&self) -> Option<AudioBlockSequentialView<'_, S>> {
+    fn as_sequential_view(&self) -> Option<SequentialView<'_, S>> {
         Some(self.view())
     }
 }
 
-impl<S: Sample + core::fmt::Debug> core::fmt::Debug for AudioBlockSequentialView<'_, S> {
+impl<S: Sample + core::fmt::Debug> core::fmt::Debug for SequentialView<'_, S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "AudioBlockSequentialView {{")?;
+        writeln!(f, "audio_block::SequentialView {{")?;
         writeln!(f, "  num_channels: {}", self.num_channels)?;
         writeln!(f, "  num_frames: {}", self.num_frames)?;
         writeln!(
@@ -336,7 +336,7 @@ mod tests {
 
     #[test]
     fn test_member_functions() {
-        let block = AudioBlockSequentialView::from_slice_limited(
+        let block = SequentialView::from_slice_limited(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 0.0, 0.0, 0.0, 0.0],
             2,
             3,
@@ -376,7 +376,7 @@ mod tests {
     #[test]
     fn test_samples() {
         let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = AudioBlockSequentialView::<f32>::from_slice(&data, 2);
+        let block = SequentialView::<f32>::from_slice(&data, 2);
 
         for ch in 0..block.num_channels() {
             for f in 0..block.num_frames() {
@@ -391,7 +391,7 @@ mod tests {
     #[test]
     fn test_channel_iter() {
         let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = AudioBlockSequentialView::<f32>::from_slice(&data, 2);
+        let block = SequentialView::<f32>::from_slice(&data, 2);
 
         let channel = block.channel_iter(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
@@ -402,7 +402,7 @@ mod tests {
     #[test]
     fn test_channel_iters() {
         let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = AudioBlockSequentialView::<f32>::from_slice(&data, 2);
+        let block = SequentialView::<f32>::from_slice(&data, 2);
 
         let mut channels_iter = block.channels_iter();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -416,7 +416,7 @@ mod tests {
     #[test]
     fn test_frame_iter() {
         let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = AudioBlockSequentialView::<f32>::from_slice(&data, 2);
+        let block = SequentialView::<f32>::from_slice(&data, 2);
 
         let channel = block.frame_iter(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 5.0]);
@@ -433,7 +433,7 @@ mod tests {
     #[test]
     fn test_frame_iters() {
         let data = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = AudioBlockSequentialView::<f32>::from_slice(&data, 2);
+        let block = SequentialView::<f32>::from_slice(&data, 2);
 
         let mut frames_iter = block.frames_iter();
         let channel = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -452,7 +452,7 @@ mod tests {
     #[test]
     fn test_from_slice() {
         let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = AudioBlockSequentialView::<f32>::from_slice(&data, 2);
+        let block = SequentialView::<f32>::from_slice(&data, 2);
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated, 2);
         assert_eq!(block.num_frames(), 5);
@@ -490,7 +490,7 @@ mod tests {
     #[test]
     fn test_view() {
         let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = AudioBlockSequentialView::<f32>::from_slice(&data, 2);
+        let block = SequentialView::<f32>::from_slice(&data, 2);
         assert!(block.as_interleaved_view().is_none());
         assert!(block.as_planar_view().is_none());
         assert!(block.as_sequential_view().is_some());
@@ -509,7 +509,7 @@ mod tests {
     fn test_limited() {
         let data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
 
-        let block = AudioBlockSequentialView::from_slice_limited(&data, 2, 3, 3, 4);
+        let block = SequentialView::from_slice_limited(&data, 2, 3, 3, 4);
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -527,7 +527,7 @@ mod tests {
     #[test]
     fn test_from_ptr() {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-        let block = unsafe { AudioBlockSequentialView::<f32>::from_ptr(data.as_mut_ptr(), 2, 5) };
+        let block = unsafe { SequentialView::<f32>::from_ptr(data.as_mut_ptr(), 2, 5) };
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_channels_allocated, 2);
         assert_eq!(block.num_frames(), 5);
@@ -566,8 +566,7 @@ mod tests {
     fn test_from_ptr_limited() {
         let data = [1.0, 2.0, 0.0, 3.0, 4.0, 0.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0];
 
-        let block =
-            unsafe { AudioBlockSequentialView::from_ptr_limited(data.as_ptr(), 2, 3, 3, 4) };
+        let block = unsafe { SequentialView::from_ptr_limited(data.as_ptr(), 2, 3, 3, 4) };
 
         assert_eq!(block.num_channels(), 2);
         assert_eq!(block.num_frames(), 3);
@@ -587,7 +586,7 @@ mod tests {
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
         let data = [1.0, 1.0, 1.0, 0.0, 2.0, 2.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-        let block = AudioBlockSequentialView::from_slice_limited(&data, 2, 3, 3, 4);
+        let block = SequentialView::from_slice_limited(&data, 2, 3, 3, 4);
 
         block.channel(2);
     }

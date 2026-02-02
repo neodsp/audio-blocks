@@ -14,26 +14,26 @@ pub use ops::AudioBlockOps;
 pub use ops::AudioBlockOpsMut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use interleaved::AudioBlockInterleaved;
-pub use interleaved::AudioBlockInterleavedView;
-pub use interleaved::AudioBlockInterleavedViewMut;
+pub use interleaved::Interleaved;
+pub use interleaved::InterleavedView;
+pub use interleaved::InterleavedViewMut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use sequential::AudioBlockSequential;
-pub use sequential::AudioBlockSequentialView;
-pub use sequential::AudioBlockSequentialViewMut;
+pub use sequential::Sequential;
+pub use sequential::SequentialView;
+pub use sequential::SequentialViewMut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use planar::AudioBlockPlanar;
-pub use planar::AudioBlockPlanarView;
-pub use planar::AudioBlockPlanarViewMut;
+pub use planar::Planar;
 pub use planar::PlanarPtrAdapter;
 pub use planar::PlanarPtrAdapterMut;
+pub use planar::PlanarView;
+pub use planar::PlanarViewMut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
-pub use mono::AudioBlockMono;
-pub use mono::AudioBlockMonoView;
-pub use mono::AudioBlockMonoViewMut;
+pub use mono::Mono;
+pub use mono::MonoView;
+pub use mono::MonoViewMut;
 
 pub mod interleaved;
 mod iter;
@@ -188,7 +188,7 @@ pub trait AudioBlock<S: Sample> {
     ///
     /// Returns `Some` if the underlying data is stored in interleaved format,
     /// otherwise returns `None`.
-    fn as_interleaved_view(&self) -> Option<AudioBlockInterleavedView<'_, S>> {
+    fn as_interleaved_view(&self) -> Option<InterleavedView<'_, S>> {
         None
     }
 
@@ -197,7 +197,7 @@ pub trait AudioBlock<S: Sample> {
     ///
     /// Returns `Some` if the underlying data is stored in planar format,
     /// otherwise returns `None`.
-    fn as_planar_view(&self) -> Option<AudioBlockPlanarView<'_, S, Self::PlanarView>> {
+    fn as_planar_view(&self) -> Option<PlanarView<'_, S, Self::PlanarView>> {
         None
     }
 
@@ -206,7 +206,7 @@ pub trait AudioBlock<S: Sample> {
     ///
     /// Returns `Some` if the underlying data is stored in sequential format,
     /// otherwise returns `None`.
-    fn as_sequential_view(&self) -> Option<AudioBlockSequentialView<'_, S>> {
+    fn as_sequential_view(&self) -> Option<SequentialView<'_, S>> {
         None
     }
 }
@@ -320,7 +320,7 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     ///
     /// Returns `Some` if the underlying data is stored in interleaved format,
     /// otherwise returns `None`.
-    fn as_interleaved_view_mut(&mut self) -> Option<AudioBlockInterleavedViewMut<'_, S>> {
+    fn as_interleaved_view_mut(&mut self) -> Option<InterleavedViewMut<'_, S>> {
         None
     }
 
@@ -329,9 +329,7 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     ///
     /// Returns `Some` if the underlying data is stored in planar format,
     /// otherwise returns `None`.
-    fn as_planar_view_mut(
-        &mut self,
-    ) -> Option<AudioBlockPlanarViewMut<'_, S, Self::PlanarViewMut>> {
+    fn as_planar_view_mut(&mut self) -> Option<PlanarViewMut<'_, S, Self::PlanarViewMut>> {
         None
     }
 
@@ -340,7 +338,7 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     ///
     /// Returns `Some` if the underlying data is stored in sequential format,
     /// otherwise returns `None`.
-    fn as_sequential_view_mut(&mut self) -> Option<AudioBlockSequentialViewMut<'_, S>> {
+    fn as_sequential_view_mut(&mut self) -> Option<SequentialViewMut<'_, S>> {
         None
     }
 }

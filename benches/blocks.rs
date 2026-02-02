@@ -1,23 +1,22 @@
 use audio_blocks::{
-    AudioBlockOpsMut, interleaved::AudioBlockInterleaved, planar::AudioBlockPlanar,
-    sequential::AudioBlockSequential,
+    AudioBlockOpsMut, interleaved::Interleaved, planar::Planar, sequential::Sequential,
 };
 use criterion::{Criterion, criterion_group, criterion_main};
 
 pub fn bench_three_types(c: &mut Criterion, num_channels: u16, num_frames: usize) {
-    let mut block = AudioBlockInterleaved::<f32>::new(num_channels, num_frames);
+    let mut block = Interleaved::<f32>::new(num_channels, num_frames);
     c.bench_function(
         &format!("for each interleaved {num_channels}ch {num_frames}fr"),
         |b| b.iter(|| block.for_each(|v| *v *= 2.0)),
     );
 
-    let mut block = AudioBlockSequential::<f32>::new(num_channels, num_frames);
+    let mut block = Sequential::<f32>::new(num_channels, num_frames);
     c.bench_function(
         &format!("for each sequential {num_channels}ch {num_frames}fr"),
         |b| b.iter(|| block.for_each(|v| *v *= 2.0)),
     );
 
-    let mut block = AudioBlockPlanar::<f32>::new(num_channels, num_frames);
+    let mut block = Planar::<f32>::new(num_channels, num_frames);
     c.bench_function(
         &format!("for each planar {num_channels}ch {num_frames}fr"),
         |b| b.iter(|| block.for_each(|v| *v *= 2.0)),
