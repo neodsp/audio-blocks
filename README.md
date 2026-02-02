@@ -118,13 +118,61 @@ let block = adapter.planar_view();
 
 ## Common Operations
 
-```rust,ignore
-use audio_blocks::AudioBlockOps;
+Import the extension traits for additional operations:
 
-block.copy_from_block(&other_block);
-block.fill_with(0.0);
+```rust,ignore
+use audio_blocks::{AudioBlockOps, AudioBlockOpsMut};
+```
+
+### Copying and Clearing
+
+```rust,ignore
+// Copy from another block (flexible - copies min of both sizes)
+let result = block.copy_from_block(&other_block);
+// Returns None if exact match, Some((channels, frames)) if partial
+
+// Copy with exact size requirement (panics on mismatch)
+block.copy_from_block_exact(&other_block);
+
+// Fill all samples with a value
+block.fill_with(0.5);
+
+// Clear to zero
 block.clear();
+```
+
+### Per-Sample Processing
+
+```rust,ignore
+// Process each sample
 block.for_each(|sample| *sample *= 0.5);
+
+// Process with channel/frame indices
+block.enumerate(|channel, frame, sample| {
+    *sample *= 0.5;
+});
+
+// Apply gain to all samples
+block.gain(0.5);
+```
+
+### Mono Conversions
+
+```rust,ignore
+let mut mono = Mono::<f32>::new(512);
+
+// Mix all channels to mono (averages channels)
+let result = block.mix_to_mono(&mut mono.as_view_mut());
+// Returns None if exact match, Some(frames_processed) if partial
+
+// Or with exact size requirement
+block.mix_to_mono_exact(&mut mono.as_view_mut());
+
+// Copy a specific channel to mono
+block.copy_channel_to_mono(&mut mono.as_view_mut(), 0); // channel 0
+
+// Copy mono to all channels of a block
+block.copy_mono_to_all_channels(&mono.as_view());
 ```
 
 ## Working with Slices
@@ -221,14 +269,31 @@ fn as_planar_view_mut(&mut self) -> Option<PlanarViewMut<'_, S, Self::PlanarView
 fn as_sequential_view_mut(&mut self) -> Option<SequentialViewMut<'_, S>>;
 ```
 
-Operations:
+### `AudioBlockOps` (extension trait)
+
+Read-only operations on audio blocks:
 ```rust,ignore
-fn copy_from_block(&mut self, block: &impl AudioBlock<S>);
-fn copy_from_block_resize(&mut self, block: &impl AudioBlock<S>);
+fn mix_to_mono(&self, dest: &mut MonoViewMut<S>) -> Option<usize>;
+fn mix_to_mono_exact(&self, dest: &mut MonoViewMut<S>);
+fn copy_channel_to_mono(&self, dest: &mut MonoViewMut<S>, channel: u16) -> Option<usize>;
+fn copy_channel_to_mono_exact(&self, dest: &mut MonoViewMut<S>, channel: u16);
+```
+
+### `AudioBlockOpsMut` (extension trait)
+
+Mutable operations on audio blocks:
+```rust,ignore
+fn copy_from_block(&mut self, block: &impl AudioBlock<S>) -> Option<(u16, usize)>;
+fn copy_from_block_exact(&mut self, block: &impl AudioBlock<S>);
+fn copy_mono_to_all_channels(&mut self, mono: &MonoView<S>) -> Option<usize>;
+fn copy_mono_to_all_channels_exact(&mut self, mono: &MonoView<S>);
 fn for_each(&mut self, f: impl FnMut(&mut S));
 fn enumerate(&mut self, f: impl FnMut(u16, usize, &mut S));
+fn for_each_allocated(&mut self, f: impl FnMut(&mut S));
+fn enumerate_allocated(&mut self, f: impl FnMut(u16, usize, &mut S));
 fn fill_with(&mut self, sample: S);
 fn clear(&mut self);
+fn gain(&mut self, gain: S);
 ```
 
 ## Advanced: Variable Buffer Sizes
@@ -264,16 +329,20 @@ block.num_channels_allocated();
 block.num_frames_allocated();
 ```
 
-## Advanced: Access Non-Visible Samples
+## Advanced: Access Allocated Samples
 
-For operations that can safely process all allocated memory:
+For operations that process all allocated memory (including non-visible samples):
 
 ```rust,ignore
-block.for_each_including_non_visible(|sample| *sample *= 0.5);
-block.enumerate_including_non_visible(|ch, frame, sample| {
+use audio_blocks::AudioBlockOpsMut;
+
+block.for_each_allocated(|sample| *sample *= 0.5);
+block.enumerate_allocated(|ch, frame, sample| {
     // Process including allocated but non-visible samples
 });
 ```
+
+Note: `fill_with`, `clear`, and `gain` also operate on the entire allocated buffer for efficiency.
 
 Direct memory access:
 ```rust,ignore
