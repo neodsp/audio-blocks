@@ -34,6 +34,7 @@ use crate::{AudioBlock, AudioBlockMut, Sample};
 /// assert_eq!(block.sample(0), 0.0);
 /// assert_eq!(block.sample(511), 511.0);
 /// ```
+#[derive(Default, Clone)]
 pub struct Mono<S: Sample> {
     data: Box<[S]>,
     num_frames: usize,

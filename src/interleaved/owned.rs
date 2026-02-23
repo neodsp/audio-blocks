@@ -35,6 +35,7 @@ use crate::{
 ///
 /// assert_eq!(block.raw_data(), &[0.0, 0.0, 1.0, 1.0, 2.0, 2.0]);
 /// ```
+#[derive(Default, Clone)]
 pub struct Interleaved<S: Sample> {
     data: Box<[S]>,
     num_channels: u16,

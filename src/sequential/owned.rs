@@ -35,6 +35,7 @@ use crate::{
 /// assert_eq!(block.channel(0), &[0.0, 0.0, 0.0]);
 /// assert_eq!(block.channel(1), &[1.0, 1.0, 1.0]);
 /// ```
+#[derive(Default, Clone)]
 pub struct Sequential<S: Sample> {
     data: Box<[S]>,
     num_channels: u16,
