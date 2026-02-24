@@ -55,19 +55,19 @@ pub trait AudioBlockOpsMut<S: Sample> {
     ///
     /// This iterates over `num_frames_allocated()` samples, not just `num_frames()`.
     /// It uses cache-friendly linear access over the underlying storage, which is
-    /// significantly faster than [`for_each`] for large buffers when the visible
+    /// significantly faster than [`for_each`](AudioBlockOpsMut::for_each) for large buffers when the visible
     /// window is close to the allocated size.
     ///
     /// # Performance Note
     ///
     /// Only use this when `num_frames()` is close to `num_frames_allocated()`.
     /// If the buffer has been resized dramatically (e.g., `set_visible()` to half
-    /// the allocation), [`for_each`] will be faster as it respects the visible window.
+    /// the allocation), [`for_each`](AudioBlockOpsMut::for_each) will be faster as it respects the visible window.
     fn for_each_allocated(&mut self, f: impl FnMut(&mut S));
     /// Iterate over all allocated samples with indices using fast linear buffer iteration.
     ///
-    /// Like [`for_each_allocated`], this iterates over the entire allocated buffer
-    /// for cache-friendly linear access. Only faster than [`enumerate`] when the
+    /// Like [`for_each_allocated`](AudioBlockOpsMut::for_each_allocated), this iterates over the entire allocated buffer
+    /// for cache-friendly linear access. Only faster than [`enumerate`](AudioBlockOpsMut::enumerate) when the
     /// visible window is close to the allocated size.
     fn enumerate_allocated(&mut self, f: impl FnMut(u16, usize, &mut S));
     /// Sets all samples in the block to the specified value.
