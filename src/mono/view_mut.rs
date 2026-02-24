@@ -14,7 +14,7 @@ use crate::{AudioBlock, AudioBlockMut, Sample};
 /// # Example
 ///
 /// ```
-/// use audio_blocks::{mono::MonoViewMut, AudioBlock};
+/// use audio_block::{mono::MonoViewMut, AudioBlock};
 ///
 /// let mut data = vec![0.0, 1.0, 2.0, 3.0, 4.0];
 /// let mut block = MonoViewMut::from_slice(&mut data);
@@ -37,7 +37,7 @@ impl<'a, S: Sample> MonoViewMut<'a, S> {
     /// # Example
     ///
     /// ```
-    /// use audio_blocks::{mono::MonoViewMut, AudioBlock};
+    /// use audio_block::{mono::MonoViewMut, AudioBlock};
     ///
     /// let mut samples = [1.0, 2.0, 3.0, 4.0, 5.0];
     /// let mut block = MonoViewMut::from_slice(&mut samples);
@@ -70,7 +70,7 @@ impl<'a, S: Sample> MonoViewMut<'a, S> {
     /// # Example
     ///
     /// ```
-    /// use audio_blocks::{mono::MonoViewMut, AudioBlock};
+    /// use audio_block::{mono::MonoViewMut, AudioBlock};
     ///
     /// let mut samples = [1.0, 2.0, 3.0, 4.0, 5.0];
     /// let mut block = MonoViewMut::from_slice_limited(&mut samples, 3, 5);
@@ -104,7 +104,7 @@ impl<'a, S: Sample> MonoViewMut<'a, S> {
     /// # Example
     ///
     /// ```
-    /// use audio_blocks::{mono::MonoViewMut, AudioBlock};
+    /// use audio_block::{mono::MonoViewMut, AudioBlock};
     ///
     /// let mut samples = [1.0, 2.0, 3.0, 4.0, 5.0];
     /// let mut block = unsafe { MonoViewMut::from_ptr(samples.as_mut_ptr(), 5) };

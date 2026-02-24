@@ -21,7 +21,7 @@ use super::{view::PlanarView, view_mut::PlanarViewMut};
 /// # Example
 ///
 /// ```
-/// use audio_blocks::*;
+/// use audio_block::*;
 ///
 /// let block = Planar::new(2, 3);
 /// let mut block = Planar::from_block(&block);

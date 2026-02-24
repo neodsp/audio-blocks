@@ -24,7 +24,7 @@ use crate::{
 /// # Example
 ///
 /// ```
-/// use audio_blocks::*;
+/// use audio_block::*;
 ///
 /// let block = Interleaved::new(2, 3);
 /// let mut block = Interleaved::from_block(&block);

@@ -14,7 +14,7 @@ use crate::{AudioBlock, Sample};
 /// # Example
 ///
 /// ```
-/// use audio_blocks::*;
+/// use audio_block::*;
 ///
 /// let data = vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]];
 ///
@@ -268,7 +268,7 @@ impl<S: Sample + core::fmt::Debug, V: AsRef<[S]> + Debug> core::fmt::Debug
 /// # Example
 ///
 /// ```
-/// use audio_blocks::*;
+/// use audio_block::*;
 ///
 /// // Create sample data for two channels with five frames each
 /// let ch1 = vec![0.0f32, 1.0, 2.0, 3.0, 4.0];

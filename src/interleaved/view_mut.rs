@@ -18,7 +18,7 @@ use crate::{
 /// # Example
 ///
 /// ```
-/// use audio_blocks::*;
+/// use audio_block::*;
 ///
 /// let mut data = vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0];
 ///

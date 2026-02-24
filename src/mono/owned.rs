@@ -22,7 +22,7 @@ use crate::{AudioBlock, AudioBlockMut, Sample};
 /// # Example
 ///
 /// ```
-/// use audio_blocks::*;
+/// use audio_block::*;
 ///
 /// let mut block = Mono::new(512);
 ///
@@ -57,7 +57,7 @@ impl<S: Sample + Default> Mono<S> {
     /// # Example
     ///
     /// ```
-    /// use audio_blocks::{mono::Mono, AudioBlock};
+    /// use audio_block::{mono::Mono, AudioBlock};
     ///
     /// let block = Mono::<f32>::new(1024);
     /// assert_eq!(block.num_frames(), 1024);

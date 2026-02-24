@@ -14,7 +14,7 @@ use crate::{AudioBlock, Sample, iter::StridedSampleIter};
 /// # Example
 ///
 /// ```
-/// use audio_blocks::*;
+/// use audio_block::*;
 ///
 /// let data = vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0];
 ///

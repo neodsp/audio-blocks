@@ -1,4 +1,4 @@
-use audio_blocks::{
+use audio_block::{
     AudioBlockMut, AudioBlockOpsMut, interleaved::Interleaved, planar::Planar,
     sequential::Sequential,
 };

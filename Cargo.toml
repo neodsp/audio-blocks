@@ -5,9 +5,9 @@ description = "Traits to handle all audio data layouts in real-time processes"
 edition = "2024"
 keywords = ["audio", "dsp", "neodsp", "no-std", "real-time"]
 license = "MIT OR Apache-2.0"
-name = "audio-blocks"
+name = "audio-block"
 readme = "README.md"
-repository = "https://github.com/neodsp/audio-blocks"
+repository = "https://github.com/neodsp/audio-block"
 rust-version = "1.85.0"
 version = "0.7.0"
 
@@ -25,4 +25,4 @@ std = []
 
 [[bench]]
 harness = false
-name = "blocks"
+name = "block-types"

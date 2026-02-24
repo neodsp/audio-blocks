@@ -13,7 +13,7 @@ use crate::{AudioBlock, Sample};
 /// # Example
 ///
 /// ```
-/// use audio_blocks::{mono::MonoView, AudioBlock};
+/// use audio_block::{mono::MonoView, AudioBlock};
 ///
 /// let data = vec![0.0, 1.0, 2.0, 3.0, 4.0];
 /// let block = MonoView::from_slice(&data);
@@ -37,7 +37,7 @@ impl<'a, S: Sample> MonoView<'a, S> {
     /// # Example
     ///
     /// ```
-    /// use audio_blocks::{mono::MonoView, AudioBlock};
+    /// use audio_block::{mono::MonoView, AudioBlock};
     ///
     /// let samples = [1.0, 2.0, 3.0, 4.0, 5.0];
     /// let block = MonoView::from_slice(&samples);
@@ -70,7 +70,7 @@ impl<'a, S: Sample> MonoView<'a, S> {
     /// # Example
     ///
     /// ```
-    /// use audio_blocks::{mono::MonoView, AudioBlock};
+    /// use audio_block::{mono::MonoView, AudioBlock};
     ///
     /// let samples = [1.0, 2.0, 3.0, 4.0, 5.0];
     /// let block = MonoView::from_slice_limited(&samples, 3, 5);
@@ -104,7 +104,7 @@ impl<'a, S: Sample> MonoView<'a, S> {
     /// # Example
     ///
     /// ```
-    /// use audio_blocks::{mono::MonoView, AudioBlock};
+    /// use audio_block::{mono::MonoView, AudioBlock};
     ///
     /// let samples = [1.0, 2.0, 3.0, 4.0, 5.0];
     /// let block = unsafe { MonoView::from_ptr(samples.as_ptr(), 5) };
