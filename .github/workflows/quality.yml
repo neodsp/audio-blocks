@@ -75,6 +75,7 @@ jobs:
 
   readme:
     name: 📖 README Check
+    runs-on: ubuntu-latest
     run: |
       cargo install cargo-rdme
       cargo rdme --check
