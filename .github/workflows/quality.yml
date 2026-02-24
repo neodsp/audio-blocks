@@ -74,7 +74,7 @@ jobs:
       - run: cargo check --all-features
 
   readme:
-    name: Check if the README is up to date.
+    name: 📖 README Check
     run: |
       cargo install cargo-rdme
       cargo rdme --check
