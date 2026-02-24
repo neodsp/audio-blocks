@@ -14,7 +14,7 @@ use crate::{AudioBlock, AudioBlockMut, Sample};
 /// # Example
 ///
 /// ```
-/// use audio_block::{mono::MonoViewMut, AudioBlock};
+/// use audio_blocks::{mono::MonoViewMut, AudioBlock};
 ///
 /// let mut data = vec![0.0, 1.0, 2.0, 3.0, 4.0];
 /// let mut block = MonoViewMut::from_slice(&mut data);
@@ -37,7 +37,7 @@ impl<'a, S: Sample> MonoViewMut<'a, S> {
     /// # Example
     ///
     /// ```
-    /// use audio_block::{mono::MonoViewMut, AudioBlock};
+    /// use audio_blocks::{mono::MonoViewMut, AudioBlock};
     ///
     /// let mut samples = [1.0, 2.0, 3.0, 4.0, 5.0];
     /// let mut block = MonoViewMut::from_slice(&mut samples);
@@ -70,7 +70,7 @@ impl<'a, S: Sample> MonoViewMut<'a, S> {
     /// # Example
     ///
     /// ```
-    /// use audio_block::{mono::MonoViewMut, AudioBlock};
+    /// use audio_blocks::{mono::MonoViewMut, AudioBlock};
     ///
     /// let mut samples = [1.0, 2.0, 3.0, 4.0, 5.0];
     /// let mut block = MonoViewMut::from_slice_limited(&mut samples, 3, 5);
@@ -104,7 +104,7 @@ impl<'a, S: Sample> MonoViewMut<'a, S> {
     /// # Example
     ///
     /// ```
-    /// use audio_block::{mono::MonoViewMut, AudioBlock};
+    /// use audio_blocks::{mono::MonoViewMut, AudioBlock};
     ///
     /// let mut samples = [1.0, 2.0, 3.0, 4.0, 5.0];
     /// let mut block = unsafe { MonoViewMut::from_ptr(samples.as_mut_ptr(), 5) };
@@ -272,7 +272,7 @@ impl<S: Sample> AudioBlockMut<S> for MonoViewMut<'_, S> {
     fn set_num_channels_visible(&mut self, num_channels: u16) {
         assert_eq!(
             num_channels, 1,
-            "audio_block::MonoViewMut can only have 1 channel, got {}",
+            "audio_blocks::MonoViewMut can only have 1 channel, got {}",
             num_channels
         );
     }
@@ -285,13 +285,13 @@ impl<S: Sample> AudioBlockMut<S> for MonoViewMut<'_, S> {
 
     #[nonblocking]
     fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S {
-        assert_eq!(channel, 0, "audio_block::MonoViewMut only has channel 0");
+        assert_eq!(channel, 0, "audio_blocks::MonoViewMut only has channel 0");
         self.sample_mut(frame)
     }
 
     #[nonblocking]
     fn channel_iter_mut(&mut self, channel: u16) -> impl ExactSizeIterator<Item = &mut S> {
-        assert_eq!(channel, 0, "audio_block::MonoViewMut only has channel 0");
+        assert_eq!(channel, 0, "audio_blocks::MonoViewMut only has channel 0");
         self.samples_mut().iter_mut()
     }
 
@@ -325,7 +325,7 @@ impl<S: Sample> AudioBlockMut<S> for MonoViewMut<'_, S> {
 
 impl<S: Sample + core::fmt::Debug> core::fmt::Debug for MonoViewMut<'_, S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "audio_block::MonoViewMut {{")?;
+        writeln!(f, "audio_blocks::MonoViewMut {{")?;
         writeln!(f, "  num_frames: {}", self.num_frames)?;
         writeln!(f, "  num_frames_allocated: {}", self.num_frames_allocated)?;
         writeln!(f, "  samples: {:?}", self.samples())?;
@@ -416,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn test_audio_block_trait() {
+    fn test_audio_blocks_trait() {
         let mut data = [1.0, 2.0, 3.0, 4.0, 5.0];
         let block = MonoViewMut::from_slice(&mut data);
 
@@ -433,7 +433,7 @@ mod tests {
     }
 
     #[test]
-    fn test_audio_block_mut_trait() {
+    fn test_audio_blocks_mut_trait() {
         let mut data = [0.0, 0.0, 0.0, 0.0, 0.0];
         let mut block = MonoViewMut::from_slice(&mut data);
 

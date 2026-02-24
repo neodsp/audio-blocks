@@ -13,7 +13,7 @@ use crate::{AudioBlock, Sample};
 /// # Example
 ///
 /// ```
-/// use audio_block::{mono::MonoView, AudioBlock};
+/// use audio_blocks::{mono::MonoView, AudioBlock};
 ///
 /// let data = vec![0.0, 1.0, 2.0, 3.0, 4.0];
 /// let block = MonoView::from_slice(&data);
@@ -37,7 +37,7 @@ impl<'a, S: Sample> MonoView<'a, S> {
     /// # Example
     ///
     /// ```
-    /// use audio_block::{mono::MonoView, AudioBlock};
+    /// use audio_blocks::{mono::MonoView, AudioBlock};
     ///
     /// let samples = [1.0, 2.0, 3.0, 4.0, 5.0];
     /// let block = MonoView::from_slice(&samples);
@@ -70,7 +70,7 @@ impl<'a, S: Sample> MonoView<'a, S> {
     /// # Example
     ///
     /// ```
-    /// use audio_block::{mono::MonoView, AudioBlock};
+    /// use audio_blocks::{mono::MonoView, AudioBlock};
     ///
     /// let samples = [1.0, 2.0, 3.0, 4.0, 5.0];
     /// let block = MonoView::from_slice_limited(&samples, 3, 5);
@@ -104,7 +104,7 @@ impl<'a, S: Sample> MonoView<'a, S> {
     /// # Example
     ///
     /// ```
-    /// use audio_block::{mono::MonoView, AudioBlock};
+    /// use audio_blocks::{mono::MonoView, AudioBlock};
     ///
     /// let samples = [1.0, 2.0, 3.0, 4.0, 5.0];
     /// let block = unsafe { MonoView::from_ptr(samples.as_ptr(), 5) };
@@ -202,13 +202,13 @@ impl<S: Sample> AudioBlock<S> for MonoView<'_, S> {
 
     #[nonblocking]
     fn sample(&self, channel: u16, frame: usize) -> S {
-        assert_eq!(channel, 0, "audio_block::MonoView only has channel 0");
+        assert_eq!(channel, 0, "audio_blocks::MonoView only has channel 0");
         self.sample(frame)
     }
 
     #[nonblocking]
     fn channel_iter(&self, channel: u16) -> impl ExactSizeIterator<Item = &S> {
-        assert_eq!(channel, 0, "audio_block::MonoView only has channel 0");
+        assert_eq!(channel, 0, "audio_blocks::MonoView only has channel 0");
         self.samples().iter()
     }
 
@@ -236,7 +236,7 @@ impl<S: Sample> AudioBlock<S> for MonoView<'_, S> {
 
 impl<S: Sample + core::fmt::Debug> core::fmt::Debug for MonoView<'_, S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "audio_block::MonoView {{")?;
+        writeln!(f, "audio_blocks::MonoView {{")?;
         writeln!(f, "  num_frames: {}", self.num_frames)?;
         writeln!(f, "  num_frames_allocated: {}", self.num_frames_allocated)?;
         writeln!(f, "  samples: {:?}", self.samples())?;
@@ -303,7 +303,7 @@ mod tests {
     }
 
     #[test]
-    fn test_audio_block_trait() {
+    fn test_audio_blocks_trait() {
         let data = [1.0, 2.0, 3.0, 4.0, 5.0];
         let block = MonoView::from_slice(&data);
 

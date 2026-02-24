@@ -18,7 +18,7 @@ use crate::{
 /// # Example
 ///
 /// ```
-/// use audio_block::*;
+/// use audio_blocks::*;
 ///
 /// let mut data = vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0];
 ///
@@ -458,7 +458,7 @@ impl<S: Sample> AudioBlockMut<S> for SequentialViewMut<'_, S> {
 
 impl<S: Sample + core::fmt::Debug> core::fmt::Debug for SequentialViewMut<'_, S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "audio_block::SequentialViewMut {{")?;
+        writeln!(f, "audio_blocks::SequentialViewMut {{")?;
         writeln!(f, "  num_channels: {}", self.num_channels)?;
         writeln!(f, "  num_frames: {}", self.num_frames)?;
         writeln!(

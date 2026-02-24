@@ -22,7 +22,7 @@ use crate::{AudioBlock, AudioBlockMut, Sample};
 /// # Example
 ///
 /// ```
-/// use audio_block::*;
+/// use audio_blocks::*;
 ///
 /// let mut block = Mono::new(512);
 ///
@@ -57,7 +57,7 @@ impl<S: Sample + Default> Mono<S> {
     /// # Example
     ///
     /// ```
-    /// use audio_block::{mono::Mono, AudioBlock};
+    /// use audio_blocks::{mono::Mono, AudioBlock};
     ///
     /// let block = Mono::<f32>::new(1024);
     /// assert_eq!(block.num_frames(), 1024);
@@ -307,13 +307,13 @@ impl<S: Sample> AudioBlockMut<S> for Mono<S> {
 
     #[nonblocking]
     fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S {
-        assert_eq!(channel, 0, "audio_block::Mono only has channel 0");
+        assert_eq!(channel, 0, "audio_blocks::Mono only has channel 0");
         self.sample_mut(frame)
     }
 
     #[nonblocking]
     fn channel_iter_mut(&mut self, channel: u16) -> impl ExactSizeIterator<Item = &mut S> {
-        assert_eq!(channel, 0, "audio_block::Mono only has channel 0");
+        assert_eq!(channel, 0, "audio_blocks::Mono only has channel 0");
         self.samples_mut().iter_mut()
     }
 
@@ -350,7 +350,7 @@ impl<S: Sample> AudioBlockMut<S> for Mono<S> {
 
 impl<S: Sample + core::fmt::Debug> core::fmt::Debug for Mono<S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "audio_block::Mono {{")?;
+        writeln!(f, "audio_blocks::Mono {{")?;
         writeln!(f, "  num_frames: {}", self.num_frames)?;
         writeln!(f, "  num_frames_allocated: {}", self.num_frames_allocated)?;
         writeln!(f, "  samples: {:?}", self.samples())?;
@@ -414,7 +414,7 @@ mod tests {
     }
 
     #[test]
-    fn test_audio_block_trait() {
+    fn test_audio_blocks_trait() {
         let block = Mono::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
 
         assert_eq!(block.num_channels(), 1);
@@ -430,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn test_audio_block_mut_trait() {
+    fn test_audio_blocks_mut_trait() {
         let mut block = Mono::<f32>::new(5);
 
         for (i, sample) in block.channel_iter_mut(0).enumerate() {

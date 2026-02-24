@@ -1,6 +1,6 @@
 <!-- cargo-rdme start -->
 
-# audio-block
+# audio-blocks
 
 Real-time safe abstractions over audio data with support for all common layouts.
 
@@ -8,12 +8,12 @@ Real-time safe abstractions over audio data with support for all common layouts.
 
 Install:
 ```sh
-cargo add audio-block
+cargo add audio-blocks
 ```
 
 Basic planar usage (most common for DSP):
 ```rust
-use audio_block::*;
+use audio_blocks::*;
 
 // Create a planar block - each channel gets its own buffer
 let mut block = Planar::<f32>::new(2, 512); // 2 channels, 512 frames
@@ -83,7 +83,7 @@ fn process<F: Copy + 'static + std::ops::MulAssign>(block: &mut impl AudioBlockM
 ### Owned Blocks
 
 ```rust
-use audio_block::*;
+use audio_blocks::*;
 
 // Allocate with default values (zero)
 let mut block = Planar::<f32>::new(2, 512);       // 2 channels, 512 frames
@@ -105,7 +105,7 @@ Allocation only happens when creating owned blocks. Never do that in real-time c
 ### Views (zero-allocation, borrows data)
 
 ```rust
-use audio_block::*;
+use audio_blocks::*;
 
 let channel_data = vec![[0.0f32; 512], [0.0f32; 512]];
 let data = vec![0.0f32; 1024];
@@ -133,7 +133,7 @@ let block = adapter.planar_view();
 Import the extension traits for additional operations:
 
 ```rust
-use audio_block::{AudioBlockOps, AudioBlockOpsMut};
+use audio_blocks::{AudioBlockOps, AudioBlockOpsMut};
 ```
 
 ### Copying and Clearing
@@ -344,7 +344,7 @@ let _ = block.num_frames_allocated();
 For operations that process all allocated memory (including non-visible samples):
 
 ```rust
-use audio_block::AudioBlockOpsMut;
+use audio_blocks::AudioBlockOpsMut;
 
 block.for_each_allocated(|sample| *sample *= 0.5);
 block.enumerate_allocated(|_ch, _frame, sample| {

@@ -24,7 +24,7 @@ use crate::{
 /// # Example
 ///
 /// ```
-/// use audio_block::*;
+/// use audio_blocks::*;
 ///
 /// let block = Sequential::new(2, 3);
 /// let mut block = Sequential::from_block(&block);
@@ -473,7 +473,7 @@ impl<S: Sample> AudioBlockMut<S> for Sequential<S> {
 
 impl<S: Sample + core::fmt::Debug> core::fmt::Debug for Sequential<S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "audio_block::Sequential {{")?;
+        writeln!(f, "audio_blocks::Sequential {{")?;
         writeln!(f, "  num_channels: {}", self.num_channels)?;
         writeln!(f, "  num_frames: {}", self.num_frames)?;
         writeln!(

@@ -14,7 +14,7 @@ use crate::{AudioBlock, Sample};
 /// # Example
 ///
 /// ```
-/// use audio_block::*;
+/// use audio_blocks::*;
 ///
 /// let data = vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]];
 ///
@@ -238,7 +238,7 @@ impl<S: Sample + core::fmt::Debug, V: AsRef<[S]> + Debug> core::fmt::Debug
     for PlanarView<'_, S, V>
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "audio_block::PlanarView {{")?;
+        writeln!(f, "audio_blocks::PlanarView {{")?;
         writeln!(f, "  num_channels: {}", self.num_channels)?;
         writeln!(f, "  num_frames: {}", self.num_frames)?;
         writeln!(
@@ -268,7 +268,7 @@ impl<S: Sample + core::fmt::Debug, V: AsRef<[S]> + Debug> core::fmt::Debug
 /// # Example
 ///
 /// ```
-/// use audio_block::*;
+/// use audio_blocks::*;
 ///
 /// // Create sample data for two channels with five frames each
 /// let ch1 = vec![0.0f32, 1.0, 2.0, 3.0, 4.0];

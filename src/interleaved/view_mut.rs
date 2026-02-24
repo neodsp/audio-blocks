@@ -18,7 +18,7 @@ use crate::{
 /// # Example
 ///
 /// ```
-/// use audio_block::*;
+/// use audio_blocks::*;
 ///
 /// let mut data = vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0];
 ///
@@ -456,7 +456,7 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
 
 impl<S: Sample + core::fmt::Debug> core::fmt::Debug for InterleavedViewMut<'_, S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "audio_block::InterleavedViewMut {{")?;
+        writeln!(f, "audio_blocks::InterleavedViewMut {{")?;
         writeln!(f, "  num_channels: {}", self.num_channels)?;
         writeln!(f, "  num_frames: {}", self.num_frames)?;
         writeln!(

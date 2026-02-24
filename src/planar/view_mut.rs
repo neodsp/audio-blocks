@@ -16,7 +16,7 @@ use super::PlanarView;
 /// # Example
 ///
 /// ```
-/// use audio_block::*;
+/// use audio_blocks::*;
 ///
 /// let mut data = vec![[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]];
 ///
@@ -377,7 +377,7 @@ impl<S: Sample + core::fmt::Debug, V: AsMut<[S]> + AsRef<[S]> + core::fmt::Debug
     for PlanarViewMut<'_, S, V>
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "audio_block::PlanarViewMut {{")?;
+        writeln!(f, "audio_blocks::PlanarViewMut {{")?;
         writeln!(f, "  num_channels: {}", self.num_channels)?;
         writeln!(f, "  num_frames: {}", self.num_frames)?;
         writeln!(
@@ -407,7 +407,7 @@ impl<S: Sample + core::fmt::Debug, V: AsMut<[S]> + AsRef<[S]> + core::fmt::Debug
 /// # Example
 ///
 /// ```
-/// use audio_block::*;
+/// use audio_blocks::*;
 ///
 /// // Create sample data for two channels with five frames each
 /// let mut ch1 = vec![0.0f32, 1.0, 2.0, 3.0, 4.0];
