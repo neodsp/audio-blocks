@@ -504,7 +504,7 @@ mod tests {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
         let mut block = InterleavedViewMut::from_slice(&mut data, 2);
 
-        let mut seen = vec![];
+        let mut seen = Vec::with_capacity(8);
         block.enumerate(|c, f, v| {
             seen.push((c, f, *v));
         });
@@ -558,7 +558,7 @@ mod tests {
         // Resize to half
         block.set_visible(2, 2);
 
-        let mut seen = vec![];
+        let mut seen = Vec::with_capacity(8);
         block.enumerate_allocated(|c, f, v| {
             seen.push((c, f, *v));
             *v = 0.0;
