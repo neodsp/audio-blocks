@@ -54,16 +54,10 @@
 //! **Mono** - `[sample0, sample1, sample2, ...]`
 //! Simplified single-channel block with a streamlined API that doesn't require channel indexing.
 //!
-//! ## Core Traits
-//!
-//! Use `impl AudioBlock<f32>` / `impl AudioBlockMut<f32>` to write layout-generic functions
-//! (as shown above). These traits are also generic over the sample type (`f32`, `f64`, `i16`, etc.).
-//!
 //! ## Creating Blocks
 //!
-//! Each block type provides `new(channels, frames)` for owned allocation and
-//! `from_slice()` to copy from existing data. Allocation only happens when creating
-//! owned blocks — never do this in real-time contexts.
+//! Owned blocks allocate via `new()` — never do this in real-time contexts.
+//! Views borrow existing data via `from_slice()` or `from_ptr()` and are always real-time safe.
 //!
 //! | Owned (allocates) | View (borrows data) |
 //! |---|---|
@@ -76,6 +70,9 @@
 //! use [`PlanarPtrAdapter`].
 //!
 //! ## Traits
+//!
+//! Use `impl AudioBlock<f32>` / `impl AudioBlockMut<f32>` to write layout-generic functions
+//! (as shown above). These traits are also generic over the sample type (`f32`, `f64`, `i16`, etc.).
 //!
 //! | Trait | Purpose |
 //! |---|---|
