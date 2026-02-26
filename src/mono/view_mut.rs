@@ -246,24 +246,24 @@ impl<S: Sample> AudioBlock<S> for AudioBlockMonoViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn channel_iter(&self, channel: u16) -> impl Iterator<Item = &S> {
+    fn channel_iter(&self, channel: u16) -> impl ExactSizeIterator<Item = &S> {
         assert_eq!(channel, 0, "AudioBlockMonoViewMut only has channel 0");
         self.samples().iter()
     }
 
     #[nonblocking]
-    fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn channels_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         core::iter::once(self.samples().iter())
     }
 
     #[nonblocking]
-    fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S> {
+    fn frame_iter(&self, frame: usize) -> impl ExactSizeIterator<Item = &S> {
         assert!(frame < self.num_frames);
         core::iter::once(&self.data[frame])
     }
 
     #[nonblocking]
-    fn frames_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn frames_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         self.data.iter().take(self.num_frames).map(core::iter::once)
     }
 
@@ -298,7 +298,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockMonoViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn channel_iter_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S> {
+    fn channel_iter_mut(&mut self, channel: u16) -> impl ExactSizeIterator<Item = &mut S> {
         assert_eq!(channel, 0, "AudioBlockMonoViewMut only has channel 0");
         self.samples_mut().iter_mut()
     }
@@ -306,19 +306,21 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockMonoViewMut<'_, S> {
     #[nonblocking]
     fn channels_iter_mut(
         &mut self,
-    ) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
         core::iter::once(self.samples_mut().iter_mut())
     }
 
     #[nonblocking]
-    fn frame_iter_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S> {
+    fn frame_iter_mut(&mut self, frame: usize) -> impl ExactSizeIterator<Item = &mut S> {
         assert!(frame < self.num_frames);
         let ptr = &mut self.data[frame] as *mut S;
         core::iter::once(unsafe { &mut *ptr })
     }
 
     #[nonblocking]
-    fn frames_iter_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_ {
+    fn frames_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
         let num_frames = self.num_frames;
         self.data.iter_mut().take(num_frames).map(core::iter::once)
     }

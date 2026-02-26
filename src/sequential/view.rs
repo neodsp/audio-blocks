@@ -165,7 +165,7 @@ impl<'a, S: Sample> AudioBlockSequentialView<'a, S> {
     ///
     /// Each channel is represented as a slice of samples.
     #[nonblocking]
-    pub fn channels(&self) -> impl Iterator<Item = &[S]> {
+    pub fn channels(&self) -> impl ExactSizeIterator<Item = &[S]> {
         self.data
             .chunks(self.num_frames_allocated)
             .take(self.num_channels as usize)
@@ -233,7 +233,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
     }
 
     #[nonblocking]
-    fn channel_iter(&self, channel: u16) -> impl Iterator<Item = &S> {
+    fn channel_iter(&self, channel: u16) -> impl ExactSizeIterator<Item = &S> {
         assert!(channel < self.num_channels);
         self.data
             .iter()
@@ -242,7 +242,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
     }
 
     #[nonblocking]
-    fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn channels_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         let num_frames = self.num_frames; // Visible frames per channel
         let num_frames_allocated = self.num_frames_allocated; // Allocated frames per channel (chunk size)
 
@@ -253,7 +253,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
     }
 
     #[nonblocking]
-    fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S> {
+    fn frame_iter(&self, frame: usize) -> impl ExactSizeIterator<Item = &S> {
         assert!(frame < self.num_frames);
         self.data
             .iter()
@@ -263,7 +263,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
     }
 
     #[nonblocking]
-    fn frames_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn frames_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let stride = self.num_frames_allocated;

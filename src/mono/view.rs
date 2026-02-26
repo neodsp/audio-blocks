@@ -211,24 +211,24 @@ impl<S: Sample> AudioBlock<S> for AudioBlockMonoView<'_, S> {
     }
 
     #[nonblocking]
-    fn channel_iter(&self, channel: u16) -> impl Iterator<Item = &S> {
+    fn channel_iter(&self, channel: u16) -> impl ExactSizeIterator<Item = &S> {
         assert_eq!(channel, 0, "AudioBlockMonoView only has channel 0");
         self.samples().iter()
     }
 
     #[nonblocking]
-    fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn channels_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         core::iter::once(self.samples().iter())
     }
 
     #[nonblocking]
-    fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S> {
+    fn frame_iter(&self, frame: usize) -> impl ExactSizeIterator<Item = &S> {
         assert!(frame < self.num_frames);
         core::iter::once(&self.data[frame])
     }
 
     #[nonblocking]
-    fn frames_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_> + '_ {
+    fn frames_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         self.data.iter().take(self.num_frames).map(core::iter::once)
     }
 
