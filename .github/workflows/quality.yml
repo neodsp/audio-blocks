@@ -76,6 +76,8 @@ jobs:
   readme:
     name: 📖 README Check
     runs-on: ubuntu-latest
-    steps: |
-      cargo install cargo-rdme
-      cargo rdme --check
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-rdme
+      - run: cargo rdme --check
