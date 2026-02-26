@@ -217,10 +217,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockMonoView<'_, S> {
     }
 
     #[nonblocking]
-    fn channels_iter(
-        &self,
-    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
-    {
+    fn channels_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         core::iter::once(self.samples().iter())
     }
 
@@ -231,10 +228,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockMonoView<'_, S> {
     }
 
     #[nonblocking]
-    fn frames_iter(
-        &self,
-    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
-    {
+    fn frames_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         self.data.iter().take(self.num_frames).map(core::iter::once)
     }
 

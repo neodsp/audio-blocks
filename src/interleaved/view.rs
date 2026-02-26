@@ -244,10 +244,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedView<'_, S> {
     }
 
     #[nonblocking]
-    fn channels_iter(
-        &self,
-    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
-    {
+    fn channels_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let stride = self.num_channels_allocated as usize;
@@ -288,10 +285,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedView<'_, S> {
     }
 
     #[nonblocking]
-    fn frames_iter(
-        &self,
-    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
-    {
+    fn frames_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         let num_channels = self.num_channels as usize;
         let num_channels_allocated = self.num_channels_allocated as usize;
         self.data

@@ -182,10 +182,7 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> 
     }
 
     #[nonblocking]
-    fn channels_iter(
-        &self,
-    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
-    {
+    fn channels_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         let num_frames = self.num_frames; // Capture num_frames for the closure
         self.data
             .iter()
@@ -205,10 +202,7 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for AudioBlockPlanarView<'_, S, V> 
     }
 
     #[nonblocking]
-    fn frames_iter(
-        &self,
-    ) -> impl '_
-    + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &'_ S>> {
+    fn frames_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &'_ S>> {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let data_slice: &[V] = self.data;

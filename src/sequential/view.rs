@@ -242,10 +242,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
     }
 
     #[nonblocking]
-    fn channels_iter(
-        &self,
-    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
-    {
+    fn channels_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         let num_frames = self.num_frames; // Visible frames per channel
         let num_frames_allocated = self.num_frames_allocated; // Allocated frames per channel (chunk size)
 
@@ -266,10 +263,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockSequentialView<'_, S> {
     }
 
     #[nonblocking]
-    fn frames_iter(
-        &self,
-    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
-    {
+    fn frames_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let stride = self.num_frames_allocated;

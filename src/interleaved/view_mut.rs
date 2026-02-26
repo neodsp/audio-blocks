@@ -295,10 +295,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn channels_iter(
-        &self,
-    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
-    {
+    fn channels_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let stride = self.num_channels_allocated as usize;
@@ -339,10 +336,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockInterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn frames_iter(
-        &self,
-    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
-    {
+    fn frames_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         let num_channels = self.num_channels as usize;
         let num_channels_allocated = self.num_channels_allocated as usize;
         self.data
@@ -388,10 +382,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockInterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn channel_iter_mut(
-        &mut self,
-        channel: u16,
-    ) -> impl ExactSizeIterator<Item = &mut S> {
+    fn channel_iter_mut(&mut self, channel: u16) -> impl ExactSizeIterator<Item = &mut S> {
         assert!(channel < self.num_channels);
         self.data
             .iter_mut()
@@ -403,8 +394,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockInterleavedViewMut<'_, S> {
     #[nonblocking]
     fn channels_iter_mut(
         &mut self,
-    ) -> impl '_
-    + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &mut S>> {
+    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
         let num_channels = self.num_channels as usize;
         let num_frames = self.num_frames;
         let stride = self.num_channels_allocated as usize;
@@ -444,8 +434,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockInterleavedViewMut<'_, S> {
     #[nonblocking]
     fn frames_iter_mut(
         &mut self,
-    ) -> impl '_
-    + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &mut S>> {
+    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
         let num_channels = self.num_channels as usize;
         let num_channels_allocated = self.num_channels_allocated as usize;
         self.data

@@ -252,10 +252,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockMonoViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn channels_iter(
-        &self,
-    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
-    {
+    fn channels_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         core::iter::once(self.samples().iter())
     }
 
@@ -266,10 +263,7 @@ impl<S: Sample> AudioBlock<S> for AudioBlockMonoViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn frames_iter(
-        &self,
-    ) -> impl '_ + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &S>>
-    {
+    fn frames_iter(&self) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &S>> {
         self.data.iter().take(self.num_frames).map(core::iter::once)
     }
 
@@ -304,10 +298,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockMonoViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn channel_iter_mut(
-        &mut self,
-        channel: u16,
-    ) -> impl ExactSizeIterator<Item = &mut S> {
+    fn channel_iter_mut(&mut self, channel: u16) -> impl ExactSizeIterator<Item = &mut S> {
         assert_eq!(channel, 0, "AudioBlockMonoViewMut only has channel 0");
         self.samples_mut().iter_mut()
     }
@@ -315,8 +306,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockMonoViewMut<'_, S> {
     #[nonblocking]
     fn channels_iter_mut(
         &mut self,
-    ) -> impl '_
-    + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &mut S>> {
+    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
         core::iter::once(self.samples_mut().iter_mut())
     }
 
@@ -330,8 +320,7 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockMonoViewMut<'_, S> {
     #[nonblocking]
     fn frames_iter_mut(
         &mut self,
-    ) -> impl '_
-    + ExactSizeIterator<Item = impl '_ + ExactSizeIterator<Item = &mut S>> {
+    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
         let num_frames = self.num_frames;
         self.data.iter_mut().take(num_frames).map(core::iter::once)
     }
