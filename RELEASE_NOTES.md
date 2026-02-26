@@ -19,12 +19,17 @@
 
 - **`copy_from_block` now returns `Option<(u16, usize)>`** — returns `None` if the entire block was copied (exact size match), or `Some((channels_copied, frames_copied))` if a partial copy occurred.
 
+- **`copy_from_block` no longer calls `set_visible`** — previously, `copy_from_block` resized the destination block to `min(src, dst)` channels and frames via `set_visible`. This call has been removed; the destination block's visible size is now left unchanged.
+
+- **`copy_mono_to_all_channels` now returns `Option<usize>`** — previously returned `()`. Now returns `None` if all frames were copied (exact match), or `Some(frames_copied)` if a partial copy occurred. A new `copy_mono_to_all_channels_exact` (panicking) variant has been added.
+
 - **`for_each_including_non_visible` / `enumerate_including_non_visible` renamed** — these methods are now called `for_each_allocated` and `enumerate_allocated` respectively, with improved documentation clarifying when to prefer them over `for_each` / `enumerate`.
 
 ### New Features
 
-- **`mix_to_mono` now returns `Option<usize>`** — a new `mix_to_mono_exact` (panicking) variant has been added. The same pattern applies to `copy_channel_to_mono` and `copy_mono_to_all_channels`.
+- **`mix_to_mono` now returns `Option<usize>`** — a new `mix_to_mono_exact` (panicking) variant has been added.
 - **`copy_channel_to_mono` / `copy_channel_to_mono_exact`** — new ops to copy a single channel into a mono buffer.
+- **`gain` method** — new `gain(S)` method on `AudioBlockOpsMut` applies a gain factor to all samples in the block.
 - **Iterators now implement `ExactSizeIterator`** — `channel_iter`, `frame_iter`, and their mutable counterparts now return `ExactSizeIterator`, enabling `.len()` and better integration with iterator adapters.
 - **`Default` and `Clone` for all owned types** — `Interleaved`, `Planar`, `Sequential`, and `Mono` now implement `Default` and `Clone`.
 
