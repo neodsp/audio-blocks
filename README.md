@@ -1,3 +1,5 @@
+<!-- cargo-rdme start -->
+
 # audio-blocks
 
 Real-time safe abstractions over audio data with support for all common layouts.
@@ -10,11 +12,11 @@ cargo add audio-blocks
 ```
 
 Basic planar usage (most common for DSP):
-```rust,ignore
+```rust
 use audio_blocks::*;
 
 // Create a planar block - each channel gets its own buffer
-let mut block = AudioBlockPlanar::<f32>::new(2, 512); // 2 channels, 512 frames
+let mut block = Planar::<f32>::new(2, 512); // 2 channels, 512 frames
 
 // Process per channel
 for channel in block.channels_mut() {
@@ -25,7 +27,7 @@ for channel in block.channels_mut() {
 ```
 
 Generic function that accepts any layout:
-```rust,ignore
+```rust
 fn process(block: &mut impl AudioBlockMut<f32>) {
     for channel in block.channels_iter_mut() {
         for sample in channel {
@@ -57,7 +59,7 @@ Simplified single-channel block with a streamlined API that doesn't require chan
 
 Write functions that accept any layout:
 
-```rust,ignore
+```rust
 fn process(block: &mut impl AudioBlockMut<f32>) {
     // Works with planar, sequential, or interleaved
 }
@@ -65,9 +67,9 @@ fn process(block: &mut impl AudioBlockMut<f32>) {
 
 Generic across float types:
 
-```rust,ignore
-fn process<F: num::Float + 'static>(block: &mut impl AudioBlockMut<F>) {
-    let gain = F::from(0.5).unwrap();
+```rust
+fn process<F: Copy + 'static + std::ops::MulAssign>(block: &mut impl AudioBlockMut<F>) {
+    let gain: F = todo!();
     for channel in block.channels_iter_mut() {
         for sample in channel {
             *sample *= gain;
@@ -80,58 +82,124 @@ fn process<F: num::Float + 'static>(block: &mut impl AudioBlockMut<F>) {
 
 ### Owned Blocks
 
-```rust,ignore
+```rust
+use audio_blocks::*;
+
 // Allocate with default values (zero)
-let mut block = AudioBlockPlanar::new(2, 512);       // 2 channels, 512 frames
-let mut block = AudioBlockSequential::new(2, 512);  // 2 channels, 512 frames
-let mut block = AudioBlockInterleaved::new(2, 512); // 2 channels, 512 frames
-let mut block = AudioBlockMono::new(512);           // 512 frames
+let mut block = Planar::<f32>::new(2, 512);       // 2 channels, 512 frames
+let mut block = Sequential::<f32>::new(2, 512);   // 2 channels, 512 frames
+let mut block = Interleaved::<f32>::new(2, 512);  // 2 channels, 512 frames
+let mut block = Mono::<f32>::new(512);            // 512 frames
 
 // Copy from existing data
-let mut block = AudioBlockPlanar::from_slice(&channel_data);  // channels derived from slice
-let mut block = AudioBlockSequential::from_slice(&data, 2);   // 2 channels
-let mut block = AudioBlockInterleaved::from_slice(&data, 2);  // 2 channels
-let mut block = AudioBlockMono::from_slice(&data);
+let channel_data = vec![[0.0f32; 512], [0.0f32; 512]];
+let data = vec![0.0f32; 1024];
+let mut block = Planar::from_slice(&channel_data);   // channels derived from slice
+let mut block = Sequential::from_slice(&data, 2);   // 2 channels
+let mut block = Interleaved::from_slice(&data, 2);  // 2 channels
+let mut block = Mono::from_slice(&data);
 ```
 
 Allocation only happens when creating owned blocks. Never do that in real-time contexts.
 
 ### Views (zero-allocation, borrows data)
 
-```rust,ignore
-let block = AudioBlockPlanarView::from_slice(&channel_data);  // channels derived from slice
-let block = AudioBlockSequentialView::from_slice(&data, 2);  // 2 channels
-let block = AudioBlockInterleavedView::from_slice(&data, 2); // 2 channels
-let block = AudioBlockMonoView::from_slice(&data);
+```rust
+use audio_blocks::*;
+
+let channel_data = vec![[0.0f32; 512], [0.0f32; 512]];
+let data = vec![0.0f32; 1024];
+
+let block = PlanarView::from_slice(&channel_data);   // channels derived from slice
+let block = SequentialView::from_slice(&data, 2);   // 2 channels
+let block = InterleavedView::from_slice(&data, 2);  // 2 channels
+let block = MonoView::from_slice(&data);
 ```
 
 From raw pointers:
-```rust,ignore
-let block = unsafe { AudioBlockInterleavedView::from_ptr(ptr, 2, 512) }; // 2 channels, 512 frames
+```rust
+let data = vec![0.0f32; 1024];
+let block = unsafe { InterleavedView::from_ptr(ptr, 2, 512) }; // 2 channels, 512 frames
 ```
 
 Planar requires adapter:
-```rust,ignore
+```rust
 let mut adapter = unsafe { PlanarPtrAdapter::<_, 16>::from_ptr(data, 2, 512) }; // 2 channels, 512 frames
 let block = adapter.planar_view();
 ```
 
 ## Common Operations
 
-```rust,ignore
-use audio_blocks::AudioBlockOps;
+Import the extension traits for additional operations:
 
-block.copy_from_block(&other_block);
-block.fill_with(0.0);
+```rust
+use audio_blocks::{AudioBlockOps, AudioBlockOpsMut};
+```
+
+### Copying and Clearing
+
+```rust
+let other_block = Planar::<f32>::new(2, 512);
+let mut block = Planar::<f32>::new(2, 512);
+
+// Copy from another block (flexible - copies min of both sizes)
+let result = block.copy_from_block(&other_block);
+// Returns None if exact match, Some((channels, frames)) if partial
+
+// Copy with exact size requirement (panics on mismatch)
+block.copy_from_block_exact(&other_block);
+
+// Fill all samples with a value
+block.fill_with(0.5);
+
+// Clear to zero
 block.clear();
+```
+
+### Per-Sample Processing
+
+```rust
+let mut block = Planar::<f32>::new(2, 512);
+
+// Process each sample
 block.for_each(|sample| *sample *= 0.5);
+
+// Process with channel/frame indices
+block.enumerate(|channel, frame, sample| {
+    *sample *= 0.5;
+});
+
+// Apply gain to all samples
+block.gain(0.5);
+```
+
+### Mono Conversions
+
+```rust
+let mut block = Planar::<f32>::new(2, 512);
+let mut mono_data = vec![0.0f32; 512];
+let mut mono_view = MonoViewMut::from_slice(&mut mono_data);
+
+// Mix all channels to mono (averages channels)
+let result = block.mix_to_mono(&mut mono_view);
+// Returns None if exact match, Some(frames_processed) if partial
+
+// Or with exact size requirement
+block.mix_to_mono_exact(&mut mono_view);
+
+// Copy a specific channel to mono
+block.copy_channel_to_mono(&mut mono_view, 0); // channel 0
+
+// Copy mono to all channels of a block
+let mono_ro = MonoView::from_slice(&mono_data);
+block.copy_mono_to_all_channels(&mono_ro);
 ```
 
 ## Working with Slices
 
 Convert generic blocks to concrete types for slice access:
 
-```rust,ignore
+```rust
 fn process(block: &mut impl AudioBlockMut<f32>) {
     if block.layout() == BlockLayout::Planar {
         let mut view = block.as_planar_view_mut().unwrap();
@@ -143,12 +211,12 @@ fn process(block: &mut impl AudioBlockMut<f32>) {
 
 Direct slice access on concrete types:
 
-```rust,ignore
-let mut block = AudioBlockPlanar::new(2, 512); // 2 channels, 512 frames
+```rust
+let mut block = Planar::<f32>::new(2, 512); // 2 channels, 512 frames
 let channel: &[f32] = block.channel(0);
 let raw_data: &[Box<[f32]>] = block.raw_data();
 
-let mut block = AudioBlockInterleaved::new(2, 512); // 2 channels, 512 frames
+let mut block = Interleaved::<f32>::new(2, 512); // 2 channels, 512 frames
 let frame: &[f32] = block.frame(0);
 let raw_data: &[f32] = block.raw_data();
 ```
@@ -158,35 +226,34 @@ let raw_data: &[f32] = block.raw_data();
 ### `AudioBlock`
 
 Size and layout:
-```rust,ignore
-fn num_channels(&self) -> u16;
-fn num_frames(&self) -> usize;
-fn layout(&self) -> BlockLayout;
+```rust
+let channels: u16 = audio.num_channels();
+let frames: usize = audio.num_frames();
+let layout: BlockLayout = audio.layout();
 ```
 
 Sample access:
-```rust,ignore
-fn sample(&self, channel: u16, frame: usize) -> S;
+```rust
+let s: f32 = audio.sample(0, 0);
 ```
 
 Iteration:
-```rust,ignore
-fn channel_iter(&self, channel: u16) -> impl Iterator<Item = &S>;
-fn channels_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_>;
-fn frame_iter(&self, frame: usize) -> impl Iterator<Item = &S>;
-fn frames_iter(&self) -> impl Iterator<Item = impl Iterator<Item = &S> + '_>;
+```rust
+for s in audio.channel_iter(0) { let _: &f32 = s; }
+for ch in audio.channels_iter() { for s in ch { let _: &f32 = s; } }
+for s in audio.frame_iter(0) { let _: &f32 = s; }
+for fr in audio.frames_iter() { for s in fr { let _: &f32 = s; } }
 ```
 
 Generic view (zero-allocation):
-```rust,ignore
-fn as_view(&self) -> impl AudioBlock<S>;
+```rust
+let view = audio.as_view();
 ```
 
 Downcast to concrete type:
-```rust,ignore
-fn as_interleaved_view(&self) -> Option<AudioBlockInterleavedView<'_, S>>;
-fn as_planar_view(&self) -> Option<AudioBlockPlanarView<'_, S, Self::PlanarView>>;
-fn as_sequential_view(&self) -> Option<AudioBlockSequentialView<'_, S>>;
+```rust
+let interleaved: Option<InterleavedView<f32>> = audio.as_interleaved_view();
+let sequential: Option<SequentialView<f32>> = audio.as_sequential_view();
 ```
 
 ### `AudioBlockMut`
@@ -194,55 +261,70 @@ fn as_sequential_view(&self) -> Option<AudioBlockSequentialView<'_, S>>;
 Everything from `AudioBlock` plus:
 
 Resizing:
-```rust,ignore
-fn set_visible(&mut self, num_channels: u16, num_frames: usize);
-fn set_num_channels_visible(&mut self, num_channels: u16);
-fn set_num_frames_visible(&mut self, num_frames: usize);
+```rust
+audio.set_visible(2, 1024);
+audio.set_num_channels_visible(2);
+audio.set_num_frames_visible(1024);
 ```
 
 Mutable access:
-```rust,ignore
-fn sample_mut(&mut self, channel: u16, frame: usize) -> &mut S;
-fn channel_iter_mut(&mut self, channel: u16) -> impl Iterator<Item = &mut S>;
-fn channels_iter_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
-fn frame_iter_mut(&mut self, frame: usize) -> impl Iterator<Item = &mut S>;
-fn frames_iter_mut(&mut self) -> impl Iterator<Item = impl Iterator<Item = &mut S> + '_> + '_;
+```rust
+let s: &mut f32 = audio.sample_mut(0, 0);
+for s in audio.channel_iter_mut(0) { let _: &mut f32 = s; }
+for ch in audio.channels_iter_mut() { for s in ch { let _: &mut f32 = s; } }
+for s in audio.frame_iter_mut(0) { let _: &mut f32 = s; }
+for fr in audio.frames_iter_mut() { for s in fr { let _: &mut f32 = s; } }
 ```
 
 Generic view (zero-allocation):
-```rust,ignore
-fn as_view_mut(&mut self) -> impl AudioBlockMut<S>;
+```rust
+let view = audio.as_view_mut();
 ```
 
 Downcast to concrete type:
-```rust,ignore
-fn as_interleaved_view_mut(&mut self) -> Option<AudioBlockInterleavedViewMut<'_, S>>;
-fn as_planar_view_mut(&mut self) -> Option<AudioBlockPlanarViewMut<'_, S, Self::PlanarView>>;
-fn as_sequential_view_mut(&mut self) -> Option<AudioBlockSequentialViewMut<'_, S>>;
+```rust
+let interleaved: Option<InterleavedViewMut<f32>> = audio.as_interleaved_view_mut();
+let sequential: Option<SequentialViewMut<f32>> = audio.as_sequential_view_mut();
 ```
 
-Operations:
-```rust,ignore
-fn copy_from_block(&mut self, block: &impl AudioBlock<S>);
-fn copy_from_block_resize(&mut self, block: &impl AudioBlock<S>);
-fn for_each(&mut self, f: impl FnMut(&mut S));
-fn enumerate(&mut self, f: impl FnMut(u16, usize, &mut S));
-fn fill_with(&mut self, sample: S);
-fn clear(&mut self);
+### `AudioBlockOps` (extension trait)
+
+Read-only operations on audio blocks:
+```rust
+let _: Option<usize> = block.mix_to_mono(dest);
+block.mix_to_mono_exact(dest);
+let _: Option<usize> = block.copy_channel_to_mono(dest, 0);
+block.copy_channel_to_mono_exact(dest, 0);
+```
+
+### `AudioBlockOpsMut` (extension trait)
+
+Mutable operations on audio blocks:
+```rust
+let _: Option<(u16, usize)> = block.copy_from_block(other);
+block.copy_from_block_exact(other);
+let _: Option<usize> = block.copy_mono_to_all_channels(mono);
+block.copy_mono_to_all_channels_exact(mono);
+block.for_each(|sample| *sample *= 0.5);
+block.enumerate(|_ch, _fr, sample| { *sample *= 0.5; });
+block.for_each_allocated(|sample| *sample *= 0.5);
+block.fill_with(0.5);
+block.clear();
+block.gain(0.5);
 ```
 
 ## Advanced: Variable Buffer Sizes
 
 Blocks separate allocated capacity from visible size. Resize visible portion without reallocation:
 
-```rust,ignore
-let mut block = AudioBlockPlanar::new(2, 512); // 2 channels, 512 frames
+```rust
+let mut block = Planar::<f32>::new(2, 512); // 2 channels, 512 frames
 block.set_num_frames_visible(256); // use only 256 frames
 ```
 
 Create views with limited visibility:
-```rust,ignore
-let view = AudioBlockInterleavedView::from_slice_limited(
+```rust
+let block = InterleavedView::from_slice_limited(
     &data,
     2,   // num_channels_visible
     256, // num_frames_visible
@@ -251,32 +333,31 @@ let view = AudioBlockInterleavedView::from_slice_limited(
 );
 ```
 
-Auto-resize when copying:
-```rust,ignore
-fn process(&mut self, input: &impl AudioBlock<f32>) {
-    self.block.copy_from_block_resize(input);  // Adapts to input size
-}
-```
-
 Query allocation:
-```rust,ignore
-block.num_channels_allocated();
-block.num_frames_allocated();
+```rust
+let _ = block.num_channels_allocated();
+let _ = block.num_frames_allocated();
 ```
 
-## Advanced: Access Non-Visible Samples
+## Advanced: Access Allocated Samples
 
-For operations that can safely process all allocated memory:
+For operations that process all allocated memory (including non-visible samples):
 
-```rust,ignore
-block.for_each_including_non_visible(|sample| *sample *= 0.5);
-block.enumerate_including_non_visible(|ch, frame, sample| {
+```rust
+use audio_blocks::AudioBlockOpsMut;
+
+block.for_each_allocated(|sample| *sample *= 0.5);
+block.enumerate_allocated(|_ch, _frame, sample| {
     // Process including allocated but non-visible samples
+    let _ = sample;
 });
 ```
 
+Note: `fill_with`, `clear`, and `gain` also operate on the entire allocated buffer for efficiency.
+
 Direct memory access:
-```rust,ignore
+```rust
+let block = Sequential::<f32>::new(2, 512);
 let data: &[f32] = block.raw_data();  // Includes non-visible samples
 ```
 
@@ -289,7 +370,7 @@ Iterator performance varies by layout:
 `raw_data()` access is fastest but exposes non-visible samples. For simple operations like gain, processing all samples (including non-visible) can be more efficient.
 
 Check layout before optimization:
-```rust,ignore
+```rust
 match block.layout() {
     BlockLayout::Planar => { /* channel-wise processing */ }
     BlockLayout::Interleaved => { /* frame-wise processing */ }
@@ -300,3 +381,5 @@ match block.layout() {
 ## `no_std` Support
 
 Disable default features. Owned blocks require `alloc` or `std` feature.
+
+<!-- cargo-rdme end -->

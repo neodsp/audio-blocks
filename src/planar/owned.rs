@@ -9,7 +9,7 @@ use std::{boxed::Box, vec, vec::Vec};
 
 use crate::{AudioBlock, AudioBlockMut, Sample};
 
-use super::{view::AudioBlockPlanarView, view_mut::AudioBlockPlanarViewMut};
+use super::{view::PlanarView, view_mut::PlanarViewMut};
 
 /// A planar / separate-channel audio block that owns its data.
 ///
@@ -23,8 +23,8 @@ use super::{view::AudioBlockPlanarView, view_mut::AudioBlockPlanarViewMut};
 /// ```
 /// use audio_blocks::*;
 ///
-/// let block = AudioBlockPlanar::new(2, 3);
-/// let mut block = AudioBlockPlanar::from_block(&block);
+/// let block = Planar::new(2, 3);
+/// let mut block = Planar::from_block(&block);
 ///
 /// block.channel_mut(0).fill(0.0);
 /// block.channel_mut(1).fill(1.0);
@@ -32,7 +32,8 @@ use super::{view::AudioBlockPlanarView, view_mut::AudioBlockPlanarViewMut};
 /// assert_eq!(block.channel(0), &[0.0, 0.0, 0.0]);
 /// assert_eq!(block.channel(1), &[1.0, 1.0, 1.0]);
 /// ```
-pub struct AudioBlockPlanar<S: Sample> {
+#[derive(Default, Clone)]
+pub struct Planar<S: Sample> {
     data: Box<[Box<[S]>]>,
     num_channels: u16,
     num_frames: usize,
@@ -40,7 +41,7 @@ pub struct AudioBlockPlanar<S: Sample> {
     num_frames_allocated: usize,
 }
 
-impl<S: Sample + Default> AudioBlockPlanar<S> {
+impl<S: Sample + Default> Planar<S> {
     /// Creates a new audio block with the specified dimensions.
     ///
     /// Allocates memory for a new planar audio block with exactly the specified
@@ -70,7 +71,7 @@ impl<S: Sample + Default> AudioBlockPlanar<S> {
     }
 }
 
-impl<S: Sample> AudioBlockPlanar<S> {
+impl<S: Sample> Planar<S> {
     /// Creates a new audio block from a slice of planar audio data.
     ///
     /// # Parameters
@@ -225,21 +226,17 @@ impl<S: Sample> AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    pub fn view(&self) -> AudioBlockPlanarView<'_, S, Box<[S]>> {
-        AudioBlockPlanarView::from_slice_limited(&self.data, self.num_channels, self.num_frames)
+    pub fn view(&self) -> PlanarView<'_, S, Box<[S]>> {
+        PlanarView::from_slice_limited(&self.data, self.num_channels, self.num_frames)
     }
 
     #[nonblocking]
-    pub fn view_mut(&mut self) -> AudioBlockPlanarViewMut<'_, S, Box<[S]>> {
-        AudioBlockPlanarViewMut::from_slice_limited(
-            &mut self.data,
-            self.num_channels,
-            self.num_frames,
-        )
+    pub fn view_mut(&mut self) -> PlanarViewMut<'_, S, Box<[S]>> {
+        PlanarViewMut::from_slice_limited(&mut self.data, self.num_channels, self.num_frames)
     }
 }
 
-impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
+impl<S: Sample> AudioBlock<S> for Planar<S> {
     type PlanarView = Box<[S]>;
 
     #[nonblocking]
@@ -343,12 +340,12 @@ impl<S: Sample> AudioBlock<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn as_planar_view(&self) -> Option<AudioBlockPlanarView<'_, S, Self::PlanarView>> {
+    fn as_planar_view(&self) -> Option<PlanarView<'_, S, Self::PlanarView>> {
         Some(self.view())
     }
 }
 
-impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
+impl<S: Sample> AudioBlockMut<S> for Planar<S> {
     type PlanarViewMut = Box<[S]>;
 
     #[nonblocking]
@@ -438,16 +435,14 @@ impl<S: Sample> AudioBlockMut<S> for AudioBlockPlanar<S> {
     }
 
     #[nonblocking]
-    fn as_planar_view_mut(
-        &mut self,
-    ) -> Option<AudioBlockPlanarViewMut<'_, S, Self::PlanarViewMut>> {
+    fn as_planar_view_mut(&mut self) -> Option<PlanarViewMut<'_, S, Self::PlanarViewMut>> {
         Some(self.view_mut())
     }
 }
 
-impl<S: Sample + core::fmt::Debug> core::fmt::Debug for AudioBlockPlanar<S> {
+impl<S: Sample + core::fmt::Debug> core::fmt::Debug for Planar<S> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        writeln!(f, "AudioBlockPlanar {{")?;
+        writeln!(f, "audio_blocks::Planar {{")?;
         writeln!(f, "  num_channels: {}", self.num_channels)?;
         writeln!(f, "  num_frames: {}", self.num_frames)?;
         writeln!(
@@ -472,12 +467,12 @@ impl<S: Sample + core::fmt::Debug> core::fmt::Debug for AudioBlockPlanar<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interleaved::AudioBlockInterleavedView;
+    use crate::interleaved::InterleavedView;
     use rtsan_standalone::no_sanitize_realtime;
 
     #[test]
     fn test_member_functions() {
-        let mut block = AudioBlockPlanar::<f32>::new(3, 4);
+        let mut block = Planar::<f32>::new(3, 4);
         block.channel_mut(0).copy_from_slice(&[0.0, 1.0, 2.0, 3.0]);
         block.channel_mut(1).copy_from_slice(&[4.0, 5.0, 6.0, 7.0]);
 
@@ -538,7 +533,7 @@ mod tests {
 
     #[test]
     fn test_samples() {
-        let mut block = AudioBlockPlanar::<f32>::new(2, 5);
+        let mut block = Planar::<f32>::new(2, 5);
 
         let num_frames = block.num_frames();
         for ch in 0..block.num_channels() {
@@ -559,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_channel_iter() {
-        let mut block = AudioBlockPlanar::<f32>::new(2, 5);
+        let mut block = Planar::<f32>::new(2, 5);
 
         let channel = block.channel_iter(0).copied().collect::<Vec<_>>();
         assert_eq!(channel, vec![0.0, 0.0, 0.0, 0.0, 0.0]);
@@ -583,7 +578,7 @@ mod tests {
 
     #[test]
     fn test_channel_iters() {
-        let mut block = AudioBlockPlanar::<f32>::new(2, 5);
+        let mut block = Planar::<f32>::new(2, 5);
 
         let mut channels_iter = block.channels_iter();
         let channel = channels_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -618,7 +613,7 @@ mod tests {
 
     #[test]
     fn test_frame_iter() {
-        let mut block = AudioBlockPlanar::<f32>::new(2, 5);
+        let mut block = Planar::<f32>::new(2, 5);
 
         for i in 0..block.num_frames() {
             let frame = block.frame_iter(i).copied().collect::<Vec<_>>();
@@ -647,7 +642,7 @@ mod tests {
 
     #[test]
     fn test_frame_iters() {
-        let mut block = AudioBlockPlanar::<f32>::new(3, 6);
+        let mut block = Planar::<f32>::new(3, 6);
         block.set_visible(2, 5);
 
         let num_frames = block.num_frames;
@@ -687,7 +682,7 @@ mod tests {
 
     #[test]
     fn test_from_block() {
-        let block = AudioBlockPlanar::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
+        let block = Planar::<f32>::from_block(&InterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
         ));
@@ -727,7 +722,7 @@ mod tests {
 
     #[test]
     fn test_view() {
-        let block = AudioBlockPlanar::<f32>::from_block(&AudioBlockInterleavedView::from_slice(
+        let block = Planar::<f32>::from_block(&InterleavedView::from_slice(
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
         ));
@@ -749,7 +744,7 @@ mod tests {
 
     #[test]
     fn test_view_mut() {
-        let mut block = AudioBlockPlanar::<f32>::new(2, 5);
+        let mut block = Planar::<f32>::new(2, 5);
         assert!(block.as_interleaved_view().is_none());
         assert!(block.as_planar_view().is_some());
         assert!(block.as_sequential_view().is_none());
@@ -775,7 +770,7 @@ mod tests {
 
     #[test]
     fn test_resize() {
-        let mut block = AudioBlockPlanar::<f32>::new(3, 10);
+        let mut block = Planar::<f32>::new(3, 10);
         assert_eq!(block.num_channels(), 3);
         assert_eq!(block.num_frames(), 10);
         assert_eq!(block.num_channels_allocated(), 3);
@@ -812,7 +807,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_resize_channels() {
-        let mut block = AudioBlockPlanar::<f32>::new(2, 10);
+        let mut block = Planar::<f32>::new(2, 10);
         block.set_visible(3, 10);
     }
 
@@ -820,7 +815,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_resize_frames() {
-        let mut block = AudioBlockPlanar::<f32>::new(2, 10);
+        let mut block = Planar::<f32>::new(2, 10);
         block.set_visible(2, 11);
     }
 
@@ -828,7 +823,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_channel() {
-        let mut block = AudioBlockPlanar::<f32>::new(2, 10);
+        let mut block = Planar::<f32>::new(2, 10);
         block.set_visible(1, 10);
         let _ = block.channel_iter(1);
     }
@@ -837,7 +832,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_frame() {
-        let mut block = AudioBlockPlanar::<f32>::new(2, 10);
+        let mut block = Planar::<f32>::new(2, 10);
         block.set_visible(2, 5);
         let _ = block.frame_iter(5);
     }
@@ -846,7 +841,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_channel_mut() {
-        let mut block = AudioBlockPlanar::<f32>::new(2, 10);
+        let mut block = Planar::<f32>::new(2, 10);
         block.set_visible(1, 10);
         let _ = block.channel_iter_mut(1);
     }
@@ -855,7 +850,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_wrong_frame_mut() {
-        let mut block = AudioBlockPlanar::<f32>::new(2, 10);
+        let mut block = Planar::<f32>::new(2, 10);
         block.set_visible(2, 5);
         let _ = block.frame_iter_mut(5);
     }
@@ -864,7 +859,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds() {
-        let mut block = AudioBlockPlanar::<f32>::new(3, 4);
+        let mut block = Planar::<f32>::new(3, 4);
         block.set_visible(2, 3);
 
         block.channel(2);
@@ -874,7 +869,7 @@ mod tests {
     #[should_panic]
     #[no_sanitize_realtime]
     fn test_slice_out_of_bounds_mut() {
-        let mut block = AudioBlockPlanar::<f32>::new(3, 4);
+        let mut block = Planar::<f32>::new(3, 4);
         block.set_visible(2, 3);
 
         block.channel_mut(2);
