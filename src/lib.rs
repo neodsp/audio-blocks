@@ -56,88 +56,36 @@
 //!
 //! ## Core Traits
 //!
-//! Write functions that accept any layout:
-//!
-//! ```
-//! # use audio_blocks::*;
-//! fn process(block: &mut impl AudioBlockMut<f32>) {
-//!     // Works with planar, sequential, or interleaved
-//! }
-//! ```
-//!
-//! Generic across float types:
-//!
-//! ```
-//! # use audio_blocks::*;
-//! fn process<F: Copy + 'static + std::ops::MulAssign>(block: &mut impl AudioBlockMut<F>) {
-//!     let gain: F = todo!();
-//!     for channel in block.channels_iter_mut() {
-//!         for sample in channel {
-//!             *sample *= gain;
-//!         }
-//!     }
-//! }
-//! ```
+//! Use `impl AudioBlock<f32>` / `impl AudioBlockMut<f32>` to write layout-generic functions
+//! (as shown above). These traits are also generic over the sample type (`f32`, `f64`, `i16`, etc.).
 //!
 //! ## Creating Blocks
 //!
-//! All block types provide `new(channels, frames)` for owned allocation and
-//! `from_slice()` to copy from existing data. Views borrow data without allocation.
+//! Each block type provides `new(channels, frames)` for owned allocation and
+//! `from_slice()` to copy from existing data. Allocation only happens when creating
+//! owned blocks — never do this in real-time contexts.
 //!
-//! **Owned** (allocates):
-//! - [`Planar::new`], [`Sequential::new`], [`Interleaved::new`], [`Mono::new`]
-//! - [`Planar::from_slice`], [`Sequential::from_slice`], [`Interleaved::from_slice`], [`Mono::from_slice`]
+//! | Owned (allocates) | View (borrows data) |
+//! |---|---|
+//! | [`Planar`] | [`PlanarView`] / [`PlanarViewMut`] |
+//! | [`Sequential`] | [`SequentialView`] / [`SequentialViewMut`] |
+//! | [`Interleaved`] | [`InterleavedView`] / [`InterleavedViewMut`] |
+//! | [`Mono`] | [`MonoView`] / [`MonoViewMut`] |
 //!
-//! **Views** (zero-allocation, borrows data):
-//! - [`PlanarView::from_slice`], [`SequentialView::from_slice`], [`InterleavedView::from_slice`], [`MonoView::from_slice`]
-//! - `from_ptr` for raw pointer access, [`PlanarPtrAdapter`] for planar pointers
+//! Views can also be created from raw pointers (`from_ptr`). For planar pointer data,
+//! use [`PlanarPtrAdapter`].
 //!
-//! ## Trait API
+//! ## Traits
 //!
-//! ### [`AudioBlock`] — read-only access
+//! | Trait | Purpose |
+//! |---|---|
+//! | [`AudioBlock`] | Read-only access: sample access, channel/frame iteration, layout info |
+//! | [`AudioBlockMut`] | Mutable access: sample mutation, resizing visible region, mutable iteration |
+//! | [`AudioBlockOps`] | Read-only operations: mono mixdown, channel extraction |
+//! | [`AudioBlockOpsMut`] | Mutable operations: block copy, gain, clear, fill, per-sample processing |
 //!
-//! - `num_channels()`, `num_frames()`, `layout()`
-//! - `sample(channel, frame)` — direct sample access
-//! - `channel_iter(ch)`, `channels_iter()` — per-channel iteration
-//! - `frame_iter(fr)`, `frames_iter()` — per-frame iteration
-//! - `as_view()` — zero-allocation view
-//! - `as_interleaved_view()`, `as_planar_view()`, `as_sequential_view()` — downcast to concrete type
-//!
-//! ### [`AudioBlockMut`] — mutable access
-//!
-//! Everything from `AudioBlock` plus:
-//! - `sample_mut(channel, frame)` — mutable sample access
-//! - `channel_iter_mut(ch)`, `channels_iter_mut()` — mutable per-channel iteration
-//! - `frame_iter_mut(fr)`, `frames_iter_mut()` — mutable per-frame iteration
-//! - `set_visible(channels, frames)`, `set_num_channels_visible()`, `set_num_frames_visible()` — resize without reallocation
-//! - `as_view_mut()` — zero-allocation mutable view
-//! - `as_interleaved_view_mut()`, `as_planar_view_mut()`, `as_sequential_view_mut()`
-//!
-//! ### [`AudioBlockOps`] — read-only operations (extension trait)
-//!
-//! - `mix_to_mono()` / `mix_to_mono_exact()` — average all channels to mono
-//! - `copy_channel_to_mono()` / `copy_channel_to_mono_exact()` — extract a single channel
-//!
-//! ### [`AudioBlockOpsMut`] — mutable operations (extension trait)
-//!
-//! - `copy_from_block()` / `copy_from_block_exact()` — copy from another block
-//! - `copy_mono_to_all_channels()` / `copy_mono_to_all_channels_exact()` — broadcast mono
-//! - `for_each(fn)`, `enumerate(fn)` — per-sample processing
-//! - `for_each_allocated(fn)`, `enumerate_allocated(fn)` — process all allocated samples (including non-visible)
-//! - `fill_with(value)`, `clear()`, `gain(factor)` — bulk operations
-//!
-//! ## Variable Buffer Sizes
-//!
-//! Blocks separate allocated capacity from visible size. Resize the visible portion
-//! without reallocation via `set_num_frames_visible()` / `set_num_channels_visible()`.
-//! Views support this too via `from_slice_limited()`.
-//!
-//! ## Performance
-//!
-//! - Sequential/Planar: channel iteration is faster
-//! - Interleaved: frame iteration is faster
-//! - `raw_data()` gives direct slice access (includes non-visible samples)
-//! - `fill_with`, `clear`, and `gain` operate on the entire allocated buffer
+//! Blocks also separate allocated capacity from visible size — see [`AudioBlockMut::set_num_frames_visible`]
+//! for real-time safe buffer resizing without reallocation.
 //!
 //! ## `no_std` Support
 //!

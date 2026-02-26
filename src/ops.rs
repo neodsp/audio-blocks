@@ -5,6 +5,10 @@ use crate::{
     mono::{MonoView, MonoViewMut},
 };
 
+/// Read-only operations on audio blocks: mono mixdown and channel extraction.
+///
+/// Automatically implemented for all types that implement [`AudioBlock`].
+/// Import with `use audio_blocks::AudioBlockOps;`.
 pub trait AudioBlockOps<S: Sample> {
     /// Mix all channels to mono by averaging them.
     /// Only processes `min(src_frames, dst_frames)` frames.
@@ -28,6 +32,13 @@ pub trait AudioBlockOps<S: Sample> {
     fn copy_channel_to_mono_exact(&self, dest: &mut MonoViewMut<S>, channel: u16);
 }
 
+/// Mutable operations on audio blocks: block copy, gain, clear, fill, and per-sample processing.
+///
+/// Automatically implemented for all types that implement [`AudioBlockMut`].
+/// Import with `use audio_blocks::AudioBlockOpsMut;`.
+///
+/// Note: [`fill_with`](AudioBlockOpsMut::fill_with), [`clear`](AudioBlockOpsMut::clear), and
+/// [`gain`](AudioBlockOpsMut::gain) operate on the entire allocated buffer for efficiency.
 pub trait AudioBlockOpsMut<S: Sample> {
     /// Copy samples from source block into destination.
     /// Only copies `min(src, dst)` channels and frames.
