@@ -113,7 +113,7 @@ impl<'a, S: Sample, V: AsRef<[S]>> PlanarView<'a, S, V> {
             .map(|channel_data| &channel_data.as_ref()[..self.num_frames])
     }
 
-    /// Provides direct mutable access to the underlying memory.
+    /// Provides direct access to the underlying memory.
     ///
     /// This function gives access to all allocated data, including any reserved capacity
     /// beyond the visible range.

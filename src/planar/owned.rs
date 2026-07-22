@@ -54,10 +54,6 @@ impl<S: Sample + Default> Planar<S> {
     ///
     /// * `num_channels` - The number of audio channels
     /// * `num_frames` - The number of frames per channel
-    ///
-    /// # Panics
-    ///
-    /// Panics if the multiplication of `num_channels` and `num_frames` would overflow a usize.
     #[blocking]
     pub fn new(num_channels: u16, num_frames: usize) -> Self {
         Self {
@@ -402,6 +398,18 @@ impl<S: Sample> AudioBlockMut<S> for Planar<S> {
             .map(move |channel_data| unsafe { channel_data.get_unchecked_mut(frame) })
     }
 
+    /// Returns a mutable iterator that yields a mutable iterator for each frame.
+    ///
+    /// # Aliasing
+    ///
+    /// Because a planar block stores each channel in a separate buffer, every
+    /// yielded frame iterator reborrows the shared channel storage. The frame
+    /// iterators must therefore be consumed one at a time: advancing the outer
+    /// iterator to the next frame invalidates any references obtained from the
+    /// previous frame's iterator, and holding two frame iterators alive
+    /// simultaneously is undefined behavior. For general mutation prefer
+    /// [`AudioBlockOpsMut::for_each`](crate::AudioBlockOpsMut::for_each) or
+    /// [`AudioBlockOpsMut::enumerate`](crate::AudioBlockOpsMut::enumerate).
     #[nonblocking]
     fn frames_iter_mut(
         &mut self,

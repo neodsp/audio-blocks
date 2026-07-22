@@ -168,7 +168,6 @@ pub enum BlockLayout {
 ///
 /// This trait is automatically implemented for any type that meets the following requirements:
 /// - `Copy`: The type can be copied by value efficiently
-/// - `Zero`: The type has a zero value
 /// - `'static`: The type doesn't contain any non-static references
 ///
 /// All numeric types (f32, f64, i16, i32, etc.) automatically implement this trait,
@@ -393,6 +392,26 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     fn frame_iter_mut(&mut self, frame: usize) -> impl ExactSizeIterator<Item = &mut S>;
 
     /// Returns a mutable iterator that yields mutable iterators for each frame.
+    ///
+    /// On planar blocks ([`Planar`] / [`PlanarViewMut`]), consume one frame
+    /// before advancing to the next; two live frames alias and are UB:
+    ///
+    /// ```no_run
+    /// # use audio_blocks::*;
+    /// let mut block = Planar::<f32>::new(2, 4);
+    /// let mut frames = block.frames_iter_mut();
+    /// let a = frames.next().unwrap();
+    /// let b = frames.next().unwrap(); // UB: `a` is still alive
+    /// # let _ = (a, b);
+    /// ```
+    ///
+    /// ```
+    /// # use audio_blocks::*;
+    /// let mut block = Planar::<f32>::new(2, 4);
+    /// for frame in block.frames_iter_mut() {   // fine: one at a time
+    ///     for sample in frame { *sample *= 0.5; }
+    /// }
+    /// ```
     fn frames_iter_mut(
         &mut self,
     ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>>;

@@ -104,7 +104,7 @@ impl<'a, S: Sample> InterleavedView<'a, S> {
     ///
     /// The caller must ensure that:
     /// - `ptr` points to valid memory containing at least `num_channels_allocated * num_frames_allocated` elements
-    /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
+    /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `InterleavedView`
     /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]
     pub unsafe fn from_ptr(ptr: *const S, num_channels: u16, num_frames: usize) -> Self {
@@ -123,7 +123,7 @@ impl<'a, S: Sample> InterleavedView<'a, S> {
     ///
     /// The caller must ensure that:
     /// - `ptr` points to valid memory containing at least `num_channels_allocated * num_frames_allocated` elements
-    /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `SequentialView`
+    /// - The memory referenced by `ptr` must be valid for the lifetime of the returned `InterleavedView`
     /// - The memory must not be mutated through other pointers while this view exists
     #[nonblocking]
     pub unsafe fn from_ptr_limited(

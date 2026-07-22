@@ -307,15 +307,15 @@ impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOpsMut<S> for B {
     fn enumerate_allocated(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
         match self.layout() {
             BlockLayout::Interleaved => {
-                let num_frames = self.num_frames_allocated();
+                let num_channels = self.num_channels_allocated() as usize;
                 self.as_interleaved_view_mut()
                     .expect("Layout is interleaved")
                     .raw_data_mut()
                     .iter_mut()
                     .enumerate()
                     .for_each(|(i, sample)| {
-                        let channel = i % num_frames;
-                        let frame = i / num_frames;
+                        let channel = i % num_channels;
+                        let frame = i / num_channels;
                         f(channel as u16, frame, sample)
                     });
             }
@@ -588,6 +588,28 @@ mod tests {
 
         // All values should be zeroed
         assert_eq!(data, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_enumerate_allocated_interleaved() {
+        // Interleaved 2 channels, 3 frames: [c0f0, c1f0, c0f1, c1f1, c0f2, c1f2]
+        let mut data = [10.0, 11.0, 20.0, 21.0, 30.0, 31.0];
+        let mut block = InterleavedViewMut::from_slice(&mut data, 2);
+
+        let mut seen = Vec::new();
+        block.enumerate_allocated(|c, f, v| seen.push((c, f, *v)));
+
+        assert_eq!(
+            seen,
+            vec![
+                (0, 0, 10.0),
+                (1, 0, 11.0),
+                (0, 1, 20.0),
+                (1, 1, 21.0),
+                (0, 2, 30.0),
+                (1, 2, 31.0),
+            ]
+        );
     }
 
     #[test]

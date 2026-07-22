@@ -335,6 +335,18 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for PlanarViewMut<'
             .map(move |channel_data| unsafe { channel_data.as_mut().get_unchecked_mut(frame) })
     }
 
+    /// Returns a mutable iterator that yields a mutable iterator for each frame.
+    ///
+    /// # Aliasing
+    ///
+    /// Because a planar block stores each channel in a separate buffer, every
+    /// yielded frame iterator reborrows the shared channel storage. The frame
+    /// iterators must therefore be consumed one at a time: advancing the outer
+    /// iterator to the next frame invalidates any references obtained from the
+    /// previous frame's iterator, and holding two frame iterators alive
+    /// simultaneously is undefined behavior. For general mutation prefer
+    /// [`AudioBlockOpsMut::for_each`](crate::AudioBlockOpsMut::for_each) or
+    /// [`AudioBlockOpsMut::enumerate`](crate::AudioBlockOpsMut::enumerate).
     #[nonblocking]
     fn frames_iter_mut(
         &mut self,
