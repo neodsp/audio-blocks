@@ -87,7 +87,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-rdme
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-rdme
+      - run: cargo rdme install-rust-toolchain-for-intralinks
       - run: cargo rdme --check
 
   unused-dependencies:
