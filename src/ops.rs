@@ -781,10 +781,7 @@ mod tests {
 
         assert_eq!(mono.num_frames(), 4);
         // Only first 2 frames should be copied from channel 1
-        assert_eq!(
-            mono.samples().to_vec(),
-            vec![3.0, 4.0, 0.0, 0.0]
-        );
+        assert_eq!(mono.samples().to_vec(), vec![3.0, 4.0, 0.0, 0.0]);
     }
 
     #[test]
@@ -802,10 +799,7 @@ mod tests {
         let result = block.copy_channel_to_mono(&mut mono, 0);
         assert_eq!(result, None); // Exact match
 
-        assert_eq!(
-            mono.samples().to_vec(),
-            vec![1.0, 2.0, 3.0, 4.0]
-        );
+        assert_eq!(mono.samples().to_vec(), vec![1.0, 2.0, 3.0, 4.0]);
     }
 
     #[test]
@@ -820,10 +814,7 @@ mod tests {
 
         block.copy_channel_to_mono_exact(&mut mono, 1);
 
-        assert_eq!(
-            mono.samples().to_vec(),
-            vec![5.0, 6.0, 7.0, 8.0]
-        );
+        assert_eq!(mono.samples().to_vec(), vec![5.0, 6.0, 7.0, 8.0]);
     }
 
     #[test]
