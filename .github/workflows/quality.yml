@@ -1,4 +1,4 @@
-name: 🛡️ Quality Checks
+name: Quality Checks
 
 on:
   push:
@@ -6,78 +6,99 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   cargo-fmt:
-    name: 📝 Code Format
+    name: Code Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
       - run: cargo fmt --check
 
   taplo-fmt:
-    name: 📄 TOML Format
+    name: TOML Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: uncenter/setup-taplo@v1
+      - uses: actions/checkout@v7
+      - uses: uncenter/setup-taplo@v2
       - run: taplo fmt --check
 
   clippy:
-    name: 📎 Clippy
+    name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - run: RUSTFLAGS="-D warnings" cargo clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: RUSTFLAGS="-D warnings" cargo clippy --all-targets --all-features
 
   doc:
-    name: 📚 Documentation
+    name: Documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - run: RUSTDOCFLAGS="-D warnings" cargo doc --locked --document-private-items
 
   semver:
-    name: 🏷️ Semver Checks
+    name: Semver Checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v7
       - uses: obi1kenobi/cargo-semver-checks-action@v2
 
   hack:
-    name: 🧩 Feature Matrix
+    name: Feature Matrix
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@cargo-hack
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
       - run: cargo hack --feature-powerset check
 
   msrv:
-    name: 🏗️ MSRV Check
+    name: MSRV Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.85.0
       - run: cargo check --all-features
 
   readme:
-    name: 📖 README Check
+    name: README Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-rdme
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-rdme
+      - run: cargo rdme install-rust-toolchain-for-intralinks
       - run: cargo rdme --check
+
+  unused-dependencies:
+    name: Unused Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-shear
+      - run: cargo shear

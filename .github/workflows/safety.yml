@@ -1,4 +1,4 @@
-name: 🧹 Safety Checks
+name: Safety Checks
 
 on:
   push:
@@ -6,15 +6,19 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   sanitizers:
-    name: 🩸 Leak and 🔍 Address Sanitizers
+    name: Leak and Address Sanitizers
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
       - run: |
           # to get the symbolizer for debug symbol resolution
@@ -37,14 +41,13 @@ jobs:
           RUSTFLAGS: "-Z sanitizer=address"
       - run: cargo test --target x86_64-unknown-linux-gnu
         env:
-          LSAN_OPTIONS: "suppressions=lsan-suppressions.txt"
           RUSTFLAGS: "-Z sanitizer=leak"
 
   miri:
-    name: 🔮 Miri UB Checker
+    name: Miri UB Checker
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: |
           echo "NIGHTLY=nightly-$(curl -s https://rust-lang.github.io/rustup-components-history/x86_64-unknown-linux-gnu/miri)" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@master
@@ -52,3 +55,15 @@ jobs:
           toolchain: ${{ env.NIGHTLY }}
           components: miri
       - run: cargo miri test --lib --bins --tests
+
+  realtime:
+    name: Realtime Sanitizer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt install llvm
+      - run: cargo test --locked --all-targets --workspace
+        env:
+          RTSAN_ENABLE: 1

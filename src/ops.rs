@@ -632,7 +632,7 @@ mod tests {
 
         assert_eq!(mono.num_frames(), 4);
         assert_eq!(
-            mono.samples().iter().copied().collect::<Vec<_>>(),
+            mono.samples().to_vec(),
             vec![3.0, 4.0, 5.0, 6.0] // (1+5)/2, (2+6)/2, (3+7)/2, (4+8)/2
         );
     }
@@ -680,7 +680,7 @@ mod tests {
 
         assert_eq!(mono.num_frames(), 2);
         assert_eq!(
-            mono.samples().iter().copied().collect::<Vec<_>>(),
+            mono.samples().to_vec(),
             vec![3.0, 4.0] // (1+5)/2, (2+6)/2 - only first 2 frames
         );
     }
@@ -703,7 +703,7 @@ mod tests {
         assert_eq!(mono.num_frames(), 4);
         // Only first 2 frames should be mixed
         assert_eq!(
-            mono.samples().iter().copied().collect::<Vec<_>>(),
+            mono.samples().to_vec(),
             vec![2.0, 3.0, 99.0, 99.0] // (1+3)/2, (2+4)/2, then unchanged
         );
     }
@@ -722,7 +722,7 @@ mod tests {
 
         assert_eq!(mono.num_frames(), 4);
         assert_eq!(
-            mono.samples().iter().copied().collect::<Vec<_>>(),
+            mono.samples().to_vec(),
             vec![3.0, 4.0, 5.0, 6.0] // (1+5)/2, (2+6)/2, (3+7)/2, (4+8)/2
         );
     }
@@ -759,7 +759,7 @@ mod tests {
 
         assert_eq!(mono.num_frames(), 2);
         assert_eq!(
-            mono.samples().iter().copied().collect::<Vec<_>>(),
+            mono.samples().to_vec(),
             vec![1.0, 2.0] // Only first 2 frames from channel 0
         );
     }
@@ -781,10 +781,7 @@ mod tests {
 
         assert_eq!(mono.num_frames(), 4);
         // Only first 2 frames should be copied from channel 1
-        assert_eq!(
-            mono.samples().iter().copied().collect::<Vec<_>>(),
-            vec![3.0, 4.0, 0.0, 0.0]
-        );
+        assert_eq!(mono.samples().to_vec(), vec![3.0, 4.0, 0.0, 0.0]);
     }
 
     #[test]
@@ -802,10 +799,7 @@ mod tests {
         let result = block.copy_channel_to_mono(&mut mono, 0);
         assert_eq!(result, None); // Exact match
 
-        assert_eq!(
-            mono.samples().iter().copied().collect::<Vec<_>>(),
-            vec![1.0, 2.0, 3.0, 4.0]
-        );
+        assert_eq!(mono.samples().to_vec(), vec![1.0, 2.0, 3.0, 4.0]);
     }
 
     #[test]
@@ -820,10 +814,7 @@ mod tests {
 
         block.copy_channel_to_mono_exact(&mut mono, 1);
 
-        assert_eq!(
-            mono.samples().iter().copied().collect::<Vec<_>>(),
-            vec![5.0, 6.0, 7.0, 8.0]
-        );
+        assert_eq!(mono.samples().to_vec(), vec![5.0, 6.0, 7.0, 8.0]);
     }
 
     #[test]

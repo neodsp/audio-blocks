@@ -62,13 +62,13 @@ Views borrow existing data via `from_slice()` or `from_ptr()` and are always rea
 
 | Owned (allocates) | View (borrows data) |
 |---|---|
-| [`Planar`] | [`PlanarView`] / [`PlanarViewMut`] |
-| [`Sequential`] | [`SequentialView`] / [`SequentialViewMut`] |
-| [`Interleaved`] | [`InterleavedView`] / [`InterleavedViewMut`] |
-| [`Mono`] | [`MonoView`] / [`MonoViewMut`] |
+| [`Planar`](https://docs.rs/audio-blocks/latest/audio_blocks/planar/owned/struct.Planar.html) | [`PlanarView`](https://docs.rs/audio-blocks/latest/audio_blocks/planar/view/struct.PlanarView.html) / [`PlanarViewMut`](https://docs.rs/audio-blocks/latest/audio_blocks/planar/view_mut/struct.PlanarViewMut.html) |
+| [`Sequential`](https://docs.rs/audio-blocks/latest/audio_blocks/sequential/owned/struct.Sequential.html) | [`SequentialView`](https://docs.rs/audio-blocks/latest/audio_blocks/sequential/view/struct.SequentialView.html) / [`SequentialViewMut`](https://docs.rs/audio-blocks/latest/audio_blocks/sequential/view_mut/struct.SequentialViewMut.html) |
+| [`Interleaved`](https://docs.rs/audio-blocks/latest/audio_blocks/interleaved/owned/struct.Interleaved.html) | [`InterleavedView`](https://docs.rs/audio-blocks/latest/audio_blocks/interleaved/view/struct.InterleavedView.html) / [`InterleavedViewMut`](https://docs.rs/audio-blocks/latest/audio_blocks/interleaved/view_mut/struct.InterleavedViewMut.html) |
+| [`Mono`](https://docs.rs/audio-blocks/latest/audio_blocks/mono/owned/struct.Mono.html) | [`MonoView`](https://docs.rs/audio-blocks/latest/audio_blocks/mono/view/struct.MonoView.html) / [`MonoViewMut`](https://docs.rs/audio-blocks/latest/audio_blocks/mono/view_mut/struct.MonoViewMut.html) |
 
 Views can also be created from raw pointers (`from_ptr`). For planar pointer data,
-use [`PlanarPtrAdapter`].
+use [`PlanarPtrAdapter`](https://docs.rs/audio-blocks/latest/audio_blocks/planar/view/struct.PlanarPtrAdapter.html).
 
 ## Traits
 
@@ -77,12 +77,12 @@ Use `impl AudioBlock<f32>` / `impl AudioBlockMut<f32>` to write layout-generic f
 
 | Trait | Purpose |
 |---|---|
-| [`AudioBlock`] | Read-only access: sample access, channel/frame iteration, layout info |
-| [`AudioBlockMut`] | Mutable access: sample mutation, resizing visible region, mutable iteration |
-| [`AudioBlockOps`] | Read-only operations: mono mixdown, channel extraction |
-| [`AudioBlockOpsMut`] | Mutable operations: block copy, gain, clear, fill, per-sample processing |
+| [`AudioBlock`](https://docs.rs/audio-blocks/latest/audio_blocks/trait.AudioBlock.html) | Read-only access: sample access, channel/frame iteration, layout info |
+| [`AudioBlockMut`](https://docs.rs/audio-blocks/latest/audio_blocks/trait.AudioBlockMut.html) | Mutable access: sample mutation, resizing visible region, mutable iteration |
+| [`AudioBlockOps`](https://docs.rs/audio-blocks/latest/audio_blocks/ops/trait.AudioBlockOps.html) | Read-only operations: mono mixdown, channel extraction |
+| [`AudioBlockOpsMut`](https://docs.rs/audio-blocks/latest/audio_blocks/ops/trait.AudioBlockOpsMut.html) | Mutable operations: block copy, gain, clear, fill, per-sample processing |
 
-Blocks also separate allocated capacity from visible size — see [`AudioBlockMut::set_num_frames_visible`]
+Blocks also separate allocated capacity from visible size — see [`AudioBlockMut::set_num_frames_visible`](https://docs.rs/audio-blocks/latest/audio_blocks/trait.AudioBlockMut.html#tymethod.set_num_frames_visible)
 for real-time safe buffer resizing without reallocation.
 
 ## `no_std` Support
