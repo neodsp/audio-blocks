@@ -1,4 +1,4 @@
-name: 🧰 Compatibility
+name: Compatibility
 
 on:
   push:
@@ -8,23 +8,27 @@ on:
   schedule:
     - cron: "7 7 * * *"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   nightly:
-    name: 🌙 Nightly Rust
+    name: Nightly Rust
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
       - run: cargo test --locked --all-features --all-targets --workspace
 
   update:
-    name: 🔄 Latest Dependencies
+    name: Latest Dependencies
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@beta
       - run: cargo update
       - run: RUSTFLAGS="-D deprecated" cargo test --locked --all-features --all-targets --workspace
