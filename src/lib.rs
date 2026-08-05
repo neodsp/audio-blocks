@@ -111,8 +111,10 @@ pub use sequential::Sequential;
 pub use sequential::SequentialView;
 pub use sequential::SequentialViewMut;
 
+pub use planar::MAX_PLANAR_CHANNELS;
 #[cfg(any(feature = "std", feature = "alloc"))]
 pub use planar::Planar;
+pub use planar::PlanarFrameIterMut;
 pub use planar::PlanarPtrAdapter;
 pub use planar::PlanarPtrAdapterMut;
 pub use planar::PlanarView;
@@ -393,25 +395,19 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
 
     /// Returns a mutable iterator that yields mutable iterators for each frame.
     ///
-    /// On planar blocks ([`Planar`] / [`PlanarViewMut`]), consume one frame
-    /// before advancing to the next; two live frames alias and are UB:
-    ///
-    /// ```no_run
-    /// # use audio_blocks::*;
-    /// let mut block = Planar::<f32>::new(2, 4);
-    /// let mut frames = block.frames_iter_mut();
-    /// let a = frames.next().unwrap();
-    /// let b = frames.next().unwrap(); // UB: `a` is still alive
-    /// # let _ = (a, b);
-    /// ```
+    /// Each yielded frame borrows disjoint samples, so frames are independent:
+    /// they can be advanced, held, or collected freely regardless of layout.
     ///
     /// ```
     /// # use audio_blocks::*;
     /// let mut block = Planar::<f32>::new(2, 4);
-    /// for frame in block.frames_iter_mut() {   // fine: one at a time
+    /// for frame in block.frames_iter_mut() {
     ///     for sample in frame { *sample *= 0.5; }
     /// }
     /// ```
+    ///
+    /// Note: a [`PlanarViewMut`] caps the number of channels at
+    /// [`MAX_PLANAR_CHANNELS`]; the owned [`Planar`] has no such limit.
     fn frames_iter_mut(
         &mut self,
     ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>>;
