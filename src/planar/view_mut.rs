@@ -1,4 +1,3 @@
-use core::mem::MaybeUninit;
 use rtsan_standalone::nonblocking;
 use std::marker::PhantomData;
 
@@ -379,116 +378,6 @@ impl<S: Sample + core::fmt::Debug, V: AsMut<[S]> + AsRef<[S]> + core::fmt::Debug
     }
 }
 
-/// Adapter for creating mutable planar audio block views from raw pointers.
-///
-/// This adapter provides a safe interface to work with mutable audio data stored in external buffers,
-/// which is common when interfacing with audio APIs or hardware.
-///
-/// # Example
-///
-/// ```
-/// use audio_blocks::*;
-///
-/// // Create sample data for two channels with five frames each
-/// let mut ch1 = vec![0.0f32, 1.0, 2.0, 3.0, 4.0];
-/// let mut ch2 = vec![5.0f32, 6.0, 7.0, 8.0, 9.0];
-///
-/// // Create mutable pointers to the channel data
-/// let ptrs = [ch1.as_mut_ptr(), ch2.as_mut_ptr()];
-/// let data = ptrs.as_ptr();
-/// let num_channels = 2u16;
-/// let num_frames = 5;
-///
-/// // Create an adapter from raw pointers to audio channel data
-/// let mut adapter = unsafe { PlanarPtrAdapterMut::<f32, 16>::from_ptr(data, num_channels, num_frames) };
-///
-/// // Get a safe mutable view of the audio data
-/// let mut block = adapter.planar_view_mut();
-///
-/// // Verify the data access works and can be modified
-/// assert_eq!(block.sample(0, 2), 2.0);
-/// assert_eq!(block.sample(1, 3), 8.0);
-/// *block.sample_mut(0, 1) = 10.0; // Modify a sample
-/// ```
-///
-/// # Safety
-///
-/// When creating an adapter from raw pointers, you must ensure that:
-/// - The pointers are valid and properly aligned
-/// - The channel buffers do not overlap each other
-/// - The memory they point to remains valid for the lifetime of the adapter
-/// - The data is not accessed through other pointers during the adapter's lifetime
-/// - The channel count doesn't exceed the adapter's `MAX_CHANNELS` capacity
-pub struct PlanarPtrAdapterMut<'a, S: Sample, const MAX_CHANNELS: usize> {
-    data: [MaybeUninit<&'a mut [S]>; MAX_CHANNELS],
-    num_channels: u16,
-}
-
-impl<'a, S: Sample, const MAX_CHANNELS: usize> PlanarPtrAdapterMut<'a, S, MAX_CHANNELS> {
-    /// Creates new pointer adapter to create an audio block from raw pointers.
-    ///
-    /// # Safety
-    ///
-    /// - `ptrs` must be a valid pointer to an array of pointers
-    /// - The array must contain at least `num_channels` valid pointers
-    /// - Each pointer in the array must point to a valid array of samples with `num_frames` length
-    /// - The channel buffers must not overlap each other, since each becomes an
-    ///   exclusive `&mut [S]`
-    /// - The pointed memory must remain valid for the lifetime of the returned adapter
-    /// - The data must not be modified through other pointers for the lifetime of the returned adapter
-    #[nonblocking]
-    pub unsafe fn from_ptr(ptrs: *const *mut S, num_channels: u16, num_frames: usize) -> Self {
-        assert!(
-            num_channels as usize <= MAX_CHANNELS,
-            "num_channels exceeds MAX_CHANNELS"
-        );
-
-        let mut data = [const { MaybeUninit::<&'a mut [S]>::uninit() }; MAX_CHANNELS];
-
-        // SAFETY: Caller guarantees `ptrs` is valid for `num_channels` elements.
-        // The array itself is only read from, so a shared borrow is enough.
-        let ptr_slice: &[*mut S] =
-            unsafe { core::slice::from_raw_parts(ptrs, num_channels as usize) };
-
-        for ch in 0..num_channels as usize {
-            // SAFETY: See previous explanation
-            data[ch].write(unsafe { core::slice::from_raw_parts_mut(ptr_slice[ch], num_frames) });
-        }
-
-        Self { data, num_channels }
-    }
-
-    /// Returns a mutable slice of references to the initialized channel data buffers.
-    ///
-    /// This method provides access to the underlying audio data as a slice of mutable slices,
-    /// with each inner slice representing one audio channel.
-    #[inline]
-    pub fn data_slice_mut(&mut self) -> &mut [&'a mut [S]] {
-        let initialized_part: &mut [MaybeUninit<&'a mut [S]>] =
-            &mut self.data[..self.num_channels as usize];
-        unsafe {
-            core::slice::from_raw_parts_mut(
-                initialized_part.as_mut_ptr() as *mut &'a mut [S],
-                self.num_channels as usize,
-            )
-        }
-    }
-
-    /// Creates a safe [`PlanarViewMut`] for accessing the audio data.
-    ///
-    /// This provides a convenient way to interact with the audio data through
-    /// the full [`AudioBlockMut`] interface, enabling operations like iterating
-    /// through channels or frames and modifying the underlying audio samples.
-    ///
-    /// # Returns
-    ///
-    /// An [`PlanarViewMut`] that provides safe, mutable access to the audio data.
-    #[nonblocking]
-    pub fn planar_view_mut(&mut self) -> PlanarViewMut<'_, S, &'a mut [S]> {
-        PlanarViewMut::from_slice(self.data_slice_mut())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -838,35 +727,6 @@ mod tests {
         for i in 0..block.num_frames() {
             assert_eq!(block.frame_iter(i).count(), 2);
             assert_eq!(block.frame_iter_mut(i).count(), 2);
-        }
-    }
-
-    #[test]
-    fn test_pointer() {
-        unsafe {
-            let num_channels = 2;
-            let num_frames = 5;
-            let mut data = [vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
-
-            let ptr_vec: Vec<*mut f32> = data
-                .iter_mut()
-                .map(|inner_vec| inner_vec.as_mut_ptr())
-                .collect();
-            let ptr = ptr_vec.as_ptr();
-
-            let mut adaptor = PlanarPtrAdapterMut::<_, 16>::from_ptr(ptr, num_channels, num_frames);
-
-            let planar = adaptor.planar_view_mut();
-
-            assert_eq!(
-                planar.channel_iter(0).copied().collect::<Vec<_>>(),
-                vec![0.0, 2.0, 4.0, 6.0, 8.0]
-            );
-
-            assert_eq!(
-                planar.channel_iter(1).copied().collect::<Vec<_>>(),
-                vec![1.0, 3.0, 5.0, 7.0, 9.0]
-            );
         }
     }
 

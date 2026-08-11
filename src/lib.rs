@@ -67,7 +67,7 @@
 //! | [`Mono`] | [`MonoView`] / [`MonoViewMut`] |
 //!
 //! Views can also be created from raw pointers (`from_ptr`). For planar pointer data,
-//! use [`PlanarPtrAdapter`].
+//! use [`PlanarPtrs`] / [`PlanarPtrsMut`], which borrow the caller's array of channel pointers.
 //!
 //! ## Traits
 //!
@@ -126,8 +126,8 @@ pub use sequential::SequentialViewMut;
 
 #[cfg(any(feature = "std", feature = "alloc"))]
 pub use planar::Planar;
-pub use planar::PlanarPtrAdapter;
-pub use planar::PlanarPtrAdapterMut;
+pub use planar::PlanarPtrs;
+pub use planar::PlanarPtrsMut;
 pub use planar::PlanarView;
 pub use planar::PlanarViewMut;
 

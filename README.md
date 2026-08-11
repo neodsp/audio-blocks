@@ -68,7 +68,7 @@ Views borrow existing data via `from_slice()` or `from_ptr()` and are always rea
 | [`Mono`](https://docs.rs/audio-blocks/latest/audio_blocks/mono/owned/struct.Mono.html) | [`MonoView`](https://docs.rs/audio-blocks/latest/audio_blocks/mono/view/struct.MonoView.html) / [`MonoViewMut`](https://docs.rs/audio-blocks/latest/audio_blocks/mono/view_mut/struct.MonoViewMut.html) |
 
 Views can also be created from raw pointers (`from_ptr`). For planar pointer data,
-use [`PlanarPtrAdapter`](https://docs.rs/audio-blocks/latest/audio_blocks/planar/view/struct.PlanarPtrAdapter.html).
+use [`PlanarPtrs`](https://docs.rs/audio-blocks/latest/audio_blocks/planar/ptrs/struct.PlanarPtrs.html) / [`PlanarPtrsMut`](https://docs.rs/audio-blocks/latest/audio_blocks/planar/ptrs/struct.PlanarPtrsMut.html), which borrow the caller's array of channel pointers.
 
 ## Traits
 
