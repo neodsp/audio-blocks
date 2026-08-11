@@ -54,7 +54,12 @@ jobs:
         with:
           toolchain: ${{ env.NIGHTLY }}
           components: miri
-      - run: cargo miri test --lib --bins --tests
+      - name: Miri (default borrow model)
+        run: cargo miri test --lib --bins --tests
+      - name: Miri (Tree Borrows)
+        run: cargo miri test --lib --bins --tests
+        env:
+          MIRIFLAGS: "-Zmiri-tree-borrows"
 
   realtime:
     name: Realtime Sanitizer
