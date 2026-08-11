@@ -66,8 +66,9 @@
 //! | [`Interleaved`] | [`InterleavedView`] / [`InterleavedViewMut`] |
 //! | [`Mono`] | [`MonoView`] / [`MonoViewMut`] |
 //!
-//! Views can also be created from raw pointers (`from_ptr`). For planar pointer data,
-//! use [`PlanarPtrs`] / [`PlanarPtrsMut`], which borrow the caller's array of channel pointers.
+//! Views can also be created from raw pointers (`from_ptr`). For planar pointer
+//! data use [`PlanarPtrs`] / [`PlanarPtrsMut`]; their `from_raw_ptrs` takes the
+//! `*const *mut S` that C and C++ APIs hand out, with no channel limit.
 //!
 //! ## Traits
 //!

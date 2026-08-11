@@ -67,8 +67,9 @@ Views borrow existing data via `from_slice()` or `from_ptr()` and are always rea
 | [`Interleaved`](https://docs.rs/audio-blocks/latest/audio_blocks/interleaved/owned/struct.Interleaved.html) | [`InterleavedView`](https://docs.rs/audio-blocks/latest/audio_blocks/interleaved/view/struct.InterleavedView.html) / [`InterleavedViewMut`](https://docs.rs/audio-blocks/latest/audio_blocks/interleaved/view_mut/struct.InterleavedViewMut.html) |
 | [`Mono`](https://docs.rs/audio-blocks/latest/audio_blocks/mono/owned/struct.Mono.html) | [`MonoView`](https://docs.rs/audio-blocks/latest/audio_blocks/mono/view/struct.MonoView.html) / [`MonoViewMut`](https://docs.rs/audio-blocks/latest/audio_blocks/mono/view_mut/struct.MonoViewMut.html) |
 
-Views can also be created from raw pointers (`from_ptr`). For planar pointer data,
-use [`PlanarPtrs`](https://docs.rs/audio-blocks/latest/audio_blocks/planar/ptrs/struct.PlanarPtrs.html) / [`PlanarPtrsMut`](https://docs.rs/audio-blocks/latest/audio_blocks/planar/ptrs/struct.PlanarPtrsMut.html), which borrow the caller's array of channel pointers.
+Views can also be created from raw pointers (`from_ptr`). For planar pointer
+data use [`PlanarPtrs`](https://docs.rs/audio-blocks/latest/audio_blocks/planar/ptrs/struct.PlanarPtrs.html) / [`PlanarPtrsMut`](https://docs.rs/audio-blocks/latest/audio_blocks/planar/ptrs/struct.PlanarPtrsMut.html); their `from_raw_ptrs` takes the
+`*const *mut S` that C and C++ APIs hand out, with no channel limit.
 
 ## Traits
 

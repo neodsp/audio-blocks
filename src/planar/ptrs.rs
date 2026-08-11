@@ -105,6 +105,73 @@ impl<'a, S: Sample> PlanarPtrs<'a, S> {
         }
     }
 
+    /// Creates a new audio block directly from a C-style pointer-to-pointers.
+    ///
+    /// This is the shape most C and C++ audio APIs hand out, for example JUCE's
+    /// `getArrayOfReadPointers()`. The array of channel pointers is borrowed
+    /// where it already lives, so there is nothing to allocate or copy and no
+    /// limit on the channel count.
+    ///
+    /// # Safety
+    ///
+    /// * `ptrs` must be valid and aligned for reads of `num_channels` pointers,
+    ///   and stay valid for `'a`.
+    /// * Every pointer in that array must be valid and aligned for `num_frames`
+    ///   elements of `S`, and stay valid for `'a`.
+    /// * The samples must not be mutated through any other pointer for `'a`.
+    ///
+    /// Overlapping channel pointers are allowed, since the channels are only
+    /// ever read.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use audio_blocks::*;
+    /// # let l = vec![0.0f32; 512];
+    /// # let r = vec![0.0f32; 512];
+    /// # let array = [l.as_ptr(), r.as_ptr()];
+    /// # let (channel_ptrs, num_channels, num_samples) = (array.as_ptr(), 2u16, 512);
+    /// // channel_ptrs: *const *const f32, straight from the host
+    /// let block = unsafe { PlanarPtrs::from_raw_ptrs(channel_ptrs, num_channels, num_samples) };
+    /// assert_eq!(block.num_channels(), 2);
+    /// ```
+    #[nonblocking]
+    pub unsafe fn from_raw_ptrs(
+        ptrs: *const *const S,
+        num_channels: u16,
+        num_frames: usize,
+    ) -> Self {
+        // Safety: the caller guarantees `ptrs` is valid for `num_channels` reads
+        // and stays valid for `'a`.
+        let ptrs = unsafe { core::slice::from_raw_parts(ptrs, num_channels as usize) };
+        unsafe { Self::from_ptrs(ptrs, num_frames) }
+    }
+
+    /// Creates a new audio block from a C-style pointer-to-pointers, exposing
+    /// only part of a larger buffer.
+    ///
+    /// # Safety
+    ///
+    /// As [`from_raw_ptrs`](Self::from_raw_ptrs), except every channel pointer
+    /// must be valid for `num_frames_allocated` elements of `S`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `num_frames_visible` exceeds `num_frames_allocated`.
+    #[nonblocking]
+    pub unsafe fn from_raw_ptrs_limited(
+        ptrs: *const *const S,
+        num_channels: u16,
+        num_frames_visible: usize,
+        num_frames_allocated: usize,
+    ) -> Self {
+        // Safety: as in `from_raw_ptrs`.
+        let ptrs = unsafe { core::slice::from_raw_parts(ptrs, num_channels as usize) };
+        unsafe {
+            Self::from_ptrs_limited(ptrs, num_channels, num_frames_visible, num_frames_allocated)
+        }
+    }
+
     /// Returns a slice for a single channel.
     ///
     /// # Panics
@@ -356,6 +423,73 @@ impl<'a, S: Sample> PlanarPtrsMut<'a, S> {
             num_frames: num_frames_visible,
             num_frames_allocated,
             _marker: PhantomData,
+        }
+    }
+
+    /// Creates a new audio block directly from a C-style pointer-to-pointers.
+    ///
+    /// This is the shape most C and C++ audio APIs hand out, for example JUCE's
+    /// `getArrayOfWritePointers()`. The array of channel pointers is borrowed
+    /// where it already lives, so there is nothing to allocate or copy and no
+    /// limit on the channel count.
+    ///
+    /// # Safety
+    ///
+    /// * `ptrs` must be valid and aligned for reads of `num_channels` pointers,
+    ///   and stay valid for `'a`.
+    /// * Every pointer in that array must be valid and aligned for `num_frames`
+    ///   elements of `S`, and stay valid for `'a`.
+    /// * The channel buffers must not overlap each other, since each one becomes
+    ///   an exclusive `&mut [S]`.
+    /// * The samples must not be accessed through any other pointer for `'a`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use audio_blocks::*;
+    /// # let mut l = vec![0.0f32; 512];
+    /// # let mut r = vec![0.0f32; 512];
+    /// # let array = [l.as_mut_ptr(), r.as_mut_ptr()];
+    /// # let (channel_ptrs, num_channels, num_samples) = (array.as_ptr(), 2u16, 512);
+    /// // channel_ptrs: *const *mut f32, straight from the host
+    /// let mut block =
+    ///     unsafe { PlanarPtrsMut::from_raw_ptrs(channel_ptrs, num_channels, num_samples) };
+    /// block.gain(0.5);
+    /// ```
+    #[nonblocking]
+    pub unsafe fn from_raw_ptrs(ptrs: *const *mut S, num_channels: u16, num_frames: usize) -> Self {
+        // Safety: the caller guarantees `ptrs` is valid for `num_channels` reads
+        // and stays valid for `'a`. The array is only read from, so a shared
+        // borrow of it is enough.
+        let ptrs = unsafe { core::slice::from_raw_parts(ptrs, num_channels as usize) };
+        unsafe { Self::from_ptrs(ptrs, num_frames) }
+    }
+
+    /// Creates a new audio block from a C-style pointer-to-pointers, exposing
+    /// only part of a larger buffer.
+    ///
+    /// Use this when the host buffer holds more frames than the current block,
+    /// which is common for hosts that reuse one allocation across callbacks.
+    ///
+    /// # Safety
+    ///
+    /// As [`from_raw_ptrs`](Self::from_raw_ptrs), except every channel pointer
+    /// must be valid for `num_frames_allocated` elements of `S`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `num_frames_visible` exceeds `num_frames_allocated`.
+    #[nonblocking]
+    pub unsafe fn from_raw_ptrs_limited(
+        ptrs: *const *mut S,
+        num_channels: u16,
+        num_frames_visible: usize,
+        num_frames_allocated: usize,
+    ) -> Self {
+        // Safety: as in `from_raw_ptrs`.
+        let ptrs = unsafe { core::slice::from_raw_parts(ptrs, num_channels as usize) };
+        unsafe {
+            Self::from_ptrs_limited(ptrs, num_channels, num_frames_visible, num_frames_allocated)
         }
     }
 
@@ -1214,5 +1348,68 @@ mod tests {
         let mut block = unsafe { PlanarPtrsMut::from_ptrs(&ptrs, 4) };
 
         block.set_num_frames_visible(5);
+    }
+
+    /// Stand-in for a C++ host: it owns the buffers and the pointer array, and
+    /// hands out only `*const *mut f32`, like
+    /// `juce::AudioBuffer::getArrayOfWritePointers`.
+    struct FakeHost {
+        buffers: Vec<Vec<f32>>,
+        ptr_array: Vec<*mut f32>,
+    }
+
+    impl FakeHost {
+        fn new(channels: usize, allocated: usize) -> Self {
+            let mut buffers: Vec<Vec<f32>> =
+                (0..channels).map(|c| vec![c as f32; allocated]).collect();
+            let ptr_array = buffers.iter_mut().map(|b| b.as_mut_ptr()).collect();
+            Self { buffers, ptr_array }
+        }
+
+        fn write_pointers(&self) -> *const *mut f32 {
+            self.ptr_array.as_ptr()
+        }
+    }
+
+    #[test]
+    fn test_from_raw_ptrs_c_style() {
+        // 300 channels, so any fixed-size inline array would have capped out.
+        let host = FakeHost::new(300, 64);
+        {
+            let mut block = unsafe { PlanarPtrsMut::from_raw_ptrs(host.write_pointers(), 300, 64) };
+            assert_eq!(block.num_channels(), 300);
+            block.gain(2.0);
+        }
+
+        assert_eq!(host.buffers[299][0], 598.0);
+        assert_eq!(host.buffers[1][63], 2.0);
+    }
+
+    #[test]
+    fn test_from_raw_ptrs_limited_partial_block() {
+        // Host reuses a 64 frame allocation, this callback carries 16 frames.
+        let host = FakeHost::new(2, 64);
+        {
+            let mut block =
+                unsafe { PlanarPtrsMut::from_raw_ptrs_limited(host.write_pointers(), 2, 16, 64) };
+            assert_eq!(block.num_frames(), 16);
+            assert_eq!(block.num_frames_allocated(), 64);
+            block.for_each(|s| *s = 9.0);
+        }
+
+        assert_eq!(host.buffers[0][15], 9.0);
+        assert_eq!(host.buffers[0][16], 0.0); // outside the block, untouched
+    }
+
+    #[test]
+    fn test_from_raw_ptrs_read_only() {
+        let l = [1.0f32; 8];
+        let r = [2.0f32; 8];
+        let array = [l.as_ptr(), r.as_ptr()];
+        let block = unsafe { PlanarPtrs::from_raw_ptrs(array.as_ptr(), 2, 8) };
+
+        assert_eq!(block.num_channels(), 2);
+        assert_eq!(block.channel(0), &[1.0; 8]);
+        assert_eq!(block.channel(1), &[2.0; 8]);
     }
 }
