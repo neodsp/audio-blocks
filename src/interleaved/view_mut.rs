@@ -4,7 +4,7 @@ use core::{marker::PhantomData, ptr::NonNull};
 
 use super::view::InterleavedView;
 use crate::{
-    AudioBlock, AudioBlockMut, FramesMut, Sample,
+    AudioBlock, AudioBlockMut, Contiguous, ContiguousMut, FramesMut, Sample,
     iter::{StridedSampleIter, StridedSampleIterMut},
 };
 
@@ -246,8 +246,6 @@ impl<'a, S: Sample> InterleavedViewMut<'a, S> {
 }
 
 impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
-    type PlanarView = [S; 0];
-
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -349,16 +347,23 @@ impl<S: Sample> AudioBlock<S> for InterleavedViewMut<'_, S> {
     fn as_view(&self) -> impl AudioBlock<S> {
         self.view()
     }
+}
 
+impl<S: Sample> Contiguous<S> for InterleavedViewMut<'_, S> {
     #[nonblocking]
-    fn as_interleaved_view(&self) -> Option<InterleavedView<'_, S>> {
-        Some(self.view())
+    fn raw_data(&self) -> &[S] {
+        self.raw_data()
+    }
+}
+
+impl<S: Sample> ContiguousMut<S> for InterleavedViewMut<'_, S> {
+    #[nonblocking]
+    fn raw_data_mut(&mut self) -> &mut [S] {
+        self.raw_data_mut()
     }
 }
 
 impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
-    type PlanarViewMut = [S; 0];
-
     #[nonblocking]
     fn set_num_channels_visible(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
@@ -437,8 +442,55 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn as_interleaved_view_mut(&mut self) -> Option<InterleavedViewMut<'_, S>> {
-        Some(self.view_mut())
+    fn for_each(&mut self, mut f: impl FnMut(&mut S)) {
+        // below 8 channels it is faster to always go per channel
+        if self.num_channels < 8 {
+            for channel in self.channels_iter_mut() {
+                channel.for_each(&mut f);
+            }
+        } else {
+            for frame in self.frames_iter_mut() {
+                frame.for_each(&mut f);
+            }
+        }
+    }
+
+    #[nonblocking]
+    fn enumerate(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
+        // below 8 channels it is faster to always go per channel
+        if self.num_channels < 8 {
+            for (ch, channel) in self.channels_iter_mut().enumerate() {
+                for (fr, sample) in channel.enumerate() {
+                    f(ch as u16, fr, sample)
+                }
+            }
+        } else {
+            // Frame-major is the cache-friendly order here, and
+            // interleaved frames are contiguous chunks.
+            for (fr, frame) in self.frames_iter_mut().enumerate() {
+                for (ch, sample) in frame.enumerate() {
+                    f(ch as u16, fr, sample)
+                }
+            }
+        }
+    }
+
+    #[nonblocking]
+    fn for_each_allocated(&mut self, f: impl FnMut(&mut S)) {
+        self.raw_data_mut().iter_mut().for_each(f);
+    }
+
+    #[nonblocking]
+    fn enumerate_allocated(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
+        let num_channels = self.num_channels_allocated as usize;
+        self.raw_data_mut()
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, sample)| {
+                let channel = i % num_channels;
+                let frame = i / num_channels;
+                f(channel as u16, frame, sample)
+            });
     }
 }
 
@@ -745,9 +797,7 @@ mod tests {
         let mut data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let block = InterleavedViewMut::<f32>::from_slice(&mut data, 2);
 
-        assert!(block.as_interleaved_view().is_some());
-        assert!(block.as_planar_view().is_none());
-        assert!(block.as_sequential_view().is_none());
+        assert_eq!(block.raw_data().len(), 10);
 
         let view = block.as_view();
 
@@ -766,9 +816,7 @@ mod tests {
         let mut data = vec![0.0; 10];
         let mut block = InterleavedViewMut::<f32>::from_slice(&mut data, 2);
 
-        assert!(block.as_interleaved_view_mut().is_some());
-        assert!(block.as_planar_view_mut().is_none());
-        assert!(block.as_sequential_view_mut().is_none());
+        assert_eq!(block.raw_data_mut().len(), 10);
 
         {
             let mut view = block.as_view_mut();

@@ -78,9 +78,21 @@ Use `impl AudioBlock<f32>` / `impl AudioBlockMut<f32>` to write layout-generic f
 | Trait | Purpose |
 |---|---|
 | [`AudioBlock`](https://docs.rs/audio-blocks/latest/audio_blocks/trait.AudioBlock.html) | Read-only access: sample access, channel/frame iteration, layout info |
-| [`AudioBlockMut`](https://docs.rs/audio-blocks/latest/audio_blocks/trait.AudioBlockMut.html) | Mutable access: sample mutation, resizing visible region, mutable iteration |
+| [`AudioBlockMut`](https://docs.rs/audio-blocks/latest/audio_blocks/trait.AudioBlockMut.html) | Mutable access: sample mutation, resizing, per-sample iteration |
 | [`AudioBlockOps`](https://docs.rs/audio-blocks/latest/audio_blocks/ops/trait.AudioBlockOps.html) | Read-only operations: mono mixdown, channel extraction |
-| [`AudioBlockOpsMut`](https://docs.rs/audio-blocks/latest/audio_blocks/ops/trait.AudioBlockOpsMut.html) | Mutable operations: block copy, gain, clear, fill, per-sample processing |
+| [`AudioBlockOpsMut`](https://docs.rs/audio-blocks/latest/audio_blocks/ops/trait.AudioBlockOpsMut.html) | Composite operations: block copy, mono fan-out |
+
+Two further traits describe what a layout can do, so generic code states its
+requirement in the signature instead of inspecting the layout at run time:
+
+| Trait | Implemented by | Gives you |
+|---|---|---|
+| `Contiguous` / `ContiguousMut` | interleaved, sequential, mono | the flat sample slice |
+| `FramesMut` | interleaved, sequential, mono | mutable frame-major iteration |
+
+Planar blocks implement neither: each channel is a separate allocation, so there
+is no flat slice, and independent mutable frames would need a cached pointer per
+channel. Iterate them channel-major, or a frame at a time with `frame_iter_mut`.
 
 Blocks also separate allocated capacity from visible size — see [`AudioBlockMut::set_num_frames_visible`](https://docs.rs/audio-blocks/latest/audio_blocks/trait.AudioBlockMut.html#tymethod.set_num_frames_visible)
 for real-time safe buffer resizing without reallocation.

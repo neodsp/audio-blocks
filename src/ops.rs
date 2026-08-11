@@ -1,7 +1,7 @@
 use rtsan_standalone::nonblocking;
 
 use crate::{
-    AudioBlock, AudioBlockMut, BlockLayout, FramesMut, Sample,
+    AudioBlock, AudioBlockMut, Sample,
     mono::{MonoView, MonoViewMut},
 };
 
@@ -32,13 +32,13 @@ pub trait AudioBlockOps<S: Sample> {
     fn copy_channel_to_mono_exact(&self, dest: &mut MonoViewMut<S>, channel: u16);
 }
 
-/// Mutable operations on audio blocks: block copy, gain, clear, fill, and per-sample processing.
+/// Composite operations that copy between audio blocks.
 ///
 /// Automatically implemented for all types that implement [`AudioBlockMut`].
 /// Import with `use audio_blocks::AudioBlockOpsMut;`.
 ///
-/// Note: [`fill_with`](AudioBlockOpsMut::fill_with), [`clear`](AudioBlockOpsMut::clear), and
-/// [`gain`](AudioBlockOpsMut::gain) operate on the entire allocated buffer for efficiency.
+/// Per-sample iteration lives on [`AudioBlockMut`] itself, so each layout can
+/// override it with its fastest traversal.
 pub trait AudioBlockOpsMut<S: Sample> {
     /// Copy samples from source block into destination.
     /// Only copies `min(src, dst)` channels and frames.
@@ -57,43 +57,6 @@ pub trait AudioBlockOpsMut<S: Sample> {
     /// Copy a mono block to all channels of this block.
     /// Panics if blocks don't have the same number of frames.
     fn copy_mono_to_all_channels_exact(&mut self, mono: &MonoView<S>);
-    /// Gives access to all samples in the block.
-    fn for_each(&mut self, f: impl FnMut(&mut S));
-    /// Gives access to all samples in the block while supplying the information
-    /// about which channel and frame number the sample is stored in.
-    fn enumerate(&mut self, f: impl FnMut(u16, usize, &mut S));
-    /// Iterate over all allocated samples using fast linear buffer iteration.
-    ///
-    /// This iterates over `num_frames_allocated()` samples, not just `num_frames()`.
-    /// It uses cache-friendly linear access over the underlying storage, which is
-    /// significantly faster than [`for_each`](AudioBlockOpsMut::for_each) for large buffers when the visible
-    /// window is close to the allocated size.
-    ///
-    /// # Performance Note
-    ///
-    /// Only use this when `num_frames()` is close to `num_frames_allocated()`.
-    /// If the buffer has been resized dramatically (e.g., `set_visible()` to half
-    /// the allocation), [`for_each`](AudioBlockOpsMut::for_each) will be faster as it respects the visible window.
-    fn for_each_allocated(&mut self, f: impl FnMut(&mut S));
-    /// Iterate over all allocated samples with indices using fast linear buffer iteration.
-    ///
-    /// Like [`for_each_allocated`](AudioBlockOpsMut::for_each_allocated), this iterates over the entire allocated buffer
-    /// for cache-friendly linear access. Only faster than [`enumerate`](AudioBlockOpsMut::enumerate) when the
-    /// visible window is close to the allocated size.
-    fn enumerate_allocated(&mut self, f: impl FnMut(u16, usize, &mut S));
-    /// Sets all samples in the block to the specified value.
-    /// Iterates over the entire allocated buffer for efficiency.
-    fn fill_with(&mut self, sample: S);
-    /// Sets all samples in the block to the default value (zero for numeric types).
-    /// Iterates over the entire allocated buffer for efficiency.
-    fn clear(&mut self)
-    where
-        S: Default;
-    /// Applies gain to all samples by multiplying each sample.
-    /// Iterates over the entire allocated buffer for efficiency.
-    fn gain(&mut self, gain: S)
-    where
-        S: std::ops::Mul<Output = S> + Copy;
 }
 
 impl<S: Sample, B: AudioBlock<S>> AudioBlockOps<S> for B {
@@ -225,152 +188,6 @@ impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOpsMut<S> for B {
                 *sample_mut = *sample;
             }
         }
-    }
-
-    #[nonblocking]
-    fn for_each(&mut self, mut f: impl FnMut(&mut S)) {
-        // below 8 channels it is faster to always go per channel
-        if self.num_channels() < 8 {
-            for channel in self.channels_iter_mut() {
-                channel.for_each(&mut f);
-            }
-        } else {
-            match self.layout() {
-                BlockLayout::Sequential | BlockLayout::Planar => {
-                    for channel in self.channels_iter_mut() {
-                        channel.for_each(&mut f);
-                    }
-                }
-                BlockLayout::Interleaved => {
-                    for frame in 0..self.num_frames() {
-                        self.frame_iter_mut(frame).for_each(&mut f);
-                    }
-                }
-            }
-        }
-    }
-
-    #[nonblocking]
-    fn enumerate(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
-        // below 8 channels it is faster to always go per channel
-        if self.num_channels() < 8 {
-            for (ch, channel) in self.channels_iter_mut().enumerate() {
-                for (fr, sample) in channel.enumerate() {
-                    f(ch as u16, fr, sample)
-                }
-            }
-        } else {
-            match self.layout() {
-                BlockLayout::Interleaved => {
-                    // Frame-major is the cache-friendly order here, and
-                    // interleaved frames are contiguous chunks.
-                    let mut view = self
-                        .as_interleaved_view_mut()
-                        .expect("Layout is interleaved");
-                    for (fr, frame) in view.frames_iter_mut().enumerate() {
-                        for (ch, sample) in frame.enumerate() {
-                            f(ch as u16, fr, sample)
-                        }
-                    }
-                }
-                BlockLayout::Planar | BlockLayout::Sequential => {
-                    for (ch, channel) in self.channels_iter_mut().enumerate() {
-                        for (fr, sample) in channel.enumerate() {
-                            f(ch as u16, fr, sample)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    #[nonblocking]
-    fn for_each_allocated(&mut self, mut f: impl FnMut(&mut S)) {
-        match self.layout() {
-            BlockLayout::Interleaved => self
-                .as_interleaved_view_mut()
-                .expect("Layout is interleaved")
-                .raw_data_mut()
-                .iter_mut()
-                .for_each(&mut f),
-            BlockLayout::Planar => self
-                .as_planar_view_mut()
-                .expect("Layout is planar")
-                .raw_data_mut()
-                .iter_mut()
-                .for_each(|c| c.as_mut().iter_mut().for_each(&mut f)),
-            BlockLayout::Sequential => self
-                .as_sequential_view_mut()
-                .expect("Layout is sequential")
-                .raw_data_mut()
-                .iter_mut()
-                .for_each(&mut f),
-        }
-    }
-
-    #[nonblocking]
-    fn enumerate_allocated(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
-        match self.layout() {
-            BlockLayout::Interleaved => {
-                let num_channels = self.num_channels_allocated() as usize;
-                self.as_interleaved_view_mut()
-                    .expect("Layout is interleaved")
-                    .raw_data_mut()
-                    .iter_mut()
-                    .enumerate()
-                    .for_each(|(i, sample)| {
-                        let channel = i % num_channels;
-                        let frame = i / num_channels;
-                        f(channel as u16, frame, sample)
-                    });
-            }
-            BlockLayout::Planar => self
-                .as_planar_view_mut()
-                .expect("Layout is planar")
-                .raw_data_mut()
-                .iter_mut()
-                .enumerate()
-                .for_each(|(ch, v)| {
-                    v.as_mut()
-                        .iter_mut()
-                        .enumerate()
-                        .for_each(|(frame, sample)| f(ch as u16, frame, sample))
-                }),
-            BlockLayout::Sequential => {
-                let num_frames = self.num_frames_allocated();
-                self.as_sequential_view_mut()
-                    .expect("Layout is sequential")
-                    .raw_data_mut()
-                    .iter_mut()
-                    .enumerate()
-                    .for_each(|(i, sample)| {
-                        let channel = i / num_frames;
-                        let frame = i % num_frames;
-                        f(channel as u16, frame, sample)
-                    });
-            }
-        }
-    }
-
-    #[nonblocking]
-    fn fill_with(&mut self, sample: S) {
-        self.for_each_allocated(|v| *v = sample);
-    }
-
-    #[nonblocking]
-    fn clear(&mut self)
-    where
-        S: Default,
-    {
-        self.fill_with(S::default());
-    }
-
-    #[nonblocking]
-    fn gain(&mut self, gain: S)
-    where
-        S: std::ops::Mul<Output = S> + Copy,
-    {
-        self.for_each_allocated(|v| *v = *v * gain);
     }
 }
 

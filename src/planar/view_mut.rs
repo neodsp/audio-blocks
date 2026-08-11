@@ -167,8 +167,6 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> PlanarViewMut<'a, S, V> {
 }
 
 impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for PlanarViewMut<'_, S, V> {
-    type PlanarView = V;
-
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -269,16 +267,9 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlock<S> for PlanarViewMut<'_, 
     fn as_view(&self) -> impl AudioBlock<S> {
         PlanarView::from_slice_limited(self.data, self.num_channels, self.num_frames)
     }
-
-    #[nonblocking]
-    fn as_planar_view(&self) -> Option<PlanarView<'_, S, Self::PlanarView>> {
-        Some(self.view())
-    }
 }
 
 impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for PlanarViewMut<'_, S, V> {
-    type PlanarViewMut = V;
-
     #[nonblocking]
     fn set_num_channels_visible(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
@@ -341,8 +332,24 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for PlanarViewMut<'
     }
 
     #[nonblocking]
-    fn as_planar_view_mut(&mut self) -> Option<PlanarViewMut<'_, S, Self::PlanarViewMut>> {
-        Some(self.view_mut())
+    fn for_each_allocated(&mut self, mut f: impl FnMut(&mut S)) {
+        self.raw_data_mut()
+            .iter_mut()
+            .for_each(|c| c.as_mut().iter_mut().for_each(&mut f));
+    }
+
+    #[nonblocking]
+    fn enumerate_allocated(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
+        self.raw_data_mut()
+            .iter_mut()
+            .enumerate()
+            .for_each(|(channel, channel_data)| {
+                channel_data
+                    .as_mut()
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(frame, sample)| f(channel as u16, frame, sample))
+            });
     }
 }
 
@@ -771,9 +778,9 @@ mod tests {
         let mut vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
         let block = PlanarViewMut::from_slice(&mut vec);
 
-        assert!(block.as_interleaved_view().is_none());
-        assert!(block.as_planar_view().is_some());
-        assert!(block.as_sequential_view().is_none());
+        assert_eq!(block.layout(), crate::BlockLayout::Planar);
+        assert_eq!(block.raw_data().len(), 2);
+        assert_eq!(block.channel(0), &[0.0, 2.0, 4.0, 6.0, 8.0]);
 
         let view = block.as_view();
         assert_eq!(
@@ -790,9 +797,9 @@ mod tests {
     fn test_view_mut() {
         let mut data = vec![vec![0.0; 5]; 2];
         let mut block = PlanarViewMut::from_slice(&mut data);
-        assert!(block.as_interleaved_view().is_none());
-        assert!(block.as_planar_view().is_some());
-        assert!(block.as_sequential_view().is_none());
+        assert_eq!(block.layout(), crate::BlockLayout::Planar);
+        assert_eq!(block.raw_data().len(), 2);
+        assert_eq!(block.channel(0), &[0.0; 5]);
         {
             let mut view = block.as_view_mut();
             view.channel_iter_mut(0)

@@ -10,7 +10,7 @@ use std::{boxed::Box, vec, vec::Vec};
 
 use super::{view::SequentialView, view_mut::SequentialViewMut};
 use crate::{
-    AudioBlock, AudioBlockMut, FramesMut, Sample,
+    AudioBlock, AudioBlockMut, Contiguous, ContiguousMut, FramesMut, Sample,
     iter::{StridedSampleIter, StridedSampleIterMut},
 };
 
@@ -259,8 +259,6 @@ impl<S: Sample> Sequential<S> {
 }
 
 impl<S: Sample> AudioBlock<S> for Sequential<S> {
-    type PlanarView = [S; 0];
-
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -363,16 +361,16 @@ impl<S: Sample> AudioBlock<S> for Sequential<S> {
     fn as_view(&self) -> impl AudioBlock<S> {
         self.view()
     }
+}
 
+impl<S: Sample> Contiguous<S> for Sequential<S> {
     #[nonblocking]
-    fn as_sequential_view(&self) -> Option<SequentialView<'_, S>> {
-        Some(self.view())
+    fn raw_data(&self) -> &[S] {
+        self.raw_data()
     }
 }
 
 impl<S: Sample> AudioBlockMut<S> for Sequential<S> {
-    type PlanarViewMut = [S; 0];
-
     #[nonblocking]
     fn set_num_channels_visible(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
@@ -432,8 +430,28 @@ impl<S: Sample> AudioBlockMut<S> for Sequential<S> {
     }
 
     #[nonblocking]
-    fn as_sequential_view_mut(&mut self) -> Option<SequentialViewMut<'_, S>> {
-        Some(self.view_mut())
+    fn for_each_allocated(&mut self, f: impl FnMut(&mut S)) {
+        self.raw_data_mut().iter_mut().for_each(f);
+    }
+
+    #[nonblocking]
+    fn enumerate_allocated(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
+        let num_frames = self.num_frames_allocated();
+        self.raw_data_mut()
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, sample)| {
+                let channel = i / num_frames;
+                let frame = i % num_frames;
+                f(channel as u16, frame, sample)
+            });
+    }
+}
+
+impl<S: Sample> ContiguousMut<S> for Sequential<S> {
+    #[nonblocking]
+    fn raw_data_mut(&mut self) -> &mut [S] {
+        self.raw_data_mut()
     }
 }
 
@@ -757,9 +775,10 @@ mod tests {
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
             2,
         ));
-        assert!(block.as_interleaved_view().is_none());
-        assert!(block.as_planar_view().is_none());
-        assert!(block.as_sequential_view().is_some());
+        assert_eq!(
+            block.raw_data(),
+            &[0.0, 2.0, 4.0, 6.0, 8.0, 1.0, 3.0, 5.0, 7.0, 9.0]
+        );
         let view = block.as_view();
         assert_eq!(
             view.channel_iter(0).copied().collect::<Vec<_>>(),
@@ -774,9 +793,8 @@ mod tests {
     #[test]
     fn test_view_mut() {
         let mut block = Sequential::<f32>::new(2, 5);
-        assert!(block.as_interleaved_view().is_none());
-        assert!(block.as_planar_view().is_none());
-        assert!(block.as_sequential_view().is_some());
+        assert_eq!(block.raw_data(), &[0.0; 10]);
+        assert_eq!(block.raw_data_mut(), &[0.0; 10]);
         {
             let mut view = block.as_view_mut();
             view.channel_iter_mut(0)

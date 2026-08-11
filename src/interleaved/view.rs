@@ -2,7 +2,7 @@ use rtsan_standalone::nonblocking;
 
 use core::{marker::PhantomData, ptr::NonNull};
 
-use crate::{AudioBlock, Sample, iter::StridedSampleIter};
+use crate::{AudioBlock, Contiguous, Sample, iter::StridedSampleIter};
 
 /// A read-only view of interleaved audio data.
 ///
@@ -195,8 +195,6 @@ impl<'a, S: Sample> InterleavedView<'a, S> {
 }
 
 impl<S: Sample> AudioBlock<S> for InterleavedView<'_, S> {
-    type PlanarView = [S; 0];
-
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -298,10 +296,12 @@ impl<S: Sample> AudioBlock<S> for InterleavedView<'_, S> {
     fn as_view(&self) -> impl AudioBlock<S> {
         self.view()
     }
+}
 
+impl<S: Sample> Contiguous<S> for InterleavedView<'_, S> {
     #[nonblocking]
-    fn as_interleaved_view(&self) -> Option<InterleavedView<'_, S>> {
-        Some(self.view())
+    fn raw_data(&self) -> &[S] {
+        self.raw_data()
     }
 }
 
@@ -476,9 +476,7 @@ mod tests {
     fn test_view() {
         let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let block = InterleavedView::<f32>::from_slice(&data, 2);
-        assert!(block.as_interleaved_view().is_some());
-        assert!(block.as_planar_view().is_none());
-        assert!(block.as_sequential_view().is_none());
+        assert_eq!(block.raw_data(), &data);
 
         let view = block.view();
         assert_eq!(

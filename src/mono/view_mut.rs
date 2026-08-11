@@ -1,7 +1,7 @@
 use rtsan_standalone::nonblocking;
 
 use super::view::MonoView;
-use crate::{AudioBlock, AudioBlockMut, FramesMut, Sample};
+use crate::{AudioBlock, AudioBlockMut, Contiguous, ContiguousMut, FramesMut, Sample};
 
 /// A mutable view of mono (single-channel) audio data.
 ///
@@ -204,8 +204,6 @@ impl<'a, S: Sample> MonoViewMut<'a, S> {
 }
 
 impl<S: Sample> AudioBlock<S> for MonoViewMut<'_, S> {
-    type PlanarView = [S; 0];
-
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         1
@@ -266,8 +264,6 @@ impl<S: Sample> AudioBlock<S> for MonoViewMut<'_, S> {
 }
 
 impl<S: Sample> AudioBlockMut<S> for MonoViewMut<'_, S> {
-    type PlanarViewMut = [S; 0];
-
     #[nonblocking]
     fn set_num_channels_visible(&mut self, num_channels: u16) {
         assert_eq!(
@@ -312,6 +308,33 @@ impl<S: Sample> AudioBlockMut<S> for MonoViewMut<'_, S> {
     #[nonblocking]
     fn as_view_mut(&mut self) -> impl AudioBlockMut<S> {
         self.view_mut()
+    }
+
+    #[nonblocking]
+    fn for_each_allocated(&mut self, f: impl FnMut(&mut S)) {
+        self.raw_data_mut().iter_mut().for_each(f);
+    }
+
+    #[nonblocking]
+    fn enumerate_allocated(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
+        self.raw_data_mut()
+            .iter_mut()
+            .enumerate()
+            .for_each(|(frame, sample)| f(0, frame, sample));
+    }
+}
+
+impl<S: Sample> Contiguous<S> for MonoViewMut<'_, S> {
+    #[nonblocking]
+    fn raw_data(&self) -> &[S] {
+        self.raw_data()
+    }
+}
+
+impl<S: Sample> ContiguousMut<S> for MonoViewMut<'_, S> {
+    #[nonblocking]
+    fn raw_data_mut(&mut self) -> &mut [S] {
+        self.raw_data_mut()
     }
 }
 

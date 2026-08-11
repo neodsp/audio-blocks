@@ -129,8 +129,6 @@ impl<'a, S: Sample, V: AsRef<[S]>> PlanarView<'a, S, V> {
 }
 
 impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for PlanarView<'_, S, V> {
-    type PlanarView = V;
-
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -226,11 +224,6 @@ impl<S: Sample, V: AsRef<[S]>> AudioBlock<S> for PlanarView<'_, S, V> {
     #[nonblocking]
     fn as_view(&self) -> impl AudioBlock<S> {
         self.view()
-    }
-
-    #[nonblocking]
-    fn as_planar_view(&self) -> Option<PlanarView<'_, S, Self::PlanarView>> {
-        Some(self.view())
     }
 }
 
@@ -532,9 +525,9 @@ mod tests {
         let vec = vec![vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
         let block = PlanarView::from_slice(&vec);
 
-        assert!(block.as_interleaved_view().is_none());
-        assert!(block.as_planar_view().is_some());
-        assert!(block.as_sequential_view().is_none());
+        assert_eq!(block.layout(), crate::BlockLayout::Planar);
+        assert_eq!(block.raw_data().len(), 2);
+        assert_eq!(block.channel(0), &[0.0, 2.0, 4.0, 6.0, 8.0]);
 
         let view = block.as_view();
         assert_eq!(

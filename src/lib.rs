@@ -77,9 +77,22 @@
 //! | Trait | Purpose |
 //! |---|---|
 //! | [`AudioBlock`] | Read-only access: sample access, channel/frame iteration, layout info |
-//! | [`AudioBlockMut`] | Mutable access: sample mutation, resizing visible region, mutable iteration |
+//! | [`AudioBlockMut`] | Mutable access: sample mutation, resizing, per-sample iteration |
 //! | [`AudioBlockOps`] | Read-only operations: mono mixdown, channel extraction |
-//! | [`AudioBlockOpsMut`] | Mutable operations: block copy, gain, clear, fill, per-sample processing |
+//! | [`AudioBlockOpsMut`] | Composite operations: block copy, mono fan-out |
+//!
+//! Two further traits describe what a layout can do, so generic code states its
+//! requirement in the signature instead of inspecting the layout at run time:
+//!
+//! | Trait | Implemented by | Gives you |
+//! |---|---|---|
+//! | [`Contiguous`] / [`ContiguousMut`] | interleaved, sequential, mono | the flat sample slice |
+//! | [`FramesMut`] | interleaved, sequential, mono | mutable frame-major iteration |
+//!
+//! Planar blocks implement neither: each channel is a separate allocation, so
+//! there is no flat slice, and independent mutable frames would need a cached
+//! pointer per channel. Iterate them channel-major, or a frame at a time with
+//! [`AudioBlockMut::frame_iter_mut`].
 //!
 //! Blocks also separate allocated capacity from visible size — see [`AudioBlockMut::set_num_frames_visible`]
 //! for real-time safe buffer resizing without reallocation.
@@ -216,8 +229,6 @@ impl<T> Sample for T where T: Copy + 'static {}
 /// }
 /// ```
 pub trait AudioBlock<S: Sample> {
-    type PlanarView: AsRef<[S]>;
-
     /// Returns the number of active audio channels.
     fn num_channels(&self) -> u16;
 
@@ -269,33 +280,28 @@ pub trait AudioBlock<S: Sample> {
     /// This operation is real-time safe, as it returns a lightweight
     /// wrapper around the original data.
     fn as_view(&self) -> impl AudioBlock<S>;
+}
 
-    /// Attempts to downcast this generic audio block to a concrete interleaved view.
-    /// This enables access to frame slices and the underlying raw data.
+/// Blocks whose samples all live in one contiguous slice.
+///
+/// Implemented by interleaved, sequential and mono blocks. Planar blocks store
+/// each channel in its own allocation and so cannot implement it.
+///
+/// Take this bound when you need the flat buffer, for example to hand it to a C
+/// API. It replaces asking a block what layout it has and then downcasting: the
+/// requirement is expressed in the signature and checked at compile time.
+///
+/// ```
+/// # use audio_blocks::*;
+/// fn to_c_api(block: &impl Contiguous<f32>) -> &[f32] {
+///     block.raw_data()
+/// }
+/// ```
+pub trait Contiguous<S: Sample>: AudioBlock<S> {
+    /// Returns every allocated sample as one slice, in memory order.
     ///
-    /// Returns `Some` if the underlying data is stored in interleaved format,
-    /// otherwise returns `None`.
-    fn as_interleaved_view(&self) -> Option<InterleavedView<'_, S>> {
-        None
-    }
-
-    /// Attempts to downcast this generic audio block to a concrete planar view.
-    /// This enables access to frame slices and the underlying raw data.
-    ///
-    /// Returns `Some` if the underlying data is stored in planar format,
-    /// otherwise returns `None`.
-    fn as_planar_view(&self) -> Option<PlanarView<'_, S, Self::PlanarView>> {
-        None
-    }
-
-    /// Attempts to downcast this generic audio block to a concrete sequential view.
-    /// This enables access to frame slices and the underlying raw data.
-    ///
-    /// Returns `Some` if the underlying data is stored in sequential format,
-    /// otherwise returns `None`.
-    fn as_sequential_view(&self) -> Option<SequentialView<'_, S>> {
-        None
-    }
+    /// Matches the inherent `raw_data` of each contiguous block type.
+    fn raw_data(&self) -> &[S];
 }
 
 /// Extends the [`AudioBlock`] trait with mutable access operations.
@@ -337,8 +343,6 @@ pub trait AudioBlock<S: Sample> {
 /// }
 /// ```
 pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
-    type PlanarViewMut: AsRef<[S]> + AsMut<[S]>;
-
     /// Sets the visible size of the audio block to the specified number of channels and frames.
     ///
     /// # Panics
@@ -397,32 +401,70 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// wrapper around the original data.
     fn as_view_mut(&mut self) -> impl AudioBlockMut<S>;
 
-    /// Attempts to downcast this generic audio block to a concrete interleaved view.
-    /// This enables access to frame slices and the underlying raw data.
+    /// Visits every sample in the visible region.
     ///
-    /// Returns `Some` if the underlying data is stored in interleaved format,
-    /// otherwise returns `None`.
-    fn as_interleaved_view_mut(&mut self) -> Option<InterleavedViewMut<'_, S>> {
-        None
+    /// The default walks channel by channel. Layouts with a faster traversal
+    /// override it.
+    fn for_each(&mut self, mut f: impl FnMut(&mut S)) {
+        for channel in self.channels_iter_mut() {
+            channel.for_each(&mut f);
+        }
     }
 
-    /// Attempts to downcast this generic audio block to a concrete planar view.
-    /// This enables access to frame slices and the underlying raw data.
+    /// Visits every sample in the visible region with its channel and frame index.
     ///
-    /// Returns `Some` if the underlying data is stored in planar format,
-    /// otherwise returns `None`.
-    fn as_planar_view_mut(&mut self) -> Option<PlanarViewMut<'_, S, Self::PlanarViewMut>> {
-        None
+    /// The default walks channel by channel. Layouts with a faster traversal
+    /// override it.
+    fn enumerate(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
+        for (channel, samples) in self.channels_iter_mut().enumerate() {
+            for (frame, sample) in samples.enumerate() {
+                f(channel as u16, frame, sample);
+            }
+        }
     }
 
-    /// Attempts to downcast this generic audio block to a concrete sequential view.
-    /// This enables access to frame slices and the underlying raw data.
+    /// Visits every *allocated* sample in memory order, including samples
+    /// outside the visible region.
     ///
-    /// Returns `Some` if the underlying data is stored in sequential format,
-    /// otherwise returns `None`.
-    fn as_sequential_view_mut(&mut self) -> Option<SequentialViewMut<'_, S>> {
-        None
+    /// Linear traversal of the underlying storage, so this is faster than
+    /// [`for_each`](AudioBlockMut::for_each) when the visible region covers most
+    /// of the allocation. There is no layout-independent way to reach samples
+    /// outside the visible region, so every layout implements this itself.
+    fn for_each_allocated(&mut self, f: impl FnMut(&mut S));
+
+    /// Visits every *allocated* sample with its channel and frame index.
+    ///
+    /// See [`for_each_allocated`](AudioBlockMut::for_each_allocated).
+    fn enumerate_allocated(&mut self, f: impl FnMut(u16, usize, &mut S));
+
+    /// Sets every allocated sample to `sample`.
+    fn fill_with(&mut self, sample: S) {
+        self.for_each_allocated(|v| *v = sample);
     }
+
+    /// Sets every allocated sample to the default value (zero for numeric types).
+    fn clear(&mut self)
+    where
+        S: Default,
+    {
+        self.fill_with(S::default());
+    }
+
+    /// Multiplies every allocated sample by `gain`.
+    fn gain(&mut self, gain: S)
+    where
+        S: core::ops::Mul<Output = S>,
+    {
+        self.for_each_allocated(|v| *v = *v * gain);
+    }
+}
+
+/// Mutable counterpart to [`Contiguous`].
+pub trait ContiguousMut<S: Sample>: Contiguous<S> + AudioBlockMut<S> {
+    /// Returns every allocated sample as one mutable slice, in memory order.
+    ///
+    /// Matches the inherent `raw_data_mut` of each contiguous block type.
+    fn raw_data_mut(&mut self) -> &mut [S];
 }
 
 /// Mutable frame-major iteration, for layouts that can reach a frame without
@@ -432,7 +474,7 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
 /// each channel is a separate allocation, so handing out independent frames would
 /// require caching one pointer per channel. Iterate planar blocks with
 /// [`AudioBlockMut::frame_iter_mut`] one frame at a time, or with
-/// [`AudioBlockOpsMut::for_each`] / [`AudioBlockOpsMut::enumerate`].
+/// [`AudioBlockMut::for_each`] / [`AudioBlockMut::enumerate`].
 ///
 /// ```
 /// # use audio_blocks::*;

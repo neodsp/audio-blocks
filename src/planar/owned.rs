@@ -233,8 +233,6 @@ impl<S: Sample> Planar<S> {
 }
 
 impl<S: Sample> AudioBlock<S> for Planar<S> {
-    type PlanarView = Box<[S]>;
-
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         self.num_channels
@@ -334,16 +332,9 @@ impl<S: Sample> AudioBlock<S> for Planar<S> {
     fn as_view(&self) -> impl AudioBlock<S> {
         self.view()
     }
-
-    #[nonblocking]
-    fn as_planar_view(&self) -> Option<PlanarView<'_, S, Self::PlanarView>> {
-        Some(self.view())
-    }
 }
 
 impl<S: Sample> AudioBlockMut<S> for Planar<S> {
-    type PlanarViewMut = Box<[S]>;
-
     #[nonblocking]
     fn set_num_channels_visible(&mut self, num_channels: u16) {
         assert!(num_channels <= self.num_channels_allocated);
@@ -404,8 +395,23 @@ impl<S: Sample> AudioBlockMut<S> for Planar<S> {
     }
 
     #[nonblocking]
-    fn as_planar_view_mut(&mut self) -> Option<PlanarViewMut<'_, S, Self::PlanarViewMut>> {
-        Some(self.view_mut())
+    fn for_each_allocated(&mut self, mut f: impl FnMut(&mut S)) {
+        self.raw_data_mut()
+            .iter_mut()
+            .for_each(|c| c.iter_mut().for_each(&mut f));
+    }
+
+    #[nonblocking]
+    fn enumerate_allocated(&mut self, mut f: impl FnMut(u16, usize, &mut S)) {
+        self.raw_data_mut()
+            .iter_mut()
+            .enumerate()
+            .for_each(|(channel, channel_data)| {
+                channel_data
+                    .iter_mut()
+                    .enumerate()
+                    .for_each(|(frame, sample)| f(channel as u16, frame, sample))
+            });
     }
 }
 
@@ -725,9 +731,9 @@ mod tests {
             2,
         ));
 
-        assert!(block.as_interleaved_view().is_none());
-        assert!(block.as_planar_view().is_some());
-        assert!(block.as_sequential_view().is_none());
+        assert_eq!(block.layout(), crate::BlockLayout::Planar);
+        assert_eq!(block.raw_data().len(), 2);
+        assert_eq!(block.channel(0), &[0.0, 2.0, 4.0, 6.0, 8.0]);
 
         let view = block.view();
         assert_eq!(
@@ -743,9 +749,9 @@ mod tests {
     #[test]
     fn test_view_mut() {
         let mut block = Planar::<f32>::new(2, 5);
-        assert!(block.as_interleaved_view().is_none());
-        assert!(block.as_planar_view().is_some());
-        assert!(block.as_sequential_view().is_none());
+        assert_eq!(block.layout(), crate::BlockLayout::Planar);
+        assert_eq!(block.raw_data().len(), 2);
+        assert_eq!(block.channel(0), &[0.0; 5]);
         {
             let mut view = block.view_mut();
             view.channel_iter_mut(0)

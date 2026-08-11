@@ -1,6 +1,6 @@
 use rtsan_standalone::nonblocking;
 
-use crate::{AudioBlock, Sample};
+use crate::{AudioBlock, Contiguous, Sample};
 
 /// A read-only view of mono (single-channel) audio data.
 ///
@@ -173,8 +173,6 @@ impl<'a, S: Sample> MonoView<'a, S> {
 }
 
 impl<S: Sample> AudioBlock<S> for MonoView<'_, S> {
-    type PlanarView = [S; 0];
-
     #[nonblocking]
     fn num_channels(&self) -> u16 {
         1
@@ -231,6 +229,13 @@ impl<S: Sample> AudioBlock<S> for MonoView<'_, S> {
     #[nonblocking]
     fn as_view(&self) -> impl AudioBlock<S> {
         self.view()
+    }
+}
+
+impl<S: Sample> Contiguous<S> for MonoView<'_, S> {
+    #[nonblocking]
+    fn raw_data(&self) -> &[S] {
+        self.raw_data()
     }
 }
 
