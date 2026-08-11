@@ -1,7 +1,7 @@
 use rtsan_standalone::nonblocking;
 
 use crate::{
-    AudioBlock, AudioBlockMut, BlockLayout, Sample,
+    AudioBlock, AudioBlockMut, BlockLayout, FramesMut, Sample,
     mono::{MonoView, MonoViewMut},
 };
 
@@ -262,7 +262,12 @@ impl<S: Sample, B: AudioBlockMut<S>> AudioBlockOpsMut<S> for B {
         } else {
             match self.layout() {
                 BlockLayout::Interleaved => {
-                    for (fr, frame) in self.frames_iter_mut().enumerate() {
+                    // Frame-major is the cache-friendly order here, and
+                    // interleaved frames are contiguous chunks.
+                    let mut view = self
+                        .as_interleaved_view_mut()
+                        .expect("Layout is interleaved");
+                    for (fr, frame) in view.frames_iter_mut().enumerate() {
                         for (ch, sample) in frame.enumerate() {
                             f(ch as u16, fr, sample)
                         }

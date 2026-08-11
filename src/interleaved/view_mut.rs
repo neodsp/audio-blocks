@@ -4,7 +4,7 @@ use core::{marker::PhantomData, ptr::NonNull};
 
 use super::view::InterleavedView;
 use crate::{
-    AudioBlock, AudioBlockMut, Sample,
+    AudioBlock, AudioBlockMut, FramesMut, Sample,
     iter::{StridedSampleIter, StridedSampleIterMut},
 };
 
@@ -432,18 +432,6 @@ impl<S: Sample> AudioBlockMut<S> for InterleavedViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn frames_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
-        let num_channels = self.num_channels as usize;
-        let num_channels_allocated = self.num_channels_allocated as usize;
-        self.data
-            .chunks_mut(num_channels_allocated)
-            .take(self.num_frames)
-            .map(move |channel_chunk| channel_chunk.iter_mut().take(num_channels))
-    }
-
-    #[nonblocking]
     fn as_view_mut(&mut self) -> impl AudioBlockMut<S> {
         self.view_mut()
     }
@@ -475,6 +463,20 @@ impl<S: Sample + core::fmt::Debug> core::fmt::Debug for InterleavedViewMut<'_, S
         writeln!(f, "}}")?;
 
         Ok(())
+    }
+}
+
+impl<S: Sample> FramesMut<S> for InterleavedViewMut<'_, S> {
+    #[nonblocking]
+    fn frames_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
+        let num_channels = self.num_channels as usize;
+        let num_channels_allocated = self.num_channels_allocated as usize;
+        self.data
+            .chunks_mut(num_channels_allocated)
+            .take(self.num_frames)
+            .map(move |channel_chunk| channel_chunk.iter_mut().take(num_channels))
     }
 }
 

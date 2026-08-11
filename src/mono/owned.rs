@@ -8,7 +8,7 @@ use std::{boxed::Box, vec, vec::Vec};
 use std::{boxed::Box, vec, vec::Vec};
 
 use super::{view::MonoView, view_mut::MonoViewMut};
-use crate::{AudioBlock, AudioBlockMut, Sample};
+use crate::{AudioBlock, AudioBlockMut, FramesMut, Sample};
 
 /// A mono (single-channel) audio block that owns its data.
 ///
@@ -333,14 +333,6 @@ impl<S: Sample> AudioBlockMut<S> for Mono<S> {
     }
 
     #[nonblocking]
-    fn frames_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
-        let num_frames = self.num_frames;
-        self.data.iter_mut().take(num_frames).map(core::iter::once)
-    }
-
-    #[nonblocking]
     fn as_view_mut(&mut self) -> impl AudioBlockMut<S> {
         let num_frames = self.num_frames;
         let num_frames_allocated = self.num_frames_allocated;
@@ -356,6 +348,16 @@ impl<S: Sample + core::fmt::Debug> core::fmt::Debug for Mono<S> {
         writeln!(f, "  samples: {:?}", self.samples())?;
         writeln!(f, "}}")?;
         Ok(())
+    }
+}
+
+impl<S: Sample> FramesMut<S> for Mono<S> {
+    #[nonblocking]
+    fn frames_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
+        let num_frames = self.num_frames;
+        self.data.iter_mut().take(num_frames).map(core::iter::once)
     }
 }
 

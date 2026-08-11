@@ -1,7 +1,7 @@
 use rtsan_standalone::nonblocking;
 
 use super::view::MonoView;
-use crate::{AudioBlock, AudioBlockMut, Sample};
+use crate::{AudioBlock, AudioBlockMut, FramesMut, Sample};
 
 /// A mutable view of mono (single-channel) audio data.
 ///
@@ -310,14 +310,6 @@ impl<S: Sample> AudioBlockMut<S> for MonoViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn frames_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
-        let num_frames = self.num_frames;
-        self.data.iter_mut().take(num_frames).map(core::iter::once)
-    }
-
-    #[nonblocking]
     fn as_view_mut(&mut self) -> impl AudioBlockMut<S> {
         self.view_mut()
     }
@@ -331,6 +323,16 @@ impl<S: Sample + core::fmt::Debug> core::fmt::Debug for MonoViewMut<'_, S> {
         writeln!(f, "  samples: {:?}", self.samples())?;
         writeln!(f, "}}")?;
         Ok(())
+    }
+}
+
+impl<S: Sample> FramesMut<S> for MonoViewMut<'_, S> {
+    #[nonblocking]
+    fn frames_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
+        let num_frames = self.num_frames;
+        self.data.iter_mut().take(num_frames).map(core::iter::once)
     }
 }
 

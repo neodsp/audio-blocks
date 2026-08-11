@@ -9,7 +9,7 @@ use std::{boxed::Box, vec, vec::Vec};
 
 use crate::{AudioBlock, AudioBlockMut, Sample};
 
-use super::{PlanarFrameIterMut, view::PlanarView, view_mut::PlanarViewMut};
+use super::{view::PlanarView, view_mut::PlanarViewMut};
 
 /// A planar / separate-channel audio block that owns its data.
 ///
@@ -32,40 +32,13 @@ use super::{PlanarFrameIterMut, view::PlanarView, view_mut::PlanarViewMut};
 /// assert_eq!(block.channel(0), &[0.0, 0.0, 0.0]);
 /// assert_eq!(block.channel(1), &[1.0, 1.0, 1.0]);
 /// ```
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Planar<S: Sample> {
     data: Box<[Box<[S]>]>,
     num_channels: u16,
     num_frames: usize,
     num_channels_allocated: u16,
     num_frames_allocated: usize,
-    /// Scratch cache of one base pointer per allocated channel, refreshed on
-    /// each [`AudioBlockMut::frames_iter_mut`] call. Caching the pointers lets
-    /// every yielded frame borrow disjoint samples independently, so mutable
-    /// frame iteration is a real (non-lending) iterator.
-    frame_bases: Box<[*mut S]>,
-}
-
-// Safety: `frame_bases` is scratch storage that only ever holds pointers derived
-// from `data` (which `Planar` owns exclusively) and is never read without first
-// being refreshed. It grants no aliasing capability beyond `data` itself, so the
-// auto-trait bounds match those of `Box<[Box<[S]>]>`.
-unsafe impl<S: Sample + Send> Send for Planar<S> {}
-unsafe impl<S: Sample + Sync> Sync for Planar<S> {}
-
-impl<S: Sample> Clone for Planar<S> {
-    fn clone(&self) -> Self {
-        Self {
-            data: self.data.clone(),
-            num_channels: self.num_channels,
-            num_frames: self.num_frames,
-            num_channels_allocated: self.num_channels_allocated,
-            num_frames_allocated: self.num_frames_allocated,
-            // Do not copy the source's pointers; they refer to the source's
-            // buffers. Allocate fresh scratch; it is refreshed before every use.
-            frame_bases: vec![core::ptr::null_mut(); self.data.len()].into_boxed_slice(),
-        }
-    }
 }
 
 impl<S: Sample + Default> Planar<S> {
@@ -90,7 +63,6 @@ impl<S: Sample + Default> Planar<S> {
             num_frames,
             num_channels_allocated: num_channels,
             num_frames_allocated: num_frames,
-            frame_bases: vec![core::ptr::null_mut(); num_channels as usize].into_boxed_slice(),
         }
     }
 }
@@ -156,8 +128,6 @@ impl<S: Sample> Planar<S> {
             num_frames: num_frames_visible,
             num_channels_allocated,
             num_frames_allocated,
-            frame_bases: vec![core::ptr::null_mut(); num_channels_allocated as usize]
-                .into_boxed_slice(),
         }
     }
 
@@ -186,8 +156,6 @@ impl<S: Sample> Planar<S> {
             num_frames: block.num_frames(),
             num_channels_allocated: block.num_channels(),
             num_frames_allocated: block.num_frames(),
-            frame_bases: vec![core::ptr::null_mut(); block.num_channels() as usize]
-                .into_boxed_slice(),
         }
     }
 
@@ -431,31 +399,6 @@ impl<S: Sample> AudioBlockMut<S> for Planar<S> {
     }
 
     #[nonblocking]
-    fn frames_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
-        let num_channels = self.num_channels as usize;
-        let num_frames = self.num_frames;
-
-        // Cache one base pointer per visible channel. Each channel is a separate
-        // allocation, so these pointers are pairwise non-overlapping.
-        for channel in 0..num_channels {
-            self.frame_bases[channel] = self.data[channel].as_mut_ptr();
-        }
-        // `bases` borrows `self` for the returned iterator's lifetime, so `&mut
-        // self` keeps the samples exclusively borrowed the whole time.
-        let bases: &[*mut S] = &self.frame_bases[..num_channels];
-
-        (0..num_frames).map(move |frame| {
-            // Safety: every base points to a buffer of at least `num_frames`
-            // samples (a planar invariant), the samples are exclusively borrowed
-            // for the iterator's lifetime, channels are non-overlapping, and each
-            // frame uses a distinct `frame` offset, so no two references overlap.
-            unsafe { PlanarFrameIterMut::new(bases.iter(), frame) }
-        })
-    }
-
-    #[nonblocking]
     fn as_view_mut(&mut self) -> impl AudioBlockMut<S> {
         self.view_mut()
     }
@@ -680,17 +623,13 @@ mod tests {
         assert!(frames_iter.next().is_none());
         drop(frames_iter);
 
-        let mut frames_iter = block.frames_iter_mut();
         for i in 0..num_frames {
             let add = i as f32 * 10.0;
-            frames_iter
-                .next()
-                .unwrap()
+            block
+                .frame_iter_mut(i)
                 .enumerate()
                 .for_each(|(i, v)| *v = i as f32 + add);
         }
-        assert!(frames_iter.next().is_none());
-        drop(frames_iter);
 
         let mut frames_iter = block.frames_iter();
         let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();
@@ -707,51 +646,32 @@ mod tests {
     }
 
     #[test]
-    fn test_frames_iter_mut_independent_frames() {
-        // Previously UB: hold several frame iterators alive at once and mutate
-        // through them. Each frame borrows disjoint samples, so this is sound.
+    fn test_frame_iter_mut_covers_every_frame() {
+        // Planar blocks mutate frame-major one frame at a time; `&mut self`
+        // makes two live frames impossible, so no pointer cache is needed.
         let mut block = Planar::<f32>::new(3, 4);
 
-        // Collect every frame iterator first, then mutate, proving frames are
-        // independent (not a lending iterator).
-        let mut frames: Vec<_> = block.frames_iter_mut().collect();
-        for (f, frame) in frames.iter_mut().enumerate() {
-            for (c, sample) in frame.enumerate() {
+        for f in 0..block.num_frames() {
+            for (c, sample) in block.frame_iter_mut(f).enumerate() {
                 *sample = (c * 10 + f) as f32;
             }
         }
-        drop(frames);
 
         assert_eq!(block.channel(0), &[0.0, 1.0, 2.0, 3.0]);
         assert_eq!(block.channel(1), &[10.0, 11.0, 12.0, 13.0]);
         assert_eq!(block.channel(2), &[20.0, 21.0, 22.0, 23.0]);
-
-        // Two frames alive simultaneously, mutated interleaved.
-        let mut it = block.frames_iter_mut();
-        let mut f0 = it.next().unwrap();
-        let mut f1 = it.next().unwrap();
-        *f0.next().unwrap() = 100.0; // channel 0, frame 0
-        *f1.next().unwrap() = 200.0; // channel 0, frame 1
-        *f0.next().unwrap() = 101.0; // channel 1, frame 0
-        *f1.next().unwrap() = 201.0; // channel 1, frame 1
-        drop((f0, f1, it));
-
-        assert_eq!(block.sample(0, 0), 100.0);
-        assert_eq!(block.sample(1, 0), 101.0);
-        assert_eq!(block.sample(0, 1), 200.0);
-        assert_eq!(block.sample(1, 1), 201.0);
     }
 
     #[test]
-    fn test_frames_iter_mut_after_buffer_swap() {
-        // Swapping a channel buffer via raw_data_mut must not leave frame
-        // iteration reading a stale pointer: the cache is refreshed per call.
+    fn test_frame_iter_mut_after_buffer_swap() {
+        // Swapping a channel buffer via raw_data_mut stays correct: nothing is
+        // cached between calls.
         let mut block = Planar::<f32>::new(2, 3);
         block.raw_data_mut()[0] = vec![7.0, 8.0, 9.0].into_boxed_slice();
 
         let mut collected = Vec::new();
-        for frame in block.frames_iter_mut() {
-            for sample in frame {
+        for f in 0..block.num_frames() {
+            for sample in block.frame_iter_mut(f) {
                 collected.push(*sample);
             }
         }

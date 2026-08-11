@@ -111,10 +111,8 @@ pub use sequential::Sequential;
 pub use sequential::SequentialView;
 pub use sequential::SequentialViewMut;
 
-pub use planar::MAX_PLANAR_CHANNELS;
 #[cfg(any(feature = "std", feature = "alloc"))]
 pub use planar::Planar;
-pub use planar::PlanarFrameIterMut;
 pub use planar::PlanarPtrAdapter;
 pub use planar::PlanarPtrAdapterMut;
 pub use planar::PlanarView;
@@ -393,25 +391,6 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     /// Panics if frame index is out of bounds.
     fn frame_iter_mut(&mut self, frame: usize) -> impl ExactSizeIterator<Item = &mut S>;
 
-    /// Returns a mutable iterator that yields mutable iterators for each frame.
-    ///
-    /// Each yielded frame borrows disjoint samples, so frames are independent:
-    /// they can be advanced, held, or collected freely regardless of layout.
-    ///
-    /// ```
-    /// # use audio_blocks::*;
-    /// let mut block = Planar::<f32>::new(2, 4);
-    /// for frame in block.frames_iter_mut() {
-    ///     for sample in frame { *sample *= 0.5; }
-    /// }
-    /// ```
-    ///
-    /// Note: a [`PlanarViewMut`] caps the number of channels at
-    /// [`MAX_PLANAR_CHANNELS`]; the owned [`Planar`] has no such limit.
-    fn frames_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>>;
-
     /// Creates a non-owning mutable view of this audio block.
     ///
     /// This operation is real-time safe, as it returns a lightweight
@@ -444,4 +423,27 @@ pub trait AudioBlockMut<S: Sample>: AudioBlock<S> {
     fn as_sequential_view_mut(&mut self) -> Option<SequentialViewMut<'_, S>> {
         None
     }
+}
+
+/// Mutable frame-major iteration, for layouts that can reach a frame without
+/// side storage.
+///
+/// Interleaved, sequential and mono blocks implement this. Planar blocks do not:
+/// each channel is a separate allocation, so handing out independent frames would
+/// require caching one pointer per channel. Iterate planar blocks with
+/// [`AudioBlockMut::frame_iter_mut`] one frame at a time, or with
+/// [`AudioBlockOpsMut::for_each`] / [`AudioBlockOpsMut::enumerate`].
+///
+/// ```
+/// # use audio_blocks::*;
+/// let mut block = Interleaved::<f32>::new(2, 4);
+/// for frame in block.frames_iter_mut() {
+///     for sample in frame { *sample *= 0.5; }
+/// }
+/// ```
+pub trait FramesMut<S: Sample>: AudioBlockMut<S> {
+    /// Returns a mutable iterator that yields a mutable iterator per frame.
+    fn frames_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>>;
 }

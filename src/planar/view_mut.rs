@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use crate::{AudioBlock, AudioBlockMut, Sample};
 
-use super::{MAX_PLANAR_CHANNELS, PlanarFrameIterMut, PlanarView};
+use super::PlanarView;
 
 /// A mutable view of planar / separate-channel audio data.
 ///
@@ -25,32 +25,14 @@ use super::{MAX_PLANAR_CHANNELS, PlanarFrameIterMut, PlanarView};
 /// assert_eq!(block.channel(0), &[0.0, 0.0, 0.0]);
 /// assert_eq!(block.channel(1), &[1.0, 1.0, 1.0]);
 /// ```
-///
-/// # Size
-///
-/// This type is much larger than the other views, since it caches one pointer
-/// per channel (see [`MAX_PLANAR_CHANNELS`], which it may not exceed). If memory
-/// is tight, use [`PlanarView`] or a non-planar layout.
 pub struct PlanarViewMut<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> {
     data: &'a mut [V],
     num_channels: u16,
     num_frames: usize,
     num_channels_allocated: u16,
     num_frames_allocated: usize,
-    /// Scratch cache of one base pointer per channel, refreshed on each
-    /// [`AudioBlockMut::frames_iter_mut`] call. Caching the pointers lets every
-    /// yielded frame borrow disjoint samples independently, so mutable frame
-    /// iteration is a real (non-lending) iterator. See [`MAX_PLANAR_CHANNELS`].
-    frame_bases: [*mut S; MAX_PLANAR_CHANNELS],
     _phantom: PhantomData<S>,
 }
-
-// Safety: `frame_bases` only ever holds pointers derived from `data`, which is
-// itself an exclusive `&mut [V]` borrow. The pointers add no aliasing capability
-// beyond what `data` already grants, so the auto-trait bounds match those of
-// `&'a mut [V]`.
-unsafe impl<S: Sample + Send, V: AsMut<[S]> + AsRef<[S]> + Send> Send for PlanarViewMut<'_, S, V> {}
-unsafe impl<S: Sample + Sync, V: AsMut<[S]> + AsRef<[S]> + Sync> Sync for PlanarViewMut<'_, S, V> {}
 
 impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> PlanarViewMut<'a, S, V> {
     /// Creates a new audio block from a mutable slice of planar audio data.
@@ -98,10 +80,6 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> PlanarViewMut<'a, S, V> {
         };
         assert!(num_channels_visible <= num_channels_allocated as u16);
         assert!(num_frames_visible <= num_frames_allocated);
-        assert!(
-            num_channels_allocated <= MAX_PLANAR_CHANNELS,
-            "planar views support at most {MAX_PLANAR_CHANNELS} channels"
-        );
         data.iter()
             .for_each(|v| assert_eq!(v.as_ref().len(), num_frames_allocated));
 
@@ -111,7 +89,6 @@ impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> PlanarViewMut<'a, S, V> {
             num_frames: num_frames_visible,
             num_channels_allocated: num_channels_allocated as u16,
             num_frames_allocated,
-            frame_bases: [core::ptr::null_mut(); MAX_PLANAR_CHANNELS],
             _phantom: PhantomData,
         }
     }
@@ -359,33 +336,6 @@ impl<S: Sample, V: AsMut<[S]> + AsRef<[S]>> AudioBlockMut<S> for PlanarViewMut<'
     }
 
     #[nonblocking]
-    fn frames_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
-        let num_channels = self.num_channels as usize;
-        let num_frames = self.num_frames;
-
-        // Cache one base pointer per visible channel. Each channel lives in its
-        // own buffer, so these pointers are pairwise non-overlapping. Refreshing
-        // here (rather than at construction) keeps the cache correct even if the
-        // caller swapped a channel buffer via `raw_data_mut`.
-        for channel in 0..num_channels {
-            self.frame_bases[channel] = self.data[channel].as_mut().as_mut_ptr();
-        }
-        // `bases` borrows `self` for the returned iterator's lifetime, so `&mut
-        // self` keeps the samples exclusively borrowed the whole time.
-        let bases: &[*mut S] = &self.frame_bases[..num_channels];
-
-        (0..num_frames).map(move |frame| {
-            // Safety: every base points to a buffer of at least `num_frames`
-            // samples (a planar invariant), the samples are exclusively borrowed
-            // for the iterator's lifetime, channels are non-overlapping, and each
-            // frame uses a distinct `frame` offset, so no two references overlap.
-            unsafe { PlanarFrameIterMut::new(bases.iter(), frame) }
-        })
-    }
-
-    #[nonblocking]
     fn as_view_mut(&mut self) -> impl AudioBlockMut<S> {
         self.view_mut()
     }
@@ -484,12 +434,6 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> PlanarPtrAdapterMut<'a, S, MAX_CH
         assert!(
             num_channels as usize <= MAX_CHANNELS,
             "num_channels exceeds MAX_CHANNELS"
-        );
-        // Checked here as well so an over-wide adapter fails at construction
-        // rather than later in `planar_view_mut`.
-        assert!(
-            num_channels as usize <= MAX_PLANAR_CHANNELS,
-            "num_channels exceeds MAX_PLANAR_CHANNELS"
         );
 
         let mut data = [const { MaybeUninit::<&'a mut [S]>::uninit() }; MAX_CHANNELS];
@@ -727,22 +671,19 @@ mod tests {
     }
 
     #[test]
-    fn test_frames_iter_mut_independent_frames() {
-        // Previously UB: hold every frame iterator alive at once and mutate
-        // through them. Each frame borrows disjoint samples, so this is sound.
+    fn test_frame_iter_mut_covers_every_frame() {
+        // Planar views mutate frame-major one frame at a time via `&mut self`.
         let mut ch0 = vec![0.0f32; 4];
         let mut ch1 = vec![0.0f32; 4];
         let mut ch2 = vec![0.0f32; 4];
         let mut data = vec![ch0.as_mut_slice(), ch1.as_mut_slice(), ch2.as_mut_slice()];
         let mut block = PlanarViewMut::from_slice(&mut data);
 
-        let mut frames: Vec<_> = block.frames_iter_mut().collect();
-        for (f, frame) in frames.iter_mut().enumerate() {
-            for (c, sample) in frame.enumerate() {
+        for f in 0..block.num_frames() {
+            for (c, sample) in block.frame_iter_mut(f).enumerate() {
                 *sample = (c * 10 + f) as f32;
             }
         }
-        drop(frames);
 
         assert_eq!(block.channel(0), &[0.0, 1.0, 2.0, 3.0]);
         assert_eq!(block.channel(1), &[10.0, 11.0, 12.0, 13.0]);
@@ -767,17 +708,13 @@ mod tests {
         assert!(frames_iter.next().is_none());
         drop(frames_iter);
 
-        let mut frames_iter = block.frames_iter_mut();
         for i in 0..num_frames {
             let add = i as f32 * 10.0;
-            frames_iter
-                .next()
-                .unwrap()
+            block
+                .frame_iter_mut(i)
                 .enumerate()
                 .for_each(|(i, v)| *v = i as f32 + add);
         }
-        assert!(frames_iter.next().is_none());
-        drop(frames_iter);
 
         let mut frames_iter = block.frames_iter();
         let frame = frames_iter.next().unwrap().copied().collect::<Vec<_>>();

@@ -4,7 +4,7 @@ use core::{marker::PhantomData, ptr::NonNull};
 
 use super::view::SequentialView;
 use crate::{
-    AudioBlock, AudioBlockMut, Sample,
+    AudioBlock, AudioBlockMut, FramesMut, Sample,
     iter::{StridedSampleIter, StridedSampleIterMut},
 };
 
@@ -412,40 +412,6 @@ impl<S: Sample> AudioBlockMut<S> for SequentialViewMut<'_, S> {
     }
 
     #[nonblocking]
-    fn frames_iter_mut(
-        &mut self,
-    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
-        let num_channels = self.num_channels as usize;
-        let num_frames = self.num_frames;
-        let stride = self.num_frames_allocated;
-        let data_ptr = self.data.as_mut_ptr();
-
-        (0..num_frames).map(move |frame_idx| {
-            // Safety check: Ensure data isn't empty if we calculate a start_ptr.
-            // If num_frames or num_channels is 0, remaining will be 0, iterator is safe.
-            // If data is empty, ptr is dangling, but add(0) is okay. add(>0) is UB.
-            // But if data is empty, num_channels or num_frames must be 0.
-            let start_ptr = if self.data.is_empty() {
-                NonNull::dangling().as_ptr() // Use dangling pointer if slice is empty
-            } else {
-                // Safety: channel_idx is < num_channels <= num_channels_allocated.
-                // Adding it to a valid data_ptr is safe within slice bounds.
-                unsafe { data_ptr.add(frame_idx) }
-            };
-
-            StridedSampleIterMut::<'_, S> {
-                // Note: '_ lifetime from &self borrow
-                // Safety: Pointer is either dangling (if empty) or valid start pointer.
-                // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
-                ptr: NonNull::new(start_ptr).unwrap_or(NonNull::dangling()), // Use dangling on null/empty
-                stride,
-                remaining: num_channels, // If 0, iterator yields None immediately
-                _marker: PhantomData,
-            }
-        })
-    }
-
-    #[nonblocking]
     fn as_view_mut(&mut self) -> impl AudioBlockMut<S> {
         self.view_mut()
     }
@@ -477,6 +443,42 @@ impl<S: Sample + core::fmt::Debug> core::fmt::Debug for SequentialViewMut<'_, S>
         writeln!(f, "}}")?;
 
         Ok(())
+    }
+}
+
+impl<S: Sample> FramesMut<S> for SequentialViewMut<'_, S> {
+    #[nonblocking]
+    fn frames_iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = &mut S>> {
+        let num_channels = self.num_channels as usize;
+        let num_frames = self.num_frames;
+        let stride = self.num_frames_allocated;
+        let data_ptr = self.data.as_mut_ptr();
+
+        (0..num_frames).map(move |frame_idx| {
+            // Safety check: Ensure data isn't empty if we calculate a start_ptr.
+            // If num_frames or num_channels is 0, remaining will be 0, iterator is safe.
+            // If data is empty, ptr is dangling, but add(0) is okay. add(>0) is UB.
+            // But if data is empty, num_channels or num_frames must be 0.
+            let start_ptr = if self.data.is_empty() {
+                NonNull::dangling().as_ptr() // Use dangling pointer if slice is empty
+            } else {
+                // Safety: channel_idx is < num_channels <= num_channels_allocated.
+                // Adding it to a valid data_ptr is safe within slice bounds.
+                unsafe { data_ptr.add(frame_idx) }
+            };
+
+            StridedSampleIterMut::<'_, S> {
+                // Note: '_ lifetime from &self borrow
+                // Safety: Pointer is either dangling (if empty) or valid start pointer.
+                // NonNull::new is safe if start_ptr is non-null (i.e., data not empty).
+                ptr: NonNull::new(start_ptr).unwrap_or(NonNull::dangling()), // Use dangling on null/empty
+                stride,
+                remaining: num_channels, // If 0, iterator yields None immediately
+                _marker: PhantomData,
+            }
+        })
     }
 }
 
