@@ -34,7 +34,7 @@ checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
 
 [[package]]
 name = "audio-blocks"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "criterion",
  "rtsan-standalone",

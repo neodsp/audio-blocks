@@ -319,8 +319,7 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> PlanarPtrAdapter<'a, S, MAX_CHANN
             "num_channels exceeds MAX_CHANNELS"
         );
 
-        let mut data: [core::mem::MaybeUninit<&'a [S]>; MAX_CHANNELS] =
-            unsafe { core::mem::MaybeUninit::uninit().assume_init() }; // Or other safe initialization
+        let mut data = [const { core::mem::MaybeUninit::<&'a [S]>::uninit() }; MAX_CHANNELS];
 
         // SAFETY: Caller guarantees `ptr` is valid for `num_channels` elements.
         let ptr_slice: &[*const S] =

@@ -25,6 +25,12 @@ use super::{MAX_PLANAR_CHANNELS, PlanarFrameIterMut, PlanarView};
 /// assert_eq!(block.channel(0), &[0.0, 0.0, 0.0]);
 /// assert_eq!(block.channel(1), &[1.0, 1.0, 1.0]);
 /// ```
+///
+/// # Size
+///
+/// This type is much larger than the other views, since it caches one pointer
+/// per channel (see [`MAX_PLANAR_CHANNELS`], which it may not exceed). If memory
+/// is tight, use [`PlanarView`] or a non-planar layout.
 pub struct PlanarViewMut<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> {
     data: &'a mut [V],
     num_channels: u16,
@@ -43,14 +49,8 @@ pub struct PlanarViewMut<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> {
 // itself an exclusive `&mut [V]` borrow. The pointers add no aliasing capability
 // beyond what `data` already grants, so the auto-trait bounds match those of
 // `&'a mut [V]`.
-unsafe impl<S: Sample + Send, V: AsMut<[S]> + AsRef<[S]> + Send> Send
-    for PlanarViewMut<'_, S, V>
-{
-}
-unsafe impl<S: Sample + Sync, V: AsMut<[S]> + AsRef<[S]> + Sync> Sync
-    for PlanarViewMut<'_, S, V>
-{
-}
+unsafe impl<S: Sample + Send, V: AsMut<[S]> + AsRef<[S]> + Send> Send for PlanarViewMut<'_, S, V> {}
+unsafe impl<S: Sample + Sync, V: AsMut<[S]> + AsRef<[S]> + Sync> Sync for PlanarViewMut<'_, S, V> {}
 
 impl<'a, S: Sample, V: AsMut<[S]> + AsRef<[S]>> PlanarViewMut<'a, S, V> {
     /// Creates a new audio block from a mutable slice of planar audio data.
@@ -437,8 +437,8 @@ impl<S: Sample + core::fmt::Debug, V: AsMut<[S]> + AsRef<[S]> + core::fmt::Debug
 /// let mut ch2 = vec![5.0f32, 6.0, 7.0, 8.0, 9.0];
 ///
 /// // Create mutable pointers to the channel data
-/// let mut ptrs = [ch1.as_mut_ptr(), ch2.as_mut_ptr()];
-/// let data = ptrs.as_mut_ptr();
+/// let ptrs = [ch1.as_mut_ptr(), ch2.as_mut_ptr()];
+/// let data = ptrs.as_ptr();
 /// let num_channels = 2u16;
 /// let num_frames = 5;
 ///
@@ -458,6 +458,7 @@ impl<S: Sample + core::fmt::Debug, V: AsMut<[S]> + AsRef<[S]> + core::fmt::Debug
 ///
 /// When creating an adapter from raw pointers, you must ensure that:
 /// - The pointers are valid and properly aligned
+/// - The channel buffers do not overlap each other
 /// - The memory they point to remains valid for the lifetime of the adapter
 /// - The data is not accessed through other pointers during the adapter's lifetime
 /// - The channel count doesn't exceed the adapter's `MAX_CHANNELS` capacity
@@ -471,24 +472,32 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> PlanarPtrAdapterMut<'a, S, MAX_CH
     ///
     /// # Safety
     ///
-    /// - `ptr` must be a valid pointer to an array of pointers
+    /// - `ptrs` must be a valid pointer to an array of pointers
     /// - The array must contain at least `num_channels` valid pointers
     /// - Each pointer in the array must point to a valid array of samples with `num_frames` length
+    /// - The channel buffers must not overlap each other, since each becomes an
+    ///   exclusive `&mut [S]`
     /// - The pointed memory must remain valid for the lifetime of the returned adapter
     /// - The data must not be modified through other pointers for the lifetime of the returned adapter
     #[nonblocking]
-    pub unsafe fn from_ptr(ptrs: *mut *mut S, num_channels: u16, num_frames: usize) -> Self {
+    pub unsafe fn from_ptr(ptrs: *const *mut S, num_channels: u16, num_frames: usize) -> Self {
         assert!(
             num_channels as usize <= MAX_CHANNELS,
             "num_channels exceeds MAX_CHANNELS"
         );
+        // Checked here as well so an over-wide adapter fails at construction
+        // rather than later in `planar_view_mut`.
+        assert!(
+            num_channels as usize <= MAX_PLANAR_CHANNELS,
+            "num_channels exceeds MAX_PLANAR_CHANNELS"
+        );
 
-        let mut data: [MaybeUninit<&'a mut [S]>; MAX_CHANNELS] =
-            unsafe { MaybeUninit::uninit().assume_init() }; // Or other safe initialization
+        let mut data = [const { MaybeUninit::<&'a mut [S]>::uninit() }; MAX_CHANNELS];
 
-        // SAFETY: Caller guarantees `ptr` is valid for `num_channels` elements.
-        let ptr_slice: &mut [*mut S] =
-            unsafe { core::slice::from_raw_parts_mut(ptrs, num_channels as usize) };
+        // SAFETY: Caller guarantees `ptrs` is valid for `num_channels` elements.
+        // The array itself is only read from, so a shared borrow is enough.
+        let ptr_slice: &[*mut S] =
+            unsafe { core::slice::from_raw_parts(ptrs, num_channels as usize) };
 
         for ch in 0..num_channels as usize {
             // SAFETY: See previous explanation
@@ -524,7 +533,7 @@ impl<'a, S: Sample, const MAX_CHANNELS: usize> PlanarPtrAdapterMut<'a, S, MAX_CH
     ///
     /// An [`PlanarViewMut`] that provides safe, mutable access to the audio data.
     #[nonblocking]
-    pub fn planar_view_mut(&mut self) -> PlanarViewMut<'a, S, &mut [S]> {
+    pub fn planar_view_mut(&mut self) -> PlanarViewMut<'_, S, &'a mut [S]> {
         PlanarViewMut::from_slice(self.data_slice_mut())
     }
 }
@@ -895,11 +904,11 @@ mod tests {
             let num_frames = 5;
             let mut data = [vec![0.0, 2.0, 4.0, 6.0, 8.0], vec![1.0, 3.0, 5.0, 7.0, 9.0]];
 
-            let mut ptr_vec: Vec<*mut f32> = data
+            let ptr_vec: Vec<*mut f32> = data
                 .iter_mut()
                 .map(|inner_vec| inner_vec.as_mut_ptr())
                 .collect();
-            let ptr = ptr_vec.as_mut_ptr();
+            let ptr = ptr_vec.as_ptr();
 
             let mut adaptor = PlanarPtrAdapterMut::<_, 16>::from_ptr(ptr, num_channels, num_frames);
 

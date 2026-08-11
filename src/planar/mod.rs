@@ -13,11 +13,11 @@ use core::marker::PhantomData;
 /// Maximum number of channels supported by [`PlanarViewMut`]'s mutable frame
 /// iteration.
 ///
-/// Mutable frame iteration over planar data caches one base pointer per channel
-/// so that every yielded frame can borrow disjoint samples independently (see
-/// [`PlanarFrameIterMut`]). That cache is a fixed-size inline array, so the
-/// number of channels a mutable planar view can hold is capped at this value.
-pub const MAX_PLANAR_CHANNELS: usize = 256;
+/// Mutable frame iteration caches one pointer per channel (see
+/// [`PlanarFrameIterMut`]) in a fixed-size array, which caps how many channels a
+/// [`PlanarViewMut`] can hold. The owned [`Planar`] type keeps this cache on the
+/// heap and has no such limit.
+pub const MAX_PLANAR_CHANNELS: usize = 64;
 
 /// A mutable iterator over the samples of a single frame of planar audio data.
 ///
